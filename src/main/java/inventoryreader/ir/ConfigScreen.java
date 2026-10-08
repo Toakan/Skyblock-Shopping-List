@@ -197,6 +197,9 @@ public final class ConfigScreen {
                             case REQUIRED -> "Required";
                         }))),
                     d.amountFormat, s -> s.amountFormat, (s, v) -> s.amountFormat = v))
+                .option(toggle("Short numbers", "Show big amounts as 5.1k, 512k, 500m or 1.5b instead of the full "
+                    + "number (rounded down).", d.shortNumbers,
+                    s -> s.shortNumbers, (s, v) -> s.shortNumbers = v))
                 .option(toggle("Craftable section", "Show what you can craft right now.", d.showCraftable,
                     s -> s.showCraftable, (s, v) -> s.showCraftable = v))
                 .option(placement("Craftable panel", d.craftablePlacement,

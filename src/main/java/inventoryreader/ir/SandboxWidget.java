@@ -1037,11 +1037,35 @@ public class SandboxWidget {
      */
     public static String amountText(RecipeManager.RecipeNode node) {
         return switch (HudStyle.get().amountFormat) {
-            case REMAINING -> (node.amount + node.toCraft) + "×";
-            case REQUIRED -> node.required + "×";
-            case HAVE_NEED -> String.format(Locale.ROOT, "%,d/%,d",
-                Math.max(0, node.required - node.amount - node.toCraft), node.required);
+            case REMAINING -> number((long) node.amount + node.toCraft) + "×";
+            case REQUIRED -> number(node.required) + "×";
+            case HAVE_NEED -> number(Math.max(0L, (long) node.required - node.amount - node.toCraft)) + "/"
+                + number(node.required);
         };
+    }
+
+    /** An amount as the style wants it: "512", "5,120", or with Short numbers on "5.1k", "500m", "1.5b". */
+    public static String number(long value) {
+        if (!HudStyle.get().shortNumbers) return String.format(Locale.ROOT, "%,d", value);
+        return shortNumber(value);
+    }
+
+    /** 999 -> "999", 5120 -> "5.1k", 512000 -> "512k", 500000000 -> "500m", 1500000000 -> "1.5b". */
+    static String shortNumber(long value) {
+        long abs = Math.abs(value);
+        if (abs < 1000) return Long.toString(value);
+        String[] units = {"k", "m", "b", "t"};
+        double scaled = value;
+        int unit = -1;
+        while (Math.abs(scaled) >= 1000 && unit < units.length - 1) {
+            scaled /= 1000;
+            unit++;
+        }
+        // One decimal below 100 (5.1k, 12.5m), none above (512k); always rounded towards zero.
+        String text = Math.abs(scaled) < 100 ? String.format(Locale.ROOT, "%.1f", (long) (scaled * 10) / 10.0)
+            : Long.toString((long) scaled);
+        if (text.endsWith(".0")) text = text.substring(0, text.length() - 2);
+        return text + units[unit];
     }
 
     /**

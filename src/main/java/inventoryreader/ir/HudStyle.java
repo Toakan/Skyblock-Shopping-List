@@ -75,6 +75,8 @@ public final class HudStyle {
     public boolean showRowBoxes = true;
     public boolean showMarks = false;
     public AmountFormat amountFormat = AmountFormat.REMAINING;
+    /** Row amounts as 1.2k / 500m / 1.5b instead of the full number. */
+    public boolean shortNumbers = true;
     public boolean showCraftable = true;
     public boolean showForging = true;
     public Placement craftablePlacement = Placement.MAIN_PANEL;
