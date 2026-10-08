@@ -47,6 +47,7 @@ public class SandboxWidget {
     private volatile boolean showTotal = true;
     private volatile boolean notifications = true;
     private volatile boolean autoRemove = true;
+    private volatile boolean staleSackWarning = true;
     private volatile int maxRecipes = 3;
     /** Update thread only: entries already announced as ready / achieved, so each toast fires once. */
     private final Set<String> readyEntries = new HashSet<>();
@@ -192,6 +193,7 @@ public class SandboxWidget {
         config.showTotal = showTotal;
         config.notifications = notifications;
         config.autoRemove = autoRemove;
+        config.staleSackWarning = staleSackWarning;
         config.maxRecipes = maxRecipes;
         JsonFiles.write(FilePathManager.WIDGET_CONFIG_JSON, config);
     }
@@ -208,6 +210,7 @@ public class SandboxWidget {
         if (config.showTotal != null) this.showTotal = config.showTotal;
         if (config.notifications != null) this.notifications = config.notifications;
         if (config.autoRemove != null) this.autoRemove = config.autoRemove;
+        if (config.staleSackWarning != null) this.staleSackWarning = config.staleSackWarning;
         if (config.maxRecipes != null) this.maxRecipes = clampMaxRecipes(config.maxRecipes);
         if (config.widgetWidth > 0) this.widgetWidth = config.widgetWidth;
         if (config.widgetHeight > 0) this.widgetHeight = config.widgetHeight;
@@ -238,6 +241,7 @@ public class SandboxWidget {
         showTotal = true;
         notifications = true;
         autoRemove = true;
+        staleSackWarning = true;
         maxRecipes = 3;
         messages.clear();
         saveConfiguration();
@@ -260,6 +264,7 @@ public class SandboxWidget {
         Boolean showTotal;
         Boolean notifications;
         Boolean autoRemove;
+        Boolean staleSackWarning;
         Integer maxRecipes;
     }
     /** Marks the tree stale; the update thread recomputes it within a second. */
@@ -704,6 +709,11 @@ public class SandboxWidget {
     public void setAutoRemove(boolean autoRemove) {
         this.autoRemove = autoRemove;
         requestRefresh();
+        saveConfiguration();
+    }
+    public boolean isStaleSackWarning() { return staleSackWarning; }
+    public void setStaleSackWarning(boolean staleSackWarning) {
+        this.staleSackWarning = staleSackWarning;
         saveConfiguration();
     }
     public int getMaxRecipes() { return maxRecipes; }

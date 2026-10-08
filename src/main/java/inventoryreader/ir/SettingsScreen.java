@@ -50,6 +50,10 @@ public class SettingsScreen extends Screen {
         y += ROW_STEP;
         toggle(left, y, "Auto-remove", widget::isAutoRemove, widget::setAutoRemove,
             "Take a recipe off the list once you have made the amount you asked for.");
+        y += ROW_STEP;
+        toggle(left, y, "Sack reminder", widget::isStaleSackWarning, widget::setStaleSackWarning,
+            "Chat warning when your sacks haven't been opened for an hour. Between opens, sack counts follow the "
+            + "[Sacks] chat summaries and can drift.");
 
         // Right column: list size and other screens.
         y = TOP;

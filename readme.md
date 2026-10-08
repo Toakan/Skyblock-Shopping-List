@@ -71,7 +71,7 @@ As Hypixel states, every modification is used at your own risk.
 ## Where data is stored
 Everything lives in `config/skyblock-shopping-list/` inside your Minecraft folder:
 - `resources.json`: tracked item counts
-- `inventorydata.json`, `allcontainerData.json`, `sacks.json`: last-seen inventory, container and sack contents, used to work out changes
+- `inventorydata.json`, `allcontainerData.json`, `sacks.json`, `sacks_meta.json`: last-seen inventory, container and sack contents, used to work out changes
 - `coins.json`: last bank balance seen
 - `widget_config.json`: shopping list, HUD position and size, expanded nodes and settings
 - `forging.json`, `gemstone_recipes.json`: built-in fallback recipes
@@ -96,7 +96,7 @@ The jar is written to `build/libs/`. `./gradlew runClient` starts a development 
 
 ## Known limitations
 - Items are matched by their SkyBlock ID where the item has one, so reforges and stars don't matter. Items without an ID (some sack and menu icons) fall back to their name, with colour codes and stat symbols ignored.
-- Sack contents only resync when you open a sack; between opens they follow the `[Sacks]` chat summaries, so keep those enabled in your SkyBlock settings.
+- Sack contents only resync when you open a sack; between opens they follow the `[Sacks]` chat summaries, so keep those enabled in your SkyBlock settings. If no sack has been opened for an hour while the list has items, a chat message reminds you (Settings > Sack reminder).
 - Recipes cover what the NEU repository lists as crafting, forge, NPC shop and Kat upgrade recipes. Pets that only drop have no recipe.
 
 ## License and attribution

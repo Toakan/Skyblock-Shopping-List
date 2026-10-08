@@ -29,6 +29,8 @@ public class FilePathManager {
     public static final File INVENTORY_JSON = new File(DATA_DIR, "inventorydata.json");
     public static final File RESOURCES_JSON = new File(DATA_DIR, "resources.json");
     public static final File SACKS_JSON = new File(DATA_DIR, "sacks.json");
+    /** When a sack menu was last read, for the stale-sack warning. */
+    public static final File SACKS_META_JSON = new File(DATA_DIR, "sacks_meta.json");
     /** Last bank balance seen in the bank menu. */
     public static final File COINS_JSON = new File(DATA_DIR, "coins.json");
     public static final File WIDGET_CONFIG_JSON = new File(DATA_DIR, "widget_config.json");
@@ -96,7 +98,7 @@ public class FilePathManager {
 
     /** Deletes all tracked item data and widget settings. Recipes are kept. */
     public static synchronized void resetData() {
-        for (File f : new File[]{CONTAINER_JSON, INVENTORY_JSON, RESOURCES_JSON, SACKS_JSON, COINS_JSON, WIDGET_CONFIG_JSON}) {
+        for (File f : new File[]{CONTAINER_JSON, INVENTORY_JSON, RESOURCES_JSON, SACKS_JSON, SACKS_META_JSON, COINS_JSON, WIDGET_CONFIG_JSON}) {
             if (f.exists() && !f.delete()) {
                 InventoryReader.LOGGER.warn("Could not delete {}", f.getName());
             }
