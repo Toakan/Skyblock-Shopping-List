@@ -108,6 +108,15 @@ public final class HudStyle {
         JsonFiles.write(FilePathManager.HUD_STYLE_JSON, style);
     }
 
+    /** Switches to {@code style} (from a preset) and saves. The player's own Follow GUI Scale choice is kept. */
+    public static void replace(HudStyle style) {
+        style.followGuiScale = get().followGuiScale;
+        style.fontDescription = null;
+        style.clamp();
+        current = style;
+        save();
+    }
+
     /** Puts every look setting back to its default and saves. */
     public static void reset() {
         current = new HudStyle();

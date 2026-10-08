@@ -37,6 +37,7 @@ Press `V` (or `/ssl menu`) to open the menu. It has five tabs:
   - **HUD scale** (50-300%) sizes every panel. By default the HUD keeps its size whatever Minecraft's GUI Scale is; turn on **Follow GUI Scale** to have it change with GUI Scale.
   - **Craftable** and **Forging** can each be hidden, or moved to their **own panel** that you place and size separately in Move HUD.
   - In **Move HUD**, drag a panel to move it, drag a **corner** to scale it (keeps its shape; each panel has its own scale on top of HUD scale), or drag an **edge** to make it wider, narrower, taller or shorter.
+  - **Presets** (Appearance > Presets): save your look and panel sizes under a name, load one of yours or a built-in (Default, Compact, Minimal), and **Copy share code** / **Paste share code** to share a look as text (e.g. in Discord). Panel positions are never changed. Loading, pasting or resetting first keeps your current look as the preset "Previous (auto)", and a setup you made before presets existed is kept as "My look".
   - Panels grow to fit their content up to the height set in Move HUD; anything beyond is cut off and marked with "…" (make the panel taller or collapse rows).
 
 The HUD (`H` to toggle) shows:
@@ -81,6 +82,7 @@ Everything lives in `config/skyblock-shopping-list/` inside your Minecraft folde
 - `inventorydata.json`, `allcontainerData.json`, `sacks.json`, `sacks_meta.json`: last-seen inventory, container and sack contents, used to work out changes
 - `coins.json`: last bank balance seen
 - `hud_style.json`: your Appearance settings
+- `presets/`: your saved HUD presets, one file each (share them by sending the file or a share code); kept by a data reset
 - `forge.json`: what was cooking in the Forge when you last opened it
 - `widget_config.json`: shopping list, HUD position and size, expanded nodes and settings
 - `forging.json`, `gemstone_recipes.json`: built-in fallback recipes

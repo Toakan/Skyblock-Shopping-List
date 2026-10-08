@@ -76,6 +76,7 @@ public class InventoryReaderClient implements ClientModInitializer {
         ReminderManager.initialize();
         WelcomeManager.initialize();
         SandboxWidget.getInstance();
+        HudPresets.migrate();
         InventoryReader.LOGGER.info("Initialized {} client components", InventoryReader.NAME);
     }
 

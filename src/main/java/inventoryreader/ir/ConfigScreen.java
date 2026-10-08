@@ -12,6 +12,7 @@ import dev.isxander.yacl3.api.controller.DropdownStringControllerBuilder;
 import dev.isxander.yacl3.api.controller.EnumControllerBuilder;
 import dev.isxander.yacl3.api.controller.FloatSliderControllerBuilder;
 import dev.isxander.yacl3.api.controller.IntegerSliderControllerBuilder;
+import dev.isxander.yacl3.api.controller.StringControllerBuilder;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.options.controls.KeyBindsScreen;
@@ -51,7 +52,7 @@ public final class ConfigScreen {
                 .option(ButtonOption.createBuilder()
                     .name(Component.literal("Move HUD..."))
                     .description(OptionDescription.of(Component.literal(
-                        "Drag the HUD to move it, drag a corner to resize. Also opened with B.")))
+                        "Drag a panel to move it, a corner to scale it, an edge to resize it. Also opened with B.")))
                     .action((screen, button) -> Minecraft.getInstance().gui.setScreen(new HudPositionScreen(screen)))
                     .build())
                 .option(ButtonOption.createBuilder()
@@ -106,12 +107,15 @@ public final class ConfigScreen {
             .option(ButtonOption.createBuilder()
                 .name(Component.literal("Reset look to defaults"))
                 .description(OptionDescription.of(Component.literal(
-                    "Puts every Appearance setting back to the original look, right away.")))
+                    "Puts every Appearance setting back to the original look, right away. Your current look is "
+                        + "kept as the preset \"" + HudPresets.BACKUP_NAME + "\".")))
                 .action((screen, button) -> {
+                    HudPresets.backup();
                     HudStyle.reset();
                     Minecraft.getInstance().gui.setScreen(create(parent));
                 })
                 .build())
+            .group(presets(parent))
             .group(OptionGroup.createBuilder()
                 .name(Component.literal("Size"))
                 .option(slider("HUD scale", "Size of every HUD panel, in percent. 100% is the original size.", 50, 300,
@@ -215,6 +219,106 @@ public final class ConfigScreen {
                 .option(colour("Craftable text", d.sectionText, () -> style.sectionText, v -> style.sectionText = v))
                 .option(colour("Forging header", d.forgingHeader, () -> style.forgingHeader, v -> style.forgingHeader = v))
                 .option(colour("Forging text", d.forgingText, () -> style.forgingText, v -> style.forgingText = v))
+                .build())
+            .build();
+    }
+
+    /** Remembered between screen rebuilds (each preset action reopens the screen). */
+    private static String chosenPreset;
+    private static String presetName = "My preset";
+
+    /**
+     * Presets group: load / save / delete presets and copy / paste share codes. Every action works on the saved
+     * look and takes effect right away, then reopens the screen so the other options show the new values.
+     */
+    private static OptionGroup presets(Screen parent) {
+        List<String> names = HudPresets.list();
+        if (chosenPreset == null || !names.contains(chosenPreset)) chosenPreset = names.get(0);
+        Option<String> chosen = Option.<String>createBuilder()
+            .name(Component.literal("Preset"))
+            .description(OptionDescription.of(Component.literal(
+                "Your saved presets, then the built-in looks. \"" + HudPresets.BACKUP_NAME + "\" is your look "
+                    + "from before the last Load, Paste or Reset.")))
+            .binding(names.get(0), () -> chosenPreset, v -> chosenPreset = v)
+            .controller(opt -> DropdownStringControllerBuilder.create(opt).values(names))
+            .build();
+        Option<String> name = Option.<String>createBuilder()
+            .name(Component.literal("New preset name"))
+            .description(OptionDescription.of(Component.literal("Name used by Save current as preset.")))
+            .binding("My preset", () -> presetName, v -> presetName = v)
+            .controller(StringControllerBuilder::create)
+            .build();
+        Runnable reopen = () -> Minecraft.getInstance().gui.setScreen(create(parent));
+        String saveFirst = " Press Save first if you have unsaved Appearance changes.";
+        return OptionGroup.createBuilder()
+            .name(Component.literal("Presets"))
+            .description(OptionDescription.of(Component.literal(
+                "Presets hold the look plus each panel's size and scale. Panel positions are never changed.")))
+            .option(chosen)
+            .option(ButtonOption.createBuilder()
+                .name(Component.literal("Load preset"))
+                .description(OptionDescription.of(Component.literal(
+                    "Switches to the chosen preset. Your current look is kept as \"" + HudPresets.BACKUP_NAME
+                        + "\" first, so you can switch back.")))
+                .action((screen, button) -> {
+                    chosenPreset = chosen.pendingValue();
+                    if (HudPresets.load(chosenPreset)) HudPresets.toast("Preset loaded", chosenPreset);
+                    else HudPresets.toast("Preset not found", chosenPreset);
+                    reopen.run();
+                })
+                .build())
+            .option(ButtonOption.createBuilder()
+                .name(Component.literal("Delete preset"))
+                .description(OptionDescription.of(Component.literal(
+                    "Deletes the chosen preset. Built-in presets can't be deleted.")))
+                .action((screen, button) -> {
+                    String target = chosen.pendingValue();
+                    if (HudPresets.delete(target)) {
+                        HudPresets.toast("Preset deleted", target);
+                        chosenPreset = null;
+                    } else {
+                        HudPresets.toast("Can't delete", target);
+                    }
+                    reopen.run();
+                })
+                .build())
+            .option(name)
+            .option(ButtonOption.createBuilder()
+                .name(Component.literal("Save current as preset"))
+                .description(OptionDescription.of(Component.literal(
+                    "Saves the current look and panel sizes under the name above (a number is added if the name "
+                        + "is taken)." + saveFirst)))
+                .action((screen, button) -> {
+                    presetName = name.pendingValue();
+                    chosenPreset = HudPresets.save(presetName);
+                    HudPresets.toast("Preset saved", chosenPreset);
+                    reopen.run();
+                })
+                .build())
+            .option(ButtonOption.createBuilder()
+                .name(Component.literal("Copy share code"))
+                .description(OptionDescription.of(Component.literal(
+                    "Copies the current look and panel sizes as text, to paste in chat or Discord." + saveFirst)))
+                .action((screen, button) -> {
+                    HudPresets.copyCode();
+                    HudPresets.toast("Share code copied", "Paste it anywhere to share your look.");
+                })
+                .build())
+            .option(ButtonOption.createBuilder()
+                .name(Component.literal("Paste share code"))
+                .description(OptionDescription.of(Component.literal(
+                    "Reads a share code from the clipboard, saves it as a preset and switches to it. Your current "
+                        + "look is kept as \"" + HudPresets.BACKUP_NAME + "\" first.")))
+                .action((screen, button) -> {
+                    String imported = HudPresets.pasteCode();
+                    if (imported == null) {
+                        HudPresets.toast("No share code", "The clipboard doesn't hold a " + InventoryReader.NAME + " code.");
+                        return;
+                    }
+                    chosenPreset = imported;
+                    HudPresets.toast("Share code loaded", imported);
+                    reopen.run();
+                })
                 .build())
             .build();
     }
