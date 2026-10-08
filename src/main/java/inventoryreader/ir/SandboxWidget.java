@@ -32,6 +32,7 @@ public class SandboxWidget {
     private Map<String, Boolean> expandedNodes = new ConcurrentHashMap<>();
     private final List<String> messages = new CopyOnWriteArrayList<>();
     private volatile int craftAmount = 1;
+    private volatile boolean showRemaining = true;
     private final ResourcesManager resourcesManager;
     private final ScheduledExecutorService scheduler;
     /** Resource version the current tree was computed from; -1 forces a recompute. */
@@ -130,7 +131,8 @@ public class SandboxWidget {
             widgetWidth,
             widgetHeight,
             new HashMap<>(expandedNodes),
-            craftAmount
+            craftAmount,
+            showRemaining
         );
         JsonFiles.write(FilePathManager.WIDGET_CONFIG_JSON, config);
     }
@@ -147,6 +149,7 @@ public class SandboxWidget {
         if (config.craftAmount > 0) {
             this.craftAmount = config.craftAmount;
         }
+        if (config.showRemaining != null) this.showRemaining = config.showRemaining;
         if (config.widgetWidth > 0) this.widgetWidth = config.widgetWidth;
         if (config.widgetHeight > 0) this.widgetHeight = config.widgetHeight;
     }
@@ -161,6 +164,7 @@ public class SandboxWidget {
         widgetHeight = 300;
         expandedNodes = new ConcurrentHashMap<>();
         craftAmount = 1;
+        showRemaining = true;
         messages.clear();
         saveConfiguration();
     }
@@ -173,8 +177,10 @@ public class SandboxWidget {
     int widgetHeight;
         Map<String, Boolean> expandedNodes;
         int craftAmount;
+        /** Boxed so configs written before this option existed default to on. */
+        Boolean showRemaining;
     public WidgetConfig(boolean enabled, String selectedRecipe, int widgetX, int widgetY, int widgetWidth, int widgetHeight,
-                Map<String, Boolean> expandedNodes, int craftAmount) {
+                Map<String, Boolean> expandedNodes, int craftAmount, boolean showRemaining) {
             this.enabled = enabled;
             this.selectedRecipe = selectedRecipe;
             this.widgetX = widgetX;
@@ -183,6 +189,7 @@ public class SandboxWidget {
         this.widgetHeight = widgetHeight;
             this.expandedNodes = expandedNodes;
             this.craftAmount = craftAmount;
+            this.showRemaining = showRemaining;
         }
     }
     /** Marks the tree stale; the update thread recomputes it within a second. */
@@ -270,9 +277,9 @@ public class SandboxWidget {
         int borderThickness = 2;
         for (int i = 0; i < borderThickness; i++) {
             context.outline(panelX - i,
-                panelY - i, 
-                panelWidth + i * 2, 
-                panelHeight + i * 2, 
+                panelY - i,
+                panelWidth + i * 2,
+                panelHeight + i * 2,
                 borderColor
             );
         }
@@ -336,7 +343,7 @@ public class SandboxWidget {
         Minecraft client = Minecraft.getInstance();
         int unitIndent = Math.max(4, Math.round(RECIPE_LEVEL_INDENT * currentTreeScale));
         int indent = level * unitIndent;
-        boolean hasEnough = (node.amount == 0);
+        boolean hasEnough = (node.amount <= 0);
         String nodeKey = makePathKey(pathKey, node.name);
         boolean isExpanded = expandedNodes.getOrDefault(nodeKey, false);
         boolean hasChildren = node.ingredients != null && !node.ingredients.isEmpty();
@@ -345,15 +352,14 @@ public class SandboxWidget {
         int mouseY = (int)(client.mouseHandler.ypos() / client.getWindow().getGuiScale());
         int nodeBaseWidth = Math.max(100, widgetWidth - 20); // account for panel padding
         int nodeHeight = Math.max(6, currentNodeLineHeight);
-        boolean isHovered = mouseX >= x + indent && mouseX <= x + indent + nodeBaseWidth - indent && 
+        boolean isHovered = mouseX >= x + indent && mouseX <= x + indent + nodeBaseWidth - indent &&
                             mouseY >= y && mouseY <= y + nodeHeight;
         int nodeWidth = nodeBaseWidth - indent;
         context.fill(x + indent, y, x + indent + nodeWidth, y + nodeHeight, bgColor);
         if (isHovered) {
             context.fill(x + indent, y, x + indent + nodeWidth, y + nodeHeight, 0x22FFFFFF);
         }
-        int borderColor = hasEnough ? 0x88608C35 : 0x88FF5555;
-        context.outline(x + indent, y, nodeWidth, nodeHeight, borderColor);
+        context.outline(x + indent, y, nodeWidth, nodeHeight, progressBorderColor(node, showRemaining));
         if (hasChildren) {
             String expandIcon = isExpanded ? "▼" : "▶";
             context.text(
@@ -369,12 +375,12 @@ public class SandboxWidget {
         int textColor;
         boolean isBold = (level == 0);
         if (level == 0) {
-            textColor = GOLD; 
+            textColor = GOLD;
         } else {
-            textColor = hasEnough ? 0xFFFFFFFF : 0xFFFF6B6B;
+            textColor = hasEnough ? 0xFFFFFFFF : progressColor(node, showRemaining);
         }
-        String amountText = node.amount + "× ";
-        int amountColor = hasEnough ? 0xFF6EFF6E : 0xFFFF6B6B;
+        String amountText = displayedAmount(node, showRemaining) + "× ";
+        int amountColor = progressColor(node, showRemaining);
         Component itemName = Component.literal(node.name)
             .setStyle(Style.EMPTY.withColor(textColor).withBold(isBold));
         int amountWidth = client.font.width(amountText);
@@ -561,6 +567,35 @@ public class SandboxWidget {
             lineCount += linesInMessage;
         }
         return lineCount;
+    }
+
+    public boolean isShowRemaining() {
+        return showRemaining;
+    }
+    public void setShowRemaining(boolean showRemaining) {
+        this.showRemaining = showRemaining;
+        saveConfiguration();
+    }
+
+    private static final int DONE_GREEN = 0xFF6EFF6E;
+    private static final int PARTIAL_ORANGE = 0xFFFFA040;
+    private static final int MISSING_RED = 0xFFFF6B6B;
+
+    /** The number shown next to a node: what is still missing, or the full amount the recipe needs. */
+    public static int displayedAmount(RecipeManager.RecipeNode node, boolean showRemaining) {
+        return showRemaining ? node.amount : node.required;
+    }
+
+    /** Green when complete; with remaining mode on, orange when partly gathered and red when none yet. */
+    public static int progressColor(RecipeManager.RecipeNode node, boolean showRemaining) {
+        if (node.amount <= 0) return DONE_GREEN;
+        if (showRemaining && node.amount < node.required) return PARTIAL_ORANGE;
+        return MISSING_RED;
+    }
+
+    /** Translucent version of {@link #progressColor} for node borders. */
+    public static int progressBorderColor(RecipeManager.RecipeNode node, boolean showRemaining) {
+        return (progressColor(node, showRemaining) & 0x00FFFFFF) | 0x88000000;
     }
 
     public static String makePathKey(String parent, String name) {

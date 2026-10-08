@@ -123,6 +123,16 @@ public class WidgetCustomizationMenu extends Screen {
             .bounds(20, height - 30, 150, 20)
             .build();
             addRenderableWidget(toggleButton);
+
+            addRenderableWidget(Button.builder(
+                showRemainingLabel(),
+                button -> {
+                    widget.setShowRemaining(!widget.isShowRemaining());
+                    button.setMessage(showRemainingLabel());
+                }
+            )
+            .bounds(width - 170, 23, 150, 20)
+            .build());
         } else {
             initPositioningTab();
         }
@@ -135,6 +145,10 @@ public class WidgetCustomizationMenu extends Screen {
             .build();
             addRenderableWidget(saveButton);
         }
+    }
+
+    private Component showRemainingLabel() {
+        return Component.literal("Show remaining: " + (widget.isShowRemaining() ? "ON" : "OFF"));
     }
 
     private void initRecipeTab() {
@@ -461,13 +475,13 @@ public class WidgetCustomizationMenu extends Screen {
         if (node == null) return y;
         int indent = level * indentUnit;
         boolean hasChildren = node.ingredients != null && !node.ingredients.isEmpty();
-        boolean hasEnough = (node.amount == 0);
+        boolean hasEnough = (node.amount <= 0);
+        boolean showRemaining = widget.isShowRemaining();
         int nodeWidth = Math.max(40, availableWidth - indent);
 
         int bgColor = 0x99271910;
         context.fill(x + indent, y, x + indent + nodeWidth, y + lineHeight, bgColor);
-        int borderColor = hasEnough ? 0x88608C35 : 0x88FF5555;
-        context.outline(x + indent, y, nodeWidth, lineHeight, borderColor);
+        context.outline(x + indent, y, nodeWidth, lineHeight, SandboxWidget.progressBorderColor(node, showRemaining));
 
         String nextKey = SandboxWidget.makePathKey(pathKey, node.name);
         boolean isExpanded = widget.isNodeExpanded(nextKey);
@@ -483,11 +497,11 @@ public class WidgetCustomizationMenu extends Screen {
         }
 
         int nameX = x + indent + (hasChildren ? Math.max(14, Math.round(25 * (lineHeight / 16.0f))) : Math.max(6, Math.round(10 * (lineHeight / 16.0f))));
-        int textColor = (level == 0) ? GOLD : (hasEnough ? 0xFFFFFFFF : 0xFFFF6B6B);
+        int textColor = (level == 0) ? GOLD : (hasEnough ? 0xFFFFFFFF : SandboxWidget.progressColor(node, showRemaining));
         boolean isBold = (level == 0);
 
-        String amountText = node.amount + "× ";
-        int amountColor = hasEnough ? 0xFF6EFF6E : 0xFFFF6B6B;
+        String amountText = SandboxWidget.displayedAmount(node, showRemaining) + "× ";
+        int amountColor = SandboxWidget.progressColor(node, showRemaining);
         int amountWidth = font.width(amountText);
         Component itemName = Component.literal(node.name).setStyle(Style.EMPTY.withColor(textColor).withBold(isBold));
         int itemWidth = font.width(itemName);
@@ -644,7 +658,8 @@ public class WidgetCustomizationMenu extends Screen {
         if (node == null) return y;
         Minecraft client = Minecraft.getInstance();
         int indent = level * RECIPE_LEVEL_INDENT;
-        boolean hasEnough = (node.amount == 0);
+        boolean hasEnough = (node.amount <= 0);
+        boolean showRemaining = widget.isShowRemaining();
         String nodeKey = SandboxWidget.makePathKey(pathKey, node.name);
         boolean isExpanded = widget.isNodeExpanded(nodeKey);
         boolean hasChildren = node.ingredients != null && !node.ingredients.isEmpty();
@@ -660,8 +675,7 @@ public class WidgetCustomizationMenu extends Screen {
             context.fill(x + indent, y, x + indent + nodeWidth, y + 16, 0x22FFFFFF);
         }
 
-        int borderColor = hasEnough ? 0x88608C35 : 0x88FF5555;
-        context.outline(x + indent, y, nodeWidth, 16, borderColor);
+        context.outline(x + indent, y, nodeWidth, 16, SandboxWidget.progressBorderColor(node, showRemaining));
 
         if (hasChildren) {
             String expandIcon = isExpanded ? "▼" : "▶";
@@ -682,12 +696,12 @@ public class WidgetCustomizationMenu extends Screen {
         if (level == 0) {
             textColor = GOLD;
         } else {
-            textColor = hasEnough ? 0xFFFFFFFF : 0xFFFF6B6B;
+            textColor = hasEnough ? 0xFFFFFFFF : SandboxWidget.progressColor(node, showRemaining);
         }
 
         String prefix = "";
-        String amountText = node.amount + "×";
-        int amountColor = hasEnough ? 0xFF6EFF6E : 0xFFFF6B6B;
+        String amountText = SandboxWidget.displayedAmount(node, showRemaining) + "×";
+        int amountColor = SandboxWidget.progressColor(node, showRemaining);
 
         context.text(
             client.font,
@@ -980,8 +994,8 @@ public class WidgetCustomizationMenu extends Screen {
                     Minecraft client = Minecraft.getInstance();
                     Map<String, Integer> resources = ResourcesManager.getInstance().getAllResources();
                     int available = resources.getOrDefault(node.name, 0);
-                    boolean hasEnough = available >= node.amount;
-                    Component message = Component.literal("You have " + available + "/" + node.amount + " of " + node.name)
+                    boolean hasEnough = available >= node.required;
+                    Component message = Component.literal("You have " + available + "/" + node.required + " of " + node.name)
                         .setStyle(Style.EMPTY.withColor(hasEnough ? ChatFormatting.GREEN : ChatFormatting.RED));
                     if (client.player != null) {
                         client.player.sendOverlayMessage(message);

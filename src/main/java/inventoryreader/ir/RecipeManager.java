@@ -217,12 +217,20 @@ public class RecipeManager {
 
     public static class RecipeNode {
         public String name;
+        /** In shopping-list trees: how many are still missing. Otherwise: how many are needed. */
         public int amount;
+        /** How many this step needs in total, before counting what the player already has. */
+        public int required;
         public List<RecipeNode> ingredients;
-        
+
         public RecipeNode(String name, int amount, List<RecipeNode> ingredients) {
+            this(name, amount, amount, ingredients);
+        }
+
+        public RecipeNode(String name, int amount, int required, List<RecipeNode> ingredients) {
             this.name = name;
             this.amount = amount;
+            this.required = required;
             this.ingredients = ingredients;
         }
     }
