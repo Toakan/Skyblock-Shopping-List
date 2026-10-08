@@ -51,12 +51,14 @@ public final class ConfigScreen {
                     .build())
                 .option(ButtonOption.createBuilder()
                     .name(Component.literal("Move HUD..."))
+                    .text(Component.literal("Open"))
                     .description(OptionDescription.of(Component.literal(
                         "Drag a panel to move it, a corner to scale it, an edge to resize it. Also opened with B.")))
                     .action((screen, button) -> Minecraft.getInstance().gui.setScreen(new HudPositionScreen(screen)))
                     .build())
                 .option(ButtonOption.createBuilder()
                     .name(Component.literal("Reset HUD position"))
+                    .text(Component.literal("Reset"))
                     .description(OptionDescription.of(Component.literal("Put the HUD back in the top-left corner.")))
                     .action((screen, button) -> widget.resetPanelPositions())
                     .build())
@@ -78,6 +80,7 @@ public final class ConfigScreen {
                 .name(Component.literal("Controls"))
                 .option(ButtonOption.createBuilder()
                     .name(Component.literal("Key binds..."))
+                    .text(Component.literal("Open"))
                     .description(OptionDescription.of(Component.literal(
                         "Rebind keys. This mod's keys are under \"" + InventoryReader.NAME + "\".")))
                     .action((screen, button) -> Minecraft.getInstance().gui.setScreen(
@@ -100,12 +103,14 @@ public final class ConfigScreen {
             .name(Component.literal("Appearance"))
             .option(ButtonOption.createBuilder()
                 .name(Component.literal("Preview (Move HUD...)"))
+                .text(Component.literal("Open"))
                 .description(OptionDescription.of(Component.literal(
                     "Shows the HUD with the saved look. Press Save first to see changes.")))
                 .action((screen, button) -> Minecraft.getInstance().gui.setScreen(new HudPositionScreen(screen)))
                 .build())
             .option(ButtonOption.createBuilder()
                 .name(Component.literal("Reset look to defaults"))
+                .text(Component.literal("Reset"))
                 .description(OptionDescription.of(Component.literal(
                     "Puts every Appearance setting back to the original look, right away. Your current look is "
                         + "kept as the preset \"" + HudPresets.BACKUP_NAME + "\".")))
@@ -257,6 +262,7 @@ public final class ConfigScreen {
             .option(chosen)
             .option(ButtonOption.createBuilder()
                 .name(Component.literal("Load preset"))
+                .text(Component.literal("Load"))
                 .description(OptionDescription.of(Component.literal(
                     "Switches to the chosen preset. Your current look is kept as \"" + HudPresets.BACKUP_NAME
                         + "\" first, so you can switch back.")))
@@ -269,6 +275,7 @@ public final class ConfigScreen {
                 .build())
             .option(ButtonOption.createBuilder()
                 .name(Component.literal("Delete preset"))
+                .text(Component.literal("Delete"))
                 .description(OptionDescription.of(Component.literal(
                     "Deletes the chosen preset. Built-in presets can't be deleted.")))
                 .action((screen, button) -> {
@@ -285,6 +292,7 @@ public final class ConfigScreen {
             .option(name)
             .option(ButtonOption.createBuilder()
                 .name(Component.literal("Save current as preset"))
+                .text(Component.literal("Save"))
                 .description(OptionDescription.of(Component.literal(
                     "Saves the current look and panel sizes under the name above (a number is added if the name "
                         + "is taken)." + saveFirst)))
@@ -297,6 +305,7 @@ public final class ConfigScreen {
                 .build())
             .option(ButtonOption.createBuilder()
                 .name(Component.literal("Copy share code"))
+                .text(Component.literal("Copy"))
                 .description(OptionDescription.of(Component.literal(
                     "Copies the current look and panel sizes as text, to paste in chat or Discord." + saveFirst)))
                 .action((screen, button) -> {
@@ -306,6 +315,7 @@ public final class ConfigScreen {
                 .build())
             .option(ButtonOption.createBuilder()
                 .name(Component.literal("Paste share code"))
+                .text(Component.literal("Paste"))
                 .description(OptionDescription.of(Component.literal(
                     "Reads a share code from the clipboard, saves it as a preset and switches to it. Your current "
                         + "look is kept as \"" + HudPresets.BACKUP_NAME + "\" first.")))
