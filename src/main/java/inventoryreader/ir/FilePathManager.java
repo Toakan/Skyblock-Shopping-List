@@ -27,6 +27,8 @@ public class FilePathManager {
     public static final File GEMSTONE_RECIPES_JSON = new File(DATA_DIR, "gemstone_recipes.json");
     public static final File REMOTE_RECIPES_JSON = new File(DATA_DIR, "recipes_remote.json");
     public static final File REMOTE_FORGE_JSON = new File(DATA_DIR, "recipes_remote_forge.json");
+    /** NPC shop purchases (coins + items) for items with no crafting or forge recipe. */
+    public static final File REMOTE_SHOP_JSON = new File(DATA_DIR, "recipes_remote_shop.json");
     /** SkyBlock item ID to the name recipes use, written by the recipe fetch. */
     public static final File ITEM_NAMES_JSON = new File(DATA_DIR, "item_names.json");
     public static final File REMOTE_SOURCES_JSON = new File(DATA_DIR, "remote_sources.json");
