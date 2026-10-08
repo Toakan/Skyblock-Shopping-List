@@ -79,10 +79,12 @@ public class SandboxViewer extends Screen {
 
     public SandboxViewer() {
         super(Component.literal("Hypixel Forge"));
-        // Reopen on the HUD's recipe so the planner and the HUD always show the same thing.
-        SandboxWidget widget = SandboxWidget.getInstance();
-        selectedRecipe = widget.getSelectedRecipe();
-        craftAmount = widget.getCraftAmount();
+        // Open on the first shopping-list recipe, if there is one.
+        List<ShoppingListEntry> list = SandboxWidget.getInstance().getShoppingList();
+        if (!list.isEmpty()) {
+            selectedRecipe = list.get(0).recipe;
+            craftAmount = list.get(0).amount;
+        }
     }
 
     @Override
@@ -173,14 +175,29 @@ public class SandboxViewer extends Screen {
         this.addRenderableWidget(Button.builder(
             Component.literal(SandboxWidget.getInstance().isEnabled() ? "Disable HUD" : "Enable HUD"),
             button -> {
-                boolean isCurrentlyEnabled = SandboxWidget.getInstance().isEnabled();
-                SandboxWidget.getInstance().setEnabled(!isCurrentlyEnabled);
-                if (!isCurrentlyEnabled && selectedRecipe != null) {
-                    SandboxWidget.getInstance().setSelectedRecipe(selectedRecipe);
-                }
+                SandboxWidget.getInstance().setEnabled(!SandboxWidget.getInstance().isEnabled());
                 button.setMessage(Component.literal(SandboxWidget.getInstance().isEnabled() ? "Disable HUD" : "Enable HUD"));
             }
         ).bounds(this.width - 110, 56, 100, 18).build());
+
+        this.addRenderableWidget(Button.builder(Component.literal("Add to list"), button -> addSelectedToList())
+            .bounds(this.width - 215, 56, 100, 18).build());
+    }
+
+    private void addSelectedToList() {
+        Minecraft client = Minecraft.getInstance();
+        if (selectedRecipe == null) {
+            if (client.player != null) client.player.sendOverlayMessage(Component.literal("Pick a recipe first"));
+            return;
+        }
+        SandboxWidget widget = SandboxWidget.getInstance();
+        SandboxWidget.AddResult result = widget.addToList(selectedRecipe, craftAmount);
+        String message = switch (result) {
+            case ADDED -> "Added " + craftAmount + "× " + selectedRecipe + " to the shopping list";
+            case INCREASED -> "Added " + craftAmount + " more " + selectedRecipe;
+            case FULL -> "Shopping list full (" + widget.getShoppingList().size() + "/" + widget.getMaxRecipes() + ")";
+        };
+        if (client.player != null) client.player.sendOverlayMessage(Component.literal(message));
     }
 
     private void initModifyResources() {
@@ -293,7 +310,6 @@ public class SandboxViewer extends Screen {
             simpleRecipe = recipeManager.getSimpleRecipe(selectedRecipe, craftAmount);
             if (mode == Mode.FORGE_MODE) {
                 checkRecipeRequirements();
-                SandboxWidget.getInstance().setCraftAmount(craftAmount);
             }
         }
     }
@@ -325,10 +341,6 @@ public class SandboxViewer extends Screen {
         expandedRecipeTree = recipeManager.expandRecipe(name, craftAmount);
         simpleRecipe = recipeManager.getSimpleRecipe(name, craftAmount);
         messages.clear();
-
-        if (mode == Mode.FORGE_MODE) {
-            SandboxWidget.getInstance().setSelectedRecipe(name);
-        }
 
         this.init();
         if (mode == Mode.FORGE_MODE) {

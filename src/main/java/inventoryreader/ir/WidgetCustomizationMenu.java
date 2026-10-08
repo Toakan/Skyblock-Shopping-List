@@ -26,8 +26,12 @@ public class WidgetCustomizationMenu extends Screen {
     private List<String> filteredRecipes;
     private int scrollOffset = 0;
     private final int MAX_RECIPES_SHOWN = 10;
-    private String selectedRecipe = null;
-    private RecipeManager.RecipeNode recipeTree = null;
+    private String searchText = "";
+    /** Recipe names the shopping-list rows were built for; rows are rebuilt when the list changes. */
+    private List<String> builtRows = List.of();
+    private static final int PANEL_TOP = 58;
+    private static final int PANEL_ROW = 22;
+    private static final int PANEL_MAX_ROWS = 5;
     private int treeViewX = 300;
     private int treeViewY = 80;
     private int treeViewWidth = 400;
@@ -51,8 +55,6 @@ public class WidgetCustomizationMenu extends Screen {
     private Tab currentTab = Tab.RECIPE_SELECTION;
     private Button recipeTabButton;
     private Button positioningTabButton;
-    private int craftAmount;
-    private EditBox craftAmountField;
 
     public WidgetCustomizationMenu() {
         super(Component.literal("Widget Customization"));
@@ -60,15 +62,9 @@ public class WidgetCustomizationMenu extends Screen {
         this.recipeManager = RecipeManager.getInstance();
         this.resourcesManager = ResourcesManager.getInstance();
         this.filteredRecipes = new ArrayList<>(recipeManager.getRecipeNames());
-        this.selectedRecipe = widget.getSelectedRecipe();
         this.widgetPositionX = widget.getWidgetX();
         this.widgetPositionY = widget.getWidgetY();
-        this.craftAmount = widget.getCraftAmount();
         this.currentTab = Tab.RECIPE_SELECTION;
-        if (selectedRecipe != null) {
-            ResourcesManager.RemainingResponse response = resourcesManager.getRemainingIngredients(selectedRecipe, craftAmount);
-            this.recipeTree = response.full_recipe;
-        }
     }
 
     public WidgetCustomizationMenu(boolean openPositioningTab) {
@@ -106,12 +102,6 @@ public class WidgetCustomizationMenu extends Screen {
                     widget.setEnabled(newState);
                     button.setMessage(newState ? Component.literal("Disable Widget") : Component.literal("Enable Widget"));
 
-                    if (selectedRecipe != null && newState) {
-                        widget.setSelectedRecipe(selectedRecipe);
-                        widget.setCraftAmount(craftAmount);
-                    }
-                    widget.saveConfiguration();
-
                     Minecraft client = Minecraft.getInstance();
                     if (client.player != null) {
                         Component message = Component.literal("Widget " + (newState ? "enabled!" : "disabled!"))
@@ -138,22 +128,67 @@ public class WidgetCustomizationMenu extends Screen {
     }
 
     private void initRecipeTab() {
-        searchField = new EditBox(font, 20, 55, 215, 20, Component.literal(""));
+        searchField = new EditBox(font, 20, 55, 250, 20, Component.literal(""));
         searchField.setMaxLength(50);
         searchField.setHint(Component.literal("Search recipes..."));
+        searchField.setValue(searchText);
         searchField.setResponder(this::updateFilteredRecipes);
         addRenderableWidget(searchField);
-        craftAmountField = new EditBox(font, 236, 55, 35, 20, Component.literal(""));
-        craftAmountField.setValue(String.valueOf(craftAmount));
-        craftAmountField.setResponder(this::updateCraftAmount);
-        addRenderableWidget(craftAmountField);
-        Button applyButton = Button.builder(
-            Component.literal("Apply Recipe to Widget"),
-            button -> applyConfiguration()
-        )
-        .bounds(width / 2 - 90, height - 30, 180, 20)
-        .build();
-        addRenderableWidget(applyButton);
+
+        // Shopping list panel (right column, above the preview): name, amount box, remove button per row.
+        List<ShoppingListEntry> list = widget.getShoppingList();
+        treeViewWidth = Math.max(200, Math.min(400, width - treeViewX - 20));
+        int rows = Math.min(list.size(), PANEL_MAX_ROWS);
+        for (int i = 0; i < rows; i++) {
+            ShoppingListEntry entry = list.get(i);
+            int y = PANEL_TOP + i * PANEL_ROW;
+            EditBox amount = new EditBox(font, treeViewX + treeViewWidth - 70, y, 40, 18, Component.literal("Amount"));
+            amount.setMaxLength(6);
+            amount.setValue(String.valueOf(entry.amount));
+            amount.setResponder(text -> {
+                try {
+                    int value = Integer.parseInt(text.trim());
+                    if (value > 0) widget.setEntryAmount(entry.recipe, value);
+                } catch (NumberFormatException ignored) {
+                    // Keep the saved amount while the box is empty or half-typed.
+                }
+            });
+            addRenderableWidget(amount);
+            addRenderableWidget(Button.builder(Component.literal("×"), button -> {
+                widget.removeFromList(entry.recipe);
+                rebuildWidgets();
+            }).bounds(treeViewX + treeViewWidth - 26, y, 20, 18).build());
+        }
+        builtRows = list.stream().map(e -> e.recipe).toList();
+        treeViewY = PANEL_TOP + Math.max(1, rows) * PANEL_ROW + 22;
+        treeViewHeight = Math.max(60, height - 40 - treeViewY);
+
+        addRenderableWidget(Button.builder(Component.literal("Clear list"), button -> {
+            widget.clearList();
+            rebuildWidgets();
+        }).bounds(width / 2 - 60, height - 30, 120, 20).build());
+    }
+
+    @Override
+    public void tick() {
+        super.tick();
+        // Entries can disappear on their own (auto-remove); keep the rows in step with the list.
+        if (currentTab == Tab.RECIPE_SELECTION) {
+            List<String> names = widget.getShoppingList().stream().map(e -> e.recipe).toList();
+            if (!names.equals(builtRows)) rebuildWidgets();
+        }
+    }
+
+    /** Top-level nodes the HUD shows: Total, then one tree per recipe. */
+    private List<RecipeManager.RecipeNode> tops() {
+        RecipeManager.RecipeNode root = widget.getDisplayRoot();
+        return root == null || root.ingredients == null ? List.of() : root.ingredients;
+    }
+
+    private int forestHeight() {
+        int height = 0;
+        for (RecipeManager.RecipeNode top : tops()) height += getExpandedNodeHeight(top, SandboxWidget.LIST_KEY);
+        return height;
     }
 
     private void initPositioningTab() {
@@ -209,6 +244,7 @@ public class WidgetCustomizationMenu extends Screen {
     }
 
     private void updateFilteredRecipes(String searchTerm) {
+        searchText = searchTerm == null ? "" : searchTerm;
         if (searchTerm == null || searchTerm.isEmpty()) {
             this.filteredRecipes = new ArrayList<>(recipeManager.getRecipeNames());
         } else {
@@ -218,19 +254,6 @@ public class WidgetCustomizationMenu extends Screen {
                 .collect(Collectors.toList());
         }
         scrollOffset = 0;
-    }
-
-    private void updateCraftAmount(String text) {
-        try {
-            int amount = Integer.parseInt(text);
-            this.craftAmount = Math.max(1, amount);
-        }catch (NumberFormatException e) {
-            this.craftAmount = 1;
-        }
-        if (selectedRecipe != null) {
-            ResourcesManager.RemainingResponse response = resourcesManager.getRemainingIngredients(selectedRecipe, craftAmount);
-            recipeTree = response.full_recipe;
-        }
     }
 
     @Override
@@ -259,13 +282,14 @@ public class WidgetCustomizationMenu extends Screen {
         context.text(font,
             Component.literal("Recipe Selection").setStyle(Style.EMPTY.withColor(ChatFormatting.GOLD).withBold(true)),
             20, 47, GOLD, false);
+        renderListPanel(context);
         context.text(font,
-            Component.literal("Recipe Tree Preview (" + craftAmount + "×)").setStyle(Style.EMPTY.withColor(ChatFormatting.GOLD).withBold(true)),
-            treeViewX, treeViewY - 15, GOLD, false);
-        context.text(font, "Craft:", 236, 57, 0xFFCCCCCC, false);
+            Component.literal("Preview").setStyle(Style.EMPTY.withColor(ChatFormatting.GOLD).withBold(true)),
+            treeViewX, treeViewY - 13, GOLD, false);
         int yPos = 85;
         int itemHeight = 20;
         int endIndex = Math.min(scrollOffset + MAX_RECIPES_SHOWN, filteredRecipes.size());
+        java.util.Set<String> inList = new java.util.HashSet<>(builtRows);
 
         context.fill(20, yPos - 5, 270, yPos + MAX_RECIPES_SHOWN * itemHeight + 15, 0xFC271910);
 
@@ -283,7 +307,7 @@ public class WidgetCustomizationMenu extends Screen {
         } else {
             for (int i = scrollOffset; i < endIndex; i++) {
                 String recipe = filteredRecipes.get(i);
-                boolean isSelected = recipe.equals(selectedRecipe);
+                boolean isSelected = inList.contains(recipe);
                 if (isSelected) {
                     context.fill(20, yPos, 270, yPos + itemHeight, 0x99608C35);
                     context.text(font, recipe, 30, yPos + 5, 0xFFFFB728, false);
@@ -325,9 +349,12 @@ public class WidgetCustomizationMenu extends Screen {
             treeViewX + treeViewWidth,
             treeViewY + treeViewHeight
         );
-        if (recipeTree != null) {
-            renderRecipeTree(context, recipeTree, treeViewX + 10, treeViewY + 10 - treeScrollOffset, 0, selectedRecipe);
-            int totalHeight = getExpandedNodeHeight(recipeTree, selectedRecipe);
+        if (!tops().isEmpty()) {
+            int treeY = treeViewY + 10 - treeScrollOffset;
+            for (RecipeManager.RecipeNode top : tops()) {
+                treeY = renderRecipeTree(context, top, treeViewX + 10, treeY, 0, SandboxWidget.LIST_KEY);
+            }
+            int totalHeight = forestHeight();
             if (totalHeight > treeViewHeight) {
                 if (treeScrollOffset > 0) {
                     String up = "▲";
@@ -343,12 +370,33 @@ public class WidgetCustomizationMenu extends Screen {
                 context.fill(treeViewX + treeViewWidth - scrollbarWidth - 4, treeViewY, treeViewX + treeViewWidth - 4, treeViewY + treeViewHeight, 0x55FFFFFF);
                 context.fill(treeViewX + treeViewWidth - scrollbarWidth - 4, scrollbarY, treeViewX + treeViewWidth - 4, scrollbarY + scrollbarHeight, 0xFFDAA520);
             }
-        } else if (selectedRecipe != null) {
-            context.text(font, "Loading recipe tree...", treeViewX + 20, treeViewY + 20, 0xFFAAAAAA, false);
+        } else if (!builtRows.isEmpty()) {
+            context.text(font, "Working out the list...", treeViewX + 20, treeViewY + 20, 0xFFAAAAAA, false);
         } else {
-            context.text(font, "Select a recipe to preview", treeViewX + 20, treeViewY + 20, 0xFFAAAAAA, false);
+            context.text(font, "Click recipes on the left to add them", treeViewX + 20, treeViewY + 20, 0xFFAAAAAA, false);
         }
         context.disableScissor();
+    }
+
+    private void renderListPanel(GuiGraphicsExtractor context) {
+        List<ShoppingListEntry> list = widget.getShoppingList();
+        String header = "Shopping list (" + list.size() + "/" + widget.getMaxRecipes() + ")";
+        context.text(font, Component.literal(header).setStyle(Style.EMPTY.withColor(ChatFormatting.GOLD).withBold(true)),
+            treeViewX, 47, GOLD, false);
+        int rows = Math.min(list.size(), PANEL_MAX_ROWS);
+        if (rows == 0) {
+            context.text(font, "Empty - click a recipe on the left to add it", treeViewX + 4, PANEL_TOP + 5, 0xFFAAAAAA, false);
+            return;
+        }
+        for (int i = 0; i < rows; i++) {
+            int y = PANEL_TOP + i * PANEL_ROW;
+            context.fill(treeViewX, y - 2, treeViewX + treeViewWidth, y + 20, i % 2 == 0 ? 0xFC271910 : 0xFC2E1F14);
+            String name = font.plainSubstrByWidth(list.get(i).recipe, treeViewWidth - 80);
+            context.text(font, name, treeViewX + 4, y + 5, 0xFFE0E0E0, false);
+        }
+        if (list.size() > rows) {
+            context.text(font, "+" + (list.size() - rows) + " more", treeViewX + 4, PANEL_TOP + rows * PANEL_ROW, 0xFFAAAAAA, false);
+        }
     }
 
     private void renderPositioningTab(GuiGraphicsExtractor context, int mouseX, int mouseY) {
@@ -399,30 +447,34 @@ public class WidgetCustomizationMenu extends Screen {
             GOLD,
             Math.max(10, previewWidth - 20)
         );
-    if (selectedRecipe != null) {
+    if (!tops().isEmpty()) {
             drawFittedTextWithShadow(context,
-                Component.literal("Recipe: " + selectedRecipe),
+                Component.literal(widget.getTitle()),
                 widgetPositionX + 10,
                 widgetPositionY + 30,
                 GOLD,
                 Math.max(10, previewWidth - 20)
             );
-            if (recipeTree != null) {
+            {
                 int contentX = widgetPositionX + 10;
                 int contentY = widgetPositionY + 50;
                 int contentWidth = Math.max(20, previewWidth - 20);
-                int totalLines = getExpandedNodeHeight(recipeTree, selectedRecipe) / 16;
+                int totalLines = forestHeight() / 16;
                 totalLines = Math.max(totalLines, 1);
                 int availableHeight = Math.max(10, previewHeight - (contentY - widgetPositionY) - 10);
                 int lineHeight = Math.min(16, Math.max(6, availableHeight / totalLines));
 
-                int maxDepth = getExpandedMaxDepth(recipeTree, selectedRecipe, 0);
+                int maxDepth = 0;
+                for (RecipeManager.RecipeNode top : tops()) maxDepth = Math.max(maxDepth, getExpandedMaxDepth(top, SandboxWidget.LIST_KEY, 0));
                 int baseIndentUnit = Math.max(4, Math.round(RECIPE_LEVEL_INDENT * Math.max(0.3f, lineHeight / 16.0f)));
                 int minNodeWidth = 60;
                 int maxAllowedIndent = Math.max(2, (contentWidth - minNodeWidth) / Math.max(1, maxDepth));
                 int indentUnit = Math.max(2, Math.min(baseIndentUnit, maxAllowedIndent));
 
-                int treeEndY = renderStaticWidgetStyleTreeScaled(context, recipeTree, contentX, contentY, 0, contentWidth, selectedRecipe, lineHeight, indentUnit);
+                int treeEndY = contentY;
+                for (RecipeManager.RecipeNode top : tops()) {
+                    treeEndY = renderStaticWidgetStyleTreeScaled(context, top, contentX, treeEndY, 0, contentWidth, SandboxWidget.LIST_KEY, lineHeight, indentUnit);
+                }
 
                 int dividerY = treeEndY + 4;
                 if (dividerY < widgetPositionY + previewHeight - 5) {
@@ -434,7 +486,7 @@ public class WidgetCustomizationMenu extends Screen {
             }
         } else {
             drawFittedTextWithShadow(context,
-                Component.literal("No recipe selected"),
+                Component.literal("Shopping list is empty"),
                 widgetPositionX + 10,
                 widgetPositionY + 60,
                 0xFFFFFFFF,
@@ -754,8 +806,8 @@ public class WidgetCustomizationMenu extends Screen {
         if (currentTab == Tab.RECIPE_SELECTION &&
             mouseX >= treeViewX && mouseX <= treeViewX + treeViewWidth &&
             mouseY >= treeViewY && mouseY <= treeViewY + treeViewHeight) {
-            if (verticalAmount != 0 && recipeTree != null) {
-                int totalTreeHeight = getExpandedNodeHeight(recipeTree, selectedRecipe);
+            if (verticalAmount != 0 && !tops().isEmpty()) {
+                int totalTreeHeight = forestHeight();
                 int visibleHeight = treeViewHeight - 20;
                 int scrollAmount = (int)(verticalAmount * -12);
                 treeScrollOffset += scrollAmount;
@@ -801,17 +853,22 @@ public class WidgetCustomizationMenu extends Screen {
                 int recipeIndex = (int) ((mouseY - 80) / 20);
                 int actualIndex = scrollOffset + recipeIndex;
                 if (actualIndex >= 0 && actualIndex < filteredRecipes.size() && recipeIndex < MAX_RECIPES_SHOWN) {
-                    selectedRecipe = filteredRecipes.get(actualIndex);
-                    widget.setSelectedRecipe(selectedRecipe);
-                    ResourcesManager.RemainingResponse response = resourcesManager.getRemainingIngredients(selectedRecipe, craftAmount);
-                    recipeTree = response.full_recipe;
-                    if (recipeTree != null) {
-                        widget.setNodeExpansion(SandboxWidget.getNodeKey(recipeTree), true);
+                    String recipe = filteredRecipes.get(actualIndex);
+                    SandboxWidget.AddResult result = widget.addToList(recipe, 1);
+                    if (result == SandboxWidget.AddResult.FULL) {
+                        Minecraft client = Minecraft.getInstance();
+                        if (client.player != null) {
+                            client.player.sendOverlayMessage(Component.literal("Shopping list full ("
+                                + widget.getShoppingList().size() + "/" + widget.getMaxRecipes() + ")")
+                                .setStyle(Style.EMPTY.withColor(ChatFormatting.RED)));
+                        }
+                    } else {
+                        rebuildWidgets();
                     }
                     return true;
                 }
             }
-            if (recipeTree != null && mouseX >= treeViewX && mouseX <= treeViewX + treeViewWidth &&
+            if (!tops().isEmpty() && mouseX >= treeViewX && mouseX <= treeViewX + treeViewWidth &&
                 mouseY >= treeViewY && mouseY <= treeViewY + treeViewHeight) {
                 return handleTreeNodeClick(mouseX, mouseY);
             }
@@ -941,7 +998,11 @@ public class WidgetCustomizationMenu extends Screen {
     private boolean handleTreeNodeClick(double mouseX, double mouseY) {
         int x = treeViewX + 10;
         int y = treeViewY + 10 - treeScrollOffset;
-        return checkNodeClick(recipeTree, mouseX, mouseY, x, y, 0, selectedRecipe);
+        for (RecipeManager.RecipeNode top : tops()) {
+            if (checkNodeClick(top, mouseX, mouseY, x, y, 0, SandboxWidget.LIST_KEY)) return true;
+            y += getExpandedNodeHeight(top, SandboxWidget.LIST_KEY);
+        }
+        return false;
     }
 
     private boolean checkNodeClick(RecipeManager.RecipeNode node, double mouseX, double mouseY, int x, int y, int level, String pathKey) {
@@ -1018,10 +1079,6 @@ public class WidgetCustomizationMenu extends Screen {
     }
 
     private void applyConfiguration() {
-        if (currentTab == Tab.RECIPE_SELECTION && selectedRecipe != null) {
-            widget.setSelectedRecipe(selectedRecipe);
-            widget.setCraftAmount(craftAmount);
-        }
         widget.setWidgetPosition(widgetPositionX, widgetPositionY);
 
         Minecraft client = Minecraft.getInstance();
@@ -1044,14 +1101,8 @@ public class WidgetCustomizationMenu extends Screen {
 
     @Override
     public void onClose() {
-        if (selectedRecipe != null && !selectedRecipe.equals(widget.getSelectedRecipe())) {
-            widget.setSelectedRecipe(selectedRecipe);
-        }
         if (widget.getWidgetX() != widgetPositionX || widget.getWidgetY() != widgetPositionY) {
             widget.setWidgetPosition(widgetPositionX, widgetPositionY);
-        }
-        if (widget.getCraftAmount() != craftAmount) {
-            widget.setCraftAmount(craftAmount);
         }
         widget.saveConfiguration();
         super.onClose();

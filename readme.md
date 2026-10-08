@@ -2,7 +2,13 @@
 
 Skyblock Shopping List is a Fabric client mod for Hypixel SkyBlock. It keeps a count of the items in your inventory, sacks, backpacks and ender chest, and shows a shopping list HUD for a recipe you pick: what you can already craft and what you still need.
 
+This tool has been updated to be really beneficial for Ironman accounts, however it can still be useful for regular accounts to keep track of their inventory and plan their crafting efficiently.
+
+
+# Notification of Change
 This is a renamed, maintained fork of Inventory Reader ([Scholiboi/InventoryReader](https://github.com/Scholiboi/InventoryReader)), originally written by Scholiboi. Remove any old Inventory Reader jar from `mods/` before installing; its data folder (`.ir-data`) is moved over automatically on first launch.
+
+The license and credits remain the same as the original Inventory Reader project, with modifications only for the renaming and maintenance of this fork.
 
 ## Requirements
 - Minecraft 26.2
@@ -19,11 +25,21 @@ This is a renamed, maintained fork of Inventory Reader ([Scholiboi/InventoryRead
 ## First-time setup
 The mod only knows what you have shown it. Open each of your sacks, backpacks and ender chest pages once in SkyBlock. After that, counts stay up to date from your inventory, from the containers you open, and from the `[Sacks]` chat summaries.
 
+## Shopping list
+Press `B` (or `/ssl widget`) and click recipes on the left to add them to your shopping list (up to 3 by default). Each entry has its own amount box and an × to remove it. In `/ssl menu` Forge Mode, **Add to list** adds the recipe you are looking at with the amount typed there.
+
+The HUD shows:
+- **Total**: every raw material still needed across all recipes, missing items first. Your stock is shared between recipes, never counted twice (earlier entries get it first).
+- One tree per recipe.
+- **Craftable**: intermediates you can make right now.
+
+When a recipe has everything it needs you get a "Ready to craft" pop-up, and once you have made the amount you asked for an "Item achieved" pop-up and the recipe leaves the list. Notifications, auto-remove, the Total section and the maximum list size can all be changed in **Settings** (`/ssl menu` → Settings).
+
 ## Keys and commands
 | Key / command | Action |
 | --- | --- |
 | `V` or `/ssl menu` | Open the Sandbox Viewer (resources, recipes, forge planner, manual edits) |
-| `B` or `/ssl widget` | Open HUD widget customization |
+| `B` or `/ssl widget` | Edit the shopping list and HUD position |
 | `H` | Toggle the HUD widget |
 | `J` | Open HUD positioning |
 | `/ssl` | List commands |
@@ -31,7 +47,7 @@ The mod only knows what you have shown it. Open each of your sacks, backpacks an
 | `/ssl done` | Stop the "open a sack" reminder |
 | `/ssl credits` | Show credits |
 
-`/ir` still works as an alias for `/ssl`. Keys can be rebound under Options > Controls.
+`/ir` still works as an alias for `/ssl`. Keys can be rebound under Options > Controls > Key Binds > Skyblock Shopping List (or Settings → Key binds...).
 
 ## SkyBlock only
 The mod only runs on Hypixel SkyBlock. With the official Hypixel Mod API installed, it uses the API's location event (Hypixel's own signal, which also reports the island). Without it, it falls back to the sidebar scoreboard title ("SKYBLOCK"). In lobbies, other Hypixel games and other servers the HUD is hidden, the keys do nothing and nothing is tracked, so other inventories never change your counts. The `/ssl` commands still work everywhere.
@@ -48,7 +64,7 @@ As Hypixel states, every modification is used at your own risk.
 Everything lives in `.skyblock-shopping-list/data/` inside your Minecraft folder:
 - `resources.json`: tracked item counts
 - `inventorydata.json`, `allcontainerData.json`, `sacks.json`: last-seen inventory, container and sack contents, used to work out changes
-- `widget_config.json`: HUD position, size, selected recipe and expanded nodes
+- `widget_config.json`: shopping list, HUD position and size, expanded nodes and settings
 - `forging.json`, `gemstone_recipes.json`: built-in fallback recipes
 - `recipes_remote.json`, `recipes_remote_forge.json`: recipes parsed from the NEU repository
 - `remote_sources.json`, `remote_sources_meta.json`: recipe source list and download cache state
