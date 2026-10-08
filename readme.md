@@ -6,7 +6,7 @@ This tool has been updated to be really beneficial for Ironman accounts, however
 
 
 # Notification of Change
-This is a renamed, maintained fork of Inventory Reader ([Scholiboi/InventoryReader](https://github.com/Scholiboi/InventoryReader)), originally written by Scholiboi. Remove any old Inventory Reader jar from `mods/` before installing; its data folder (`.ir-data`) is moved over automatically on first launch.
+This is a renamed, maintained fork of Inventory Reader ([Scholiboi/InventoryReader](https://github.com/Scholiboi/InventoryReader)), originally written by Scholiboi. Remove any old Inventory Reader jar from `mods/` before installing; its data folder (`.ir-data`, or `.skyblock-shopping-list` from earlier versions of this fork) is moved to `config/skyblock-shopping-list/` automatically on first launch.
 
 The license and credits remain the same as the original Inventory Reader project, with modifications only for the renaming and maintenance of this fork.
 
@@ -65,7 +65,7 @@ Skyblock Shopping List is designed to stay within the [Hypixel Allowed Modificat
 As Hypixel states, every modification is used at your own risk.
 
 ## Where data is stored
-Everything lives in `.skyblock-shopping-list/data/` inside your Minecraft folder:
+Everything lives in `config/skyblock-shopping-list/` inside your Minecraft folder:
 - `resources.json`: tracked item counts
 - `inventorydata.json`, `allcontainerData.json`, `sacks.json`: last-seen inventory, container and sack contents, used to work out changes
 - `coins.json`: last bank balance seen

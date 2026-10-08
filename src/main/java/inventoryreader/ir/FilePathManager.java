@@ -14,10 +14,17 @@ import net.fabricmc.loader.api.FabricLoader;
 import inventoryreader.ir.recipes.RemoteRecipeFetcher;
 
 public class FilePathManager {
-    public static final File MOD_DIR = new File(FabricLoader.getInstance().getGameDir().toFile(), ".skyblock-shopping-list");
-    /** Data folder used while the mod was called Inventory Reader; moved to {@link #MOD_DIR} on first launch. */
-    private static final File LEGACY_MOD_DIR = new File(FabricLoader.getInstance().getGameDir().toFile(), ".ir-data");
-    public static final File DATA_DIR = new File(MOD_DIR, "data");
+    /** Everything the mod stores, in Fabric's standard config folder: config/skyblock-shopping-list/. */
+    public static final File MOD_DIR = new File(FabricLoader.getInstance().getConfigDir().toFile(), InventoryReader.MOD_ID);
+    public static final File DATA_DIR = MOD_DIR;
+    /**
+     * Folders used by older versions, newest first, in the game directory. Each kept its files in a data/
+     * subfolder plus welcome_shown.txt at the top.
+     */
+    private static final File[] LEGACY_DIRS = {
+        new File(FabricLoader.getInstance().getGameDir().toFile(), ".skyblock-shopping-list"),
+        new File(FabricLoader.getInstance().getGameDir().toFile(), ".ir-data"),
+    };
     public static final File CONTAINER_JSON = new File(DATA_DIR, "allcontainerData.json");
     public static final File INVENTORY_JSON = new File(DATA_DIR, "inventorydata.json");
     public static final File RESOURCES_JSON = new File(DATA_DIR, "resources.json");
@@ -60,13 +67,30 @@ public class FilePathManager {
         RemoteRecipeFetcher.fetchAsync();
     }
 
+    /** Moves the newest old data folder into config/skyblock-shopping-list/ the first time this version runs. */
     private static void migrateLegacyDir() {
-        if (MOD_DIR.exists() || !LEGACY_MOD_DIR.isDirectory()) return;
-        try {
-            Files.move(LEGACY_MOD_DIR.toPath(), MOD_DIR.toPath());
-            InventoryReader.LOGGER.info("Moved {} to {}", LEGACY_MOD_DIR.getName(), MOD_DIR.getName());
-        } catch (IOException e) {
-            InventoryReader.LOGGER.warn("Could not move {} to {}; starting with empty data", LEGACY_MOD_DIR.getName(), MOD_DIR.getName(), e);
+        if (MOD_DIR.exists()) return;
+        for (File legacy : LEGACY_DIRS) {
+            if (!legacy.isDirectory()) continue;
+            try {
+                Files.createDirectories(MOD_DIR.toPath());
+                File legacyData = new File(legacy, "data");
+                File[] entries = legacyData.listFiles();
+                if (entries != null) {
+                    for (File entry : entries) {
+                        Files.move(entry.toPath(), new File(MOD_DIR, entry.getName()).toPath());
+                    }
+                }
+                File welcome = new File(legacy, "welcome_shown.txt");
+                if (welcome.exists()) Files.move(welcome.toPath(), new File(MOD_DIR, welcome.getName()).toPath());
+                // Only empty folders are removed; anything unexpected is left where it was.
+                legacyData.delete();
+                legacy.delete();
+                InventoryReader.LOGGER.info("Moved {} to {}", legacy.getName(), MOD_DIR);
+            } catch (IOException e) {
+                InventoryReader.LOGGER.warn("Could not move {} to {}; some data may need moving by hand", legacy, MOD_DIR, e);
+            }
+            return;
         }
     }
 
