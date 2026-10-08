@@ -110,6 +110,10 @@ public class SandboxViewer extends Screen {
             this.init();
         }).bounds(startX + 3 * tabWidth, tabY, tabWidth, tabHeight).build());
 
+        this.addRenderableWidget(Button.builder(Component.literal("HUD Widget..."),
+            button -> this.minecraft.gui.setScreen(new WidgetCustomizationMenu())
+        ).bounds(this.width - 110, 5, 100, 20).build());
+
         switch (mode) {
             case RESOURCE_VIEWER -> initResourceViewer();
             case RECIPE_VIEWER -> initRecipeViewer();
