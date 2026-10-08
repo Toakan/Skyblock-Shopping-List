@@ -2,19 +2,19 @@ package inventoryreader.ir;
 
 import com.mojang.brigadier.CommandDispatcher;
 
-import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
-import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.*;
+import static net.fabricmc.fabric.api.client.command.v2.ClientCommands.*;
 
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
 
-public class IrCommandManager implements ClientModInitializer{
+public final class IrCommandManager {
 
-    @Override
-    public void onInitializeClient() {
+    private IrCommandManager() {}
+
+    public static void register() {
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
             registerIrCommands(dispatcher);
         });
@@ -41,9 +41,11 @@ public class IrCommandManager implements ClientModInitializer{
                 .then(literal("reset")
                     .executes(context -> {
                         InventoryReader.LOGGER.info("Executing complete mod reset");
-                        SendingManager.blockNextDataSend();
-                        StorageReader.getInstance().clearAllData();
-                        FilePathManager.reInitializeFiles();
+                        FilePathManager.resetData();
+                        StorageReader.getInstance().clear();
+                        SackReader.getInstance().clear();
+                        InventoryReaderClient.clearInventorySnapshot();
+                        SandboxWidget.getInstance().resetConfiguration();
                         SackReader.setNeedsReminder(true);
                         context.getSource().sendFeedback(
                             Component.literal("Inventory Reader data reset! ")
@@ -57,7 +59,6 @@ public class IrCommandManager implements ClientModInitializer{
                 .then(literal("done")
                     .executes(context -> {
                         SackReader.setNeedsReminder(false);
-                        SendingManager.unblockDataSend();
                         context.getSource().sendFeedback(Component.literal("Acknowledged! Reminders stopped.")
                             .setStyle(Style.EMPTY.withColor(ChatFormatting.GREEN)));
                         return 1;
@@ -65,25 +66,21 @@ public class IrCommandManager implements ClientModInitializer{
                 )
                 .then(literal("menu")
                     .executes(context -> {
-                        InventoryReader.LOGGER.info("Opening SandboxViewer GUI (deferred)");
-                        try {
-                            inventoryreader.ir.InventoryReaderClient.shouldOpenSandboxViewer = true;
-                        } catch (Exception e) {
-                            InventoryReader.LOGGER.error("Failed to schedule SandboxViewer GUI", e);
-                        }
+                        // Deferred to the next tick: the chat screen closes after the command runs.
+                        InventoryReaderClient.shouldOpenSandboxViewer = true;
                         return 1;
                     })
                 )
                 .then(literal("widget")
                     .executes(context -> {
-                        inventoryreader.ir.InventoryReaderClient.shouldOpenWidgetCustomization = true;
+                        InventoryReaderClient.shouldOpenWidgetCustomization = true;
                         return 1;
                     })
                 )
                 .then(literal("credits")
                     .executes(context -> {
                         context.getSource().sendFeedback(
-                            Component.literal("Inventory Reader by Scholiboi")
+                            Component.literal("Inventory Reader by Scholiboi, maintained by Tad")
                                 .setStyle(Style.EMPTY.withColor(ChatFormatting.GOLD))
                         );
                         context.getSource().sendFeedback(

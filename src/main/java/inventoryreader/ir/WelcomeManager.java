@@ -21,13 +21,9 @@ public class WelcomeManager {
         }
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
             client.execute(() -> {
-                try {
-                    checkFirstTimeUser();
-                    if (isFirstTimeUser) {
-                        showWelcomeMessage(client);
-                    }
-                } catch (Exception e) {
-                    Thread.currentThread().interrupt();
+                checkFirstTimeUser();
+                if (isFirstTimeUser) {
+                    showWelcomeMessage(client);
                 }
             });
         });
@@ -42,13 +38,13 @@ public class WelcomeManager {
 
         String divider = "§6§l" + "=".repeat(40);
         
-        client.player.displayClientMessage(Component.literal(divider), false);
-        client.player.displayClientMessage(Component.literal("§b§lSkyblock Resource Calculator").setStyle(
+        client.player.sendSystemMessage(Component.literal(divider));
+        client.player.sendSystemMessage(Component.literal("§b§lSkyblock Resource Calculator").setStyle(
             Style.EMPTY.withBold(true).withColor(ChatFormatting.AQUA)
-        ), false);
+        ));
         
-        client.player.displayClientMessage(Component.literal("§eTrack resources and recipes for Hypixel Skyblock mining."), false);
-        client.player.displayClientMessage(Component.literal(""), false);
+        client.player.sendSystemMessage(Component.literal("§eTrack resources and recipes for Hypixel Skyblock mining."));
+        client.player.sendSystemMessage(Component.literal(""));
         
         MutableComponent commandsText = Component.literal("§6§lCommands:").append(Component.literal("\n§e- Press "));
         commandsText.append(Component.literal("§b[V]").setStyle(Style.EMPTY.withBold(true).withColor(ChatFormatting.AQUA)));
@@ -56,31 +52,31 @@ public class WelcomeManager {
         commandsText.append(Component.literal("\n§e- Press "));
         commandsText.append(Component.literal("§b[B]").setStyle(Style.EMPTY.withBold(true).withColor(ChatFormatting.AQUA)));
         commandsText.append(Component.literal("§e to customize the HUD widget"));
-        client.player.displayClientMessage(commandsText, false);
+        client.player.sendSystemMessage(commandsText);
         
         MutableComponent chatCommandsText = Component.literal("§6§lChat Commands:").setStyle(
             Style.EMPTY.withBold(true).withColor(ChatFormatting.GOLD)
         );
-        client.player.displayClientMessage(chatCommandsText, false);
-        client.player.displayClientMessage(Component.literal("§e- §b/ir menu§e: Open Sandbox Viewer"), false);
-        client.player.displayClientMessage(Component.literal("§e- §b/ir widget§e: Open Widget Customization"), false);
-        client.player.displayClientMessage(Component.literal("§e- §b/ir reset§e: Reset all mod data"), false);
-        client.player.displayClientMessage(Component.literal("§e- §b/ir done§e: Acknowledge reminders"), false);
-        client.player.displayClientMessage(Component.literal("§e- §b/ir§e: Show all available commands"), false);
+        client.player.sendSystemMessage(chatCommandsText);
+        client.player.sendSystemMessage(Component.literal("§e- §b/ir menu§e: Open Sandbox Viewer"));
+        client.player.sendSystemMessage(Component.literal("§e- §b/ir widget§e: Open Widget Customization"));
+        client.player.sendSystemMessage(Component.literal("§e- §b/ir reset§e: Reset all mod data"));
+        client.player.sendSystemMessage(Component.literal("§e- §b/ir done§e: Acknowledge reminders"));
+        client.player.sendSystemMessage(Component.literal("§e- §b/ir§e: Show all available commands"));
 
-        client.player.displayClientMessage(Component.literal(""), false);
+        client.player.sendSystemMessage(Component.literal(""));
         MutableComponent firstTimeText = Component.literal("§d§lFirst-Time Setup:").setStyle(
             Style.EMPTY.withBold(true).withColor(ChatFormatting.LIGHT_PURPLE)
         );
-        client.player.displayClientMessage(firstTimeText, false);
+        client.player.sendSystemMessage(firstTimeText);
         MutableComponent warningText = Component.literal("⚠️ For the mod to work, open all your Sacks, Backpacks and Ender Chests once in Skyblock. ⚠️").setStyle(
             Style.EMPTY.withBold(true).withColor(ChatFormatting.RED)
         );
-        client.player.displayClientMessage(warningText, false);
-        client.player.displayClientMessage(Component.literal("§e1. Press §b[V]§e to open the Sandbox Viewer"), false);
-        client.player.displayClientMessage(Component.literal("§e2. Use the 'Modify' tab to modify resource amounts, if needed"), false);
-        client.player.displayClientMessage(Component.literal("§e3. In the 'Forge' tab, select recipes to view progress"), false);
-        client.player.displayClientMessage(Component.literal("§e4. Enable the HUD widget to track resources while mining"), false);
+        client.player.sendSystemMessage(warningText);
+        client.player.sendSystemMessage(Component.literal("§e1. Press §b[V]§e to open the Sandbox Viewer"));
+        client.player.sendSystemMessage(Component.literal("§e2. Use the 'Modify' tab to modify resource amounts, if needed"));
+        client.player.sendSystemMessage(Component.literal("§e3. In the 'Forge' tab, select recipes to view progress"));
+        client.player.sendSystemMessage(Component.literal("§e4. Enable the HUD widget to track resources while mining"));
         
         try {
             WELCOME_FLAG_FILE.createNewFile();
@@ -89,6 +85,6 @@ public class WelcomeManager {
         }
         
         isFirstTimeUser = false;
-        client.player.displayClientMessage(Component.literal(divider), false);
+        client.player.sendSystemMessage(Component.literal(divider));
     }
 }

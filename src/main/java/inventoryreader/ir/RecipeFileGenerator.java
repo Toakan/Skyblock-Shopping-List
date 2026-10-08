@@ -1,16 +1,9 @@
 package inventoryreader.ir;
 
-import java.io.FileWriter;
-import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 
 public class RecipeFileGenerator {
-    private static final Logger LOGGER = LoggerFactory.getLogger(InventoryReader.MOD_ID);
 
     public static void initializeRecipeFiles() {
         if (!FilePathManager.FORGING_JSON.exists()) {
@@ -22,7 +15,6 @@ public class RecipeFileGenerator {
     }
 
     private static void generateForgingRecipes() {
-        LOGGER.info("Generating forging recipes file");
         Map<String, Map<String, Integer>> forgingRecipes = new LinkedHashMap<>();
         forgingRecipes.put("Refined Diamond", mapOf("Enchanted Diamond Block", 2));
         forgingRecipes.put("Refined Mithril", mapOf("Enchanted Mithril", 160));
@@ -382,20 +374,13 @@ public class RecipeFileGenerator {
             new int[]{1, 1, 1, 1, 1, 1}
         ));
 
-    try (FileWriter writer = new FileWriter(FilePathManager.FORGING_JSON)) {
-            Gson gson = new GsonBuilder().setPrettyPrinting().create();
-            java.util.Map<String, Object> wrapped = new java.util.LinkedHashMap<>();
-            wrapped.put("version", 1);
-            wrapped.put("recipes", forgingRecipes);
-            gson.toJson(wrapped, writer);
-            LOGGER.info("Forging recipes file generated successfully");
-        } catch (IOException e) {
-            LOGGER.error("Failed to generate forging recipes file", e);
-        }
+        Map<String, Object> wrapped = new LinkedHashMap<>();
+        wrapped.put("version", 1);
+        wrapped.put("recipes", forgingRecipes);
+        JsonFiles.write(FilePathManager.FORGING_JSON, wrapped);
     }
 
     private static void generateGemstoneRecipes() {
-        LOGGER.info("Generating gemstone recipes file");
         Map<String, Map<String, Integer>> gemstoneRecipes = new LinkedHashMap<>();
         String[] gemstoneTypes = {
             "⸕ Amber", "❈ Amethyst", "☂ Aquamarine", "☘ Citrine", "☘ Jade", "❁ Jasper",
@@ -419,16 +404,10 @@ public class RecipeFileGenerator {
             perfect.put(symbol + " Flawless " + name + " Gemstone", 5);
             gemstoneRecipes.put(symbol + " Perfect " + name + " Gemstone", perfect);
         }
-    try (FileWriter writer = new FileWriter(FilePathManager.GEMSTONE_RECIPES_JSON)) {
-            Gson gson = new GsonBuilder().setPrettyPrinting().create();
-            java.util.Map<String, Object> wrapped = new java.util.LinkedHashMap<>();
-            wrapped.put("version", 1);
-            wrapped.put("recipes", gemstoneRecipes);
-            gson.toJson(wrapped, writer);
-            LOGGER.info("Gemstone recipes file generated successfully");
-        } catch (IOException e) {
-            LOGGER.error("Failed to generate gemstone recipes file", e);
-        }
+        Map<String, Object> wrapped = new LinkedHashMap<>();
+        wrapped.put("version", 1);
+        wrapped.put("recipes", gemstoneRecipes);
+        JsonFiles.write(FilePathManager.GEMSTONE_RECIPES_JSON, wrapped);
     }
 
     private static Map<String, Integer> mapOf(String key, int value) {

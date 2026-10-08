@@ -1,18 +1,14 @@
 package inventoryreader.ir;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
 import net.minecraft.resources.Identifier;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -25,32 +21,38 @@ public class SandboxWidget {
     private static final int GOLD = 0xFFFFB728;
     private static final int RECIPE_LEVEL_INDENT = 10;
     private static final SandboxWidget INSTANCE = new SandboxWidget();
-    private boolean enabled = false;
-    private String selectedRecipe = null;
-    private RecipeManager.RecipeNode recipeTree = null;
+    private volatile boolean enabled = false;
+    private volatile String selectedRecipe = null;
+    /** Written by the update thread, read by the render thread; always replaced, never mutated. */
+    private volatile RecipeManager.RecipeNode recipeTree = null;
     private int widgetX = 10;
     private int widgetY = 40;
     private int widgetWidth = 250;
     private int widgetHeight = 300;
-    private boolean isRepositioning = false;
-    private Map<String, Boolean> expandedNodes = new HashMap<>();
+    private Map<String, Boolean> expandedNodes = new ConcurrentHashMap<>();
     private final List<String> messages = new CopyOnWriteArrayList<>();
-    private int craftAmount = 1;
+    private volatile int craftAmount = 1;
     private final ResourcesManager resourcesManager;
     private final ScheduledExecutorService scheduler;
+    /** Resource version the current tree was computed from; -1 forces a recompute. */
+    private volatile long computedVersion = -1;
     private int currentNodeLineHeight = 16;
     private float currentTreeScale = 1.0f;
 
     private SandboxWidget() {
         this.resourcesManager = ResourcesManager.getInstance();
-        this.scheduler = Executors.newSingleThreadScheduledExecutor();
+        this.scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "IR-WidgetUpdate");
+            t.setDaemon(true);
+            return t;
+        });
         HudElementRegistry.addLast(SANDBOX_WIDGET_LAYER, (context, tickCounter) -> {
             if (enabled && selectedRecipe != null && recipeTree != null) {
                 render(context);
             }
         });
-        scheduler.scheduleAtFixedRate(this::updateRecipeData, 0, 1, TimeUnit.SECONDS);
         loadConfiguration();
+        scheduler.scheduleWithFixedDelay(this::refreshIfStale, 0, 1, TimeUnit.SECONDS);
     }
 
     public static SandboxWidget getInstance() {
@@ -60,11 +62,8 @@ public class SandboxWidget {
         this.enabled = enabled;
         if (!enabled) {
             this.recipeTree = null;
-        } else {
-            if (this.selectedRecipe != null && !this.selectedRecipe.isEmpty()) {
-                updateRecipeData();
-            }
         }
+        requestRefresh();
         saveConfiguration();
     }
     public boolean isEnabled() {
@@ -75,7 +74,7 @@ public class SandboxWidget {
         if (recipeName != null) {
             expandedNodes.put(recipeName, true);
         }
-        updateRecipeData();
+        requestRefresh();
         saveConfiguration();
     }
     public String getSelectedRecipe() {
@@ -106,11 +105,6 @@ public class SandboxWidget {
         return node.name + "_" + node.amount;
     }
     public boolean isNodeExpanded(String nodeKey) {
-        if (expandedNodes == null) {
-            expandedNodes = new HashMap<>();
-            return false;
-        }
-        
         Boolean result = expandedNodes.getOrDefault(nodeKey, false);
         return result != null ? result : false;
     }
@@ -118,72 +112,57 @@ public class SandboxWidget {
         expandedNodes.put(nodeKey, expanded);
     }
     public void toggleNodeExpansion(String nodeKey) {
-        if (expandedNodes == null) {
-            expandedNodes = new HashMap<>();
-        }
-        
         Boolean currentState = expandedNodes.getOrDefault(nodeKey, false);
         if (currentState == null) {
             currentState = false;
         }
-        
+
         boolean newState = !currentState;
         expandedNodes.put(nodeKey, newState);
         saveConfiguration();
     }
     public void saveConfiguration() {
-        try {
-            Gson gson = new GsonBuilder().setPrettyPrinting().create();
-            WidgetConfig config = new WidgetConfig(
-                enabled,
-                selectedRecipe,
-                widgetX,
-                widgetY,
-                widgetWidth,
-                widgetHeight,
-                expandedNodes,
-                craftAmount
-            );
-            FilePathManager.file_widget_config.getParentFile().mkdirs();
-            try (FileWriter writer = new FileWriter(FilePathManager.file_widget_config)) {
-                gson.toJson(config, writer);
-            }
-            InventoryReader.LOGGER.info("Widget configuration saved");
-        } catch (IOException e) {
-            InventoryReader.LOGGER.error("Failed to save widget configuration", e);
-        }
+        WidgetConfig config = new WidgetConfig(
+            enabled,
+            selectedRecipe,
+            widgetX,
+            widgetY,
+            widgetWidth,
+            widgetHeight,
+            new HashMap<>(expandedNodes),
+            craftAmount
+        );
+        JsonFiles.write(FilePathManager.WIDGET_CONFIG_JSON, config);
     }
     private void loadConfiguration() {
-        try {
-            if (!FilePathManager.file_widget_config.exists()) {
-                InventoryReader.LOGGER.info("No widget configuration file found, using defaults");
-                return;
-            }
-            Gson gson = new Gson();
-            try (FileReader reader = new FileReader(FilePathManager.file_widget_config)) {
-                WidgetConfig config = gson.fromJson(reader, WidgetConfig.class);
-                if (config != null) {
-                    this.enabled = config.enabled;
-                    this.selectedRecipe = config.selectedRecipe;
-                    this.widgetX = config.widgetX;
-                    this.widgetY = config.widgetY;
-                    if (config.expandedNodes != null) {
-                        this.expandedNodes = config.expandedNodes;
-                    }
-                    if (config.craftAmount > 0) {
-                        this.craftAmount = config.craftAmount;
-                    }
-                    if (config.widgetWidth > 0) this.widgetWidth = config.widgetWidth;
-                    if (config.widgetHeight > 0) this.widgetHeight = config.widgetHeight;
-                    InventoryReader.LOGGER.info("Widget configuration loaded");
-                    if (selectedRecipe != null) {
-                        updateRecipeData();
-                    }
-                }
-            }
-        } catch (IOException | com.google.gson.JsonSyntaxException e) {
-            InventoryReader.LOGGER.error("Failed to load widget configuration", e);
+        WidgetConfig config = JsonFiles.read(FilePathManager.WIDGET_CONFIG_JSON, WidgetConfig.class);
+        if (config == null) return;
+        this.enabled = config.enabled;
+        this.selectedRecipe = config.selectedRecipe;
+        this.widgetX = config.widgetX;
+        this.widgetY = config.widgetY;
+        if (config.expandedNodes != null) {
+            this.expandedNodes = new ConcurrentHashMap<>(config.expandedNodes);
         }
+        if (config.craftAmount > 0) {
+            this.craftAmount = config.craftAmount;
+        }
+        if (config.widgetWidth > 0) this.widgetWidth = config.widgetWidth;
+        if (config.widgetHeight > 0) this.widgetHeight = config.widgetHeight;
+    }
+    /** Restores defaults after a reset deleted the config file. */
+    public void resetConfiguration() {
+        enabled = false;
+        selectedRecipe = null;
+        recipeTree = null;
+        widgetX = 10;
+        widgetY = 40;
+        widgetWidth = 250;
+        widgetHeight = 300;
+        expandedNodes = new ConcurrentHashMap<>();
+        craftAmount = 1;
+        messages.clear();
+        saveConfiguration();
     }
     private static class WidgetConfig {
         boolean enabled;
@@ -206,169 +185,55 @@ public class SandboxWidget {
             this.craftAmount = craftAmount;
         }
     }
-    public void startRepositioning() {
-        if (enabled) {
-            isRepositioning = true;
-            Minecraft client = Minecraft.getInstance();
-            client.mouseHandler.releaseMouse();
-            if (client.player != null) {
-                client.player.displayClientMessage(
-                    Component.literal("Mouse cursor unlocked. Click anywhere to position the widget.")
-                    .setStyle(Style.EMPTY.withColor(ChatFormatting.YELLOW)), 
-                    false
-                );
-            }
-            InventoryReader.LOGGER.info("Widget repositioning mode activated");
-        } else {
-            InventoryReader.LOGGER.warn("Cannot reposition disabled widget");
-        }
+    /** Marks the tree stale; the update thread recomputes it within a second. */
+    private void requestRefresh() {
+        computedVersion = -1;
+        scheduler.execute(this::refreshIfStale);
     }
-    public void stopRepositioning() {
-        if (isRepositioning) {
-            isRepositioning = false;
-            Minecraft.getInstance().mouseHandler.grabMouse();
-            InventoryReader.LOGGER.info("Widget repositioning mode deactivated");
-            saveConfiguration();
+
+    /** Runs on the update thread. Recomputes only when resources or the selection changed. */
+    private void refreshIfStale() {
+        try {
+            long version = resourcesManager.getVersion();
+            if (version == computedVersion) return;
+            computedVersion = version;
+            updateRecipeData();
+        } catch (RuntimeException e) {
+            // Never let an exception escape: it would cancel the scheduled refresh for good.
+            InventoryReader.LOGGER.error("Failed to update HUD recipe", e);
         }
-    }
-    public boolean isRepositioning() {
-        return isRepositioning;
-    }
-    public boolean handleMouseClick(double mouseX, double mouseY) {
-        if (isRepositioning) {
-            widgetX = (int)mouseX;
-            widgetY = (int)mouseY;
-            isRepositioning = false;
-            Minecraft client = Minecraft.getInstance();
-            if (client.player != null) {
-                Component message = Component.literal("Widget position set: X:" + widgetX + ", Y:" + widgetY)
-                    .setStyle(Style.EMPTY.withColor(ChatFormatting.GREEN));
-                client.player.displayClientMessage(message, true);
-                client.mouseHandler.grabMouse();
-            }
-            return true;
-        } else if (enabled && selectedRecipe != null && recipeTree != null) {
-            return handleTreeNodeClick(mouseX, mouseY);
-        }
-        return false;
-    }
-    private boolean handleTreeNodeClick(double mouseX, double mouseY) {
-        int panelWidth = widgetWidth;
-        int panelX = widgetX;
-        int panelY = widgetY;
-        if (mouseX < panelX || mouseX > panelX + panelWidth) {
-            return false;
-        }
-        int y = panelY + 20;
-        return checkNodeClick(recipeTree, mouseX, mouseY, panelX, y, 0, selectedRecipe);
-    }
-    private boolean checkNodeClick(RecipeManager.RecipeNode node, double mouseX, double mouseY, int x, int y, int level, String pathKey) {
-        if (node == null) return false;
-    int unitIndent = Math.max(4, Math.round(RECIPE_LEVEL_INDENT * currentTreeScale));
-    int indent = level * unitIndent;
-    int nodeHeight = Math.max(6, currentNodeLineHeight);
-        boolean hasChildren = node.ingredients != null && !node.ingredients.isEmpty();
-        int nodeWidth = Math.max(100, widgetWidth - 20) - indent;
-        if (mouseY >= y && mouseY <= y + nodeHeight) {
-            if (mouseX >= x + indent && mouseX <= x + indent + nodeWidth) {
-                String nodeKey = makePathKey(pathKey, node.name);
-                if (hasChildren) {
-                    boolean expanded = expandedNodes.getOrDefault(nodeKey, false);
-                    expandedNodes.put(nodeKey, !expanded);
-                    return true;
-                } else {
-                    Minecraft client = Minecraft.getInstance();
-                    Map<String, Integer> resources = resourcesManager.getAllResources();
-                    int available = resources.getOrDefault(node.name, 0);
-                    int remainingNeeded = node.amount;
-                    boolean hasEnough = remainingNeeded == 0;
-                    Component message = Component.literal("You need " + remainingNeeded + " more " + node.name + " (Have: " + available + ")")
-                        .setStyle(Style.EMPTY.withColor(hasEnough ? ChatFormatting.GREEN : ChatFormatting.RED));
-                    if (client.player != null) {
-                        client.player.displayClientMessage(message, true);
-                    }
-                    return true;
-                }
-            }
-        }
-        y += nodeHeight;
-    if (hasChildren && expandedNodes.getOrDefault(makePathKey(pathKey, node.name), false)) {
-            for (RecipeManager.RecipeNode child : node.ingredients) {
-        boolean childClicked = checkNodeClick(child, mouseX, mouseY, x, y, level + 1, makePathKey(pathKey, node.name));
-                if (childClicked) return true;
-        y += getExpandedNodeHeight(child, makePathKey(pathKey, node.name)) * Math.max(6, currentNodeLineHeight) / 16;
-            }
-        }
-        return false;
-    }
-    private int getExpandedNodeHeight(RecipeManager.RecipeNode node, String pathKey) {
-        if (node == null) return 0;
-        int height = 16;
-        if (node.ingredients != null && !node.ingredients.isEmpty() && 
-        expandedNodes.getOrDefault(makePathKey(pathKey, node.name), false)) {
-        for (RecipeManager.RecipeNode child : node.ingredients) {
-        height += getExpandedNodeHeight(child, makePathKey(pathKey, node.name));
-            }
-        }
-        return height;
     }
 
     private void updateRecipeData() {
-        if (!enabled || selectedRecipe == null) {
+        String recipe = selectedRecipe;
+        if (!enabled || recipe == null) {
             return;
         }
-        
-        if (expandedNodes == null) {
-            expandedNodes = new HashMap<>();
-        }
-        
-        Map<String, Boolean> prevExpandedState = new HashMap<>(expandedNodes);
-        ResourcesManager.RemainingResponse response = resourcesManager.getRemainingIngredients(selectedRecipe, craftAmount);
-        
-        messages.clear();
-        
-        if (response.messages != null && !response.messages.isEmpty()) {
-            messages.add("Craftable -");
-            
+
+        ResourcesManager.RemainingResponse response = resourcesManager.getRemainingIngredients(recipe, craftAmount);
+
+        List<String> newMessages = new ArrayList<>();
+        newMessages.add("Craftable -");
+        if (response.messages != null) {
             List<Map.Entry<String, Integer>> sortedEntries = new ArrayList<>(response.messages.entrySet());
             sortedEntries.sort((e1, e2) -> e2.getValue().compareTo(e1.getValue()));
-            
             for (Map.Entry<String, Integer> entry : sortedEntries) {
                 if (entry.getValue() != null && entry.getValue() > 0) {
-                    messages.add("   " + entry.getValue() + "× " + entry.getKey());
+                    newMessages.add("   " + entry.getValue() + "× " + entry.getKey());
                 }
             }
         }
-        
-        
-        
-        recipeTree = convertResourceNodeToRecipeNode(response.full_recipe);
-        boolean craftable = false;
-        if (recipeTree != null && recipeTree.ingredients != null) {
-            craftable = recipeTree.ingredients.stream().allMatch(child -> child.amount <= 0);
-            if (craftable && messages.isEmpty()) {
-                addMessage("Craftable -");
-            } else if (!craftable && messages.isEmpty()) {
-                addMessage("Craftable -");
-            }
+        RecipeManager.RecipeNode tree = response.full_recipe;
+        if (tree != null) {
+            expandedNodes.putIfAbsent(makePathKey(recipe, tree.name), true);
         }
-        if (recipeTree != null) {
-            expandedNodes.put(getNodeKey(recipeTree), true);
-            preserveNodeExpansionStates(recipeTree, prevExpandedState);
-        }
+        messages.clear();
+        messages.addAll(newMessages);
+        recipeTree = tree;
     }
-
-    private RecipeManager.RecipeNode convertResourceNodeToRecipeNode(ResourcesManager.RecipeNode resourceNode) {
-        if (resourceNode == null) return null;
-        List<RecipeManager.RecipeNode> ingredients = new ArrayList<>();
-        if (resourceNode.ingredients != null) {
-            for (ResourcesManager.RecipeNode child : resourceNode.ingredients) {
-                ingredients.add(convertResourceNodeToRecipeNode(child));
-            }
-        }
-        return new RecipeManager.RecipeNode(resourceNode.name, resourceNode.amount, ingredients);
-    }
-    private void render(GuiGraphics context) {
+    private void render(GuiGraphicsExtractor context) {
+        RecipeManager.RecipeNode recipeTree = this.recipeTree;
+        String selectedRecipe = this.selectedRecipe;
         if (!enabled || selectedRecipe == null || recipeTree == null) {
             return;
         }
@@ -393,27 +258,25 @@ public class SandboxWidget {
     int messageSectionHeight = messageLinesRaw > 0 ? Math.min(messageLinesRaw * 10 + 20, availableForMessages2) : 0;
     int desiredPanelHeight = 20 + treeHeightActual + messageSectionHeight + 15;
     int panelHeight = Math.min(panelMaxHeight, desiredPanelHeight);
-        
+
         int panelX = widgetX;
         int panelY = widgetY;
-        
+
     context.fill(panelX, panelY, panelX + panelWidth, panelY + panelHeight, DARK_PANEL_BG);
-        
+
         context.fill(panelX, panelY, panelX + panelWidth, panelY + 20, HEADER_BG);
-        
+
         int borderColor = 0xFFDAA520;
         int borderThickness = 2;
         for (int i = 0; i < borderThickness; i++) {
-            drawBorder(
-                context,
-                panelX - i,
+            context.outline(panelX - i,
                 panelY - i, 
                 panelWidth + i * 2, 
                 panelHeight + i * 2, 
                 borderColor
             );
         }
-        
+
         Component title = Component.literal("Recipe: " + selectedRecipe)
             .setStyle(Style.EMPTY.withColor(ChatFormatting.GOLD).withBold(true));
         int titleWidth = client.font.width(title);
@@ -422,7 +285,7 @@ public class SandboxWidget {
         context.pose().pushMatrix();
         context.pose().translate(panelX + (panelWidth - Math.min(titleWidth, maxTitleWidth)) / 2f, panelY + 5);
         context.pose().scale(titleScale, titleScale);
-        context.drawString(
+        context.text(
             client.font,
             title,
             0,
@@ -432,20 +295,9 @@ public class SandboxWidget {
         );
         context.pose().popMatrix();
 
-        if (isRepositioning) {
-            String repoText = "◆ Click to place widget ◆";
-            context.drawString(
-                client.font,
-                repoText,
-                panelX + panelWidth - client.font.width(repoText) - 5,
-                panelY + panelHeight - 12,
-                GOLD,
-                true
-            );
-        }
-        
+
         context.fill(panelX, panelY + 19, panelX + panelWidth, panelY + 20, 0x99608C35);
-        
+
     int y = panelY + 22;
     int availableTreeHeight = Math.max(0, panelHeight - 22 - (messageSectionHeight > 0 ? (messageSectionHeight + 15) : 0));
     int computedLine = safeLines > 0 ? Math.max(6, (int)Math.floor((float)availableTreeHeight / (float)safeLines)) : 16;
@@ -453,34 +305,25 @@ public class SandboxWidget {
     currentNodeLineHeight = computedLine;
     currentTreeScale = currentNodeLineHeight / 16.0f;
     int treeEndY = renderRecipeTree(context, recipeTree, panelX, y, 0, selectedRecipe);
-        
+
         if (messageSectionHeight > 0) {
             context.fill(panelX, treeEndY, panelX + panelWidth, treeEndY + 1, 0x99608C35);
-            
+
             int messageY = treeEndY + 6;
-            
+
             int maxMessageY = panelY + panelHeight - 5;
-            
+
             drawMessages(context, panelX, messageY, panelWidth, maxMessageY);
         }
     }
     private int countVisibleRecipeTreeLines(RecipeManager.RecipeNode node, String pathKey) {
         if (node == null) return 0;
         int count = 1;
-        
-        if (expandedNodes == null) {
-            expandedNodes = new HashMap<>();
-        }
-        
+
         // Use path-based key to keep expansion stable regardless of amounts
         String nodeKey = makePathKey(pathKey, node.name);
-        Boolean isExpanded = expandedNodes.getOrDefault(nodeKey, false);
-        
-        if (isExpanded == null) {
-            isExpanded = false;
-            expandedNodes.put(nodeKey, false);
-        }
-        
+        boolean isExpanded = expandedNodes.getOrDefault(nodeKey, false);
+
         if (node.ingredients != null && !node.ingredients.isEmpty() && isExpanded) {
             for (RecipeManager.RecipeNode child : node.ingredients) {
                 count += countVisibleRecipeTreeLines(child, makePathKey(pathKey, node.name));
@@ -488,7 +331,7 @@ public class SandboxWidget {
         }
         return count;
     }
-    private int renderRecipeTree(GuiGraphics context, RecipeManager.RecipeNode node, int x, int y, int level, String pathKey) {
+    private int renderRecipeTree(GuiGraphicsExtractor context, RecipeManager.RecipeNode node, int x, int y, int level, String pathKey) {
         if (node == null) return y;
         Minecraft client = Minecraft.getInstance();
         int unitIndent = Math.max(4, Math.round(RECIPE_LEVEL_INDENT * currentTreeScale));
@@ -504,14 +347,16 @@ public class SandboxWidget {
         int nodeHeight = Math.max(6, currentNodeLineHeight);
         boolean isHovered = mouseX >= x + indent && mouseX <= x + indent + nodeBaseWidth - indent && 
                             mouseY >= y && mouseY <= y + nodeHeight;
-        int hoverEffect = isHovered ? 0x22FFFFFF : 0;
         int nodeWidth = nodeBaseWidth - indent;
-        context.fill(x + indent, y, x + indent + nodeWidth, y + nodeHeight, bgColor + hoverEffect);
+        context.fill(x + indent, y, x + indent + nodeWidth, y + nodeHeight, bgColor);
+        if (isHovered) {
+            context.fill(x + indent, y, x + indent + nodeWidth, y + nodeHeight, 0x22FFFFFF);
+        }
         int borderColor = hasEnough ? 0x88608C35 : 0x88FF5555;
-        drawBorder(context, x + indent, y, nodeWidth, nodeHeight, borderColor);
+        context.outline(x + indent, y, nodeWidth, nodeHeight, borderColor);
         if (hasChildren) {
             String expandIcon = isExpanded ? "▼" : "▶";
-            context.drawString(
+            context.text(
                 client.font,
                 expandIcon,
                 x + indent + Math.max(3, Math.round(5 * currentTreeScale)),
@@ -542,7 +387,7 @@ public class SandboxWidget {
         context.pose().pushMatrix();
         context.pose().translate(nameX, y + Math.max(1, Math.round(4 * currentTreeScale)));
         context.pose().scale(textScale, textScale);
-        context.drawString(
+        context.text(
             client.font,
             amountText,
             0,
@@ -550,7 +395,7 @@ public class SandboxWidget {
             amountColor,
             false
         );
-        context.drawString(
+        context.text(
             client.font,
             itemName,
             amountWidth,
@@ -576,25 +421,7 @@ public class SandboxWidget {
         }
         return y;
     }
-    private void preserveNodeExpansionStates(RecipeManager.RecipeNode node, Map<String, Boolean> prevStates) {
-        if (node == null) return;
-        
-        if (expandedNodes == null) {
-            expandedNodes = new HashMap<>();
-        }
-        
-    String nodeKey = makePathKey(selectedRecipe, node.name);
-    if (prevStates != null && prevStates.containsKey(nodeKey)) {
-            Boolean value = prevStates.get(nodeKey);
-            expandedNodes.put(nodeKey, value != null ? value : false);
-        }
-        if (node.ingredients != null) {
-            for (RecipeManager.RecipeNode child : node.ingredients) {
-                preserveNodeExpansionStates(child, prevStates);
-            }
-        }
-    }
-    private void drawMessages(GuiGraphics context, int x, int y, int width, int maxY) {
+    private void drawMessages(GuiGraphicsExtractor context, int x, int y, int width, int maxY) {
         Minecraft client = Minecraft.getInstance();
         int baseHeader = 13;
         int baseLine = 10;
@@ -609,7 +436,7 @@ public class SandboxWidget {
             context.pose().pushMatrix();
             context.pose().translate(x + 5, y);
             context.pose().scale(scale, scale);
-            context.drawString(
+            context.text(
                 client.font,
                 messagesHeader,
                 0,
@@ -652,7 +479,7 @@ public class SandboxWidget {
                     context.pose().pushMatrix();
                     context.pose().translate(x + 5, y);
                     context.pose().scale(scale, scale);
-                    context.drawString(
+                    context.text(
                         client.font,
                         line.toString(),
                         0,
@@ -672,7 +499,7 @@ public class SandboxWidget {
                 context.pose().pushMatrix();
                 context.pose().translate(x + 5, y);
                 context.pose().scale(scale, scale);
-                context.drawString(
+                context.text(
                     client.font,
                     line.toString(),
                     0,
@@ -685,7 +512,7 @@ public class SandboxWidget {
             }
         }
     }
-    
+
     private int extractAmount(String message) {
         try {
             int xIndex = message.indexOf('×');
@@ -711,7 +538,7 @@ public class SandboxWidget {
             craftAmount = 1;
         }
         this.craftAmount = craftAmount;
-        updateRecipeData();
+        requestRefresh();
         saveConfiguration();
     }
     private int countMessageLines(Minecraft client, int width) {
@@ -740,14 +567,6 @@ public class SandboxWidget {
         if (parent == null || parent.isEmpty()) return name == null ? "" : name;
         if (name == null || name.isEmpty()) return parent;
         return parent + ">" + name;
-    }
-
-    // Helper method to draw borders since drawBorder was removed from the rendering API in 1.21.10
-    private static void drawBorder(GuiGraphics context, int x, int y, int width, int height, int color) {
-        context.fill(x, y, x + width, y + 1, color);
-        context.fill(x, y + height - 1, x + width, y + height, color);
-        context.fill(x, y, x + 1, y + height, color);
-        context.fill(x + width - 1, y, x + width, y + height, color);
     }
 }
 

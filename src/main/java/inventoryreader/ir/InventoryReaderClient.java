@@ -1,34 +1,23 @@
 package inventoryreader.ir;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
+import com.google.gson.reflect.TypeToken;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 import org.lwjgl.glfw.GLFW;
 
-import com.google.gson.reflect.TypeToken;
 import java.lang.reflect.Type;
-import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
-// import java.util.concurrent.Executors;
-// import java.util.concurrent.ScheduledExecutorService;
-// import java.util.concurrent.TimeUnit;
 
 public class InventoryReaderClient implements ClientModInitializer {
-    private final Map<String, Integer> changesData = new HashMap<>();
-    private int tickCounter = 0;
-    private static final File DATA_FILE = new File(FilePathManager.DATA_DIR, "inventorydata.json");
-    private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
-    // private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+    private static final String INVENTORY_KEY = "Player Inventory";
+    private static final Type DATA_TYPE = new TypeToken<Map<String, Map<String, Integer>>>() {}.getType();
+
     private static KeyMapping openSandboxViewerKey;
     private static KeyMapping openWidgetCustomizationKey;
     private static KeyMapping toggleWidgetKey;
@@ -36,150 +25,89 @@ public class InventoryReaderClient implements ClientModInitializer {
     public static boolean shouldOpenSandboxViewer = false;
     public static boolean shouldOpenWidgetCustomization = false;
 
+    /** Last inventory contents written to inventorydata.json; null until loaded. */
+    private static Map<String, Integer> lastInventory;
+    private int tickCounter = 0;
+
     @Override
     public void onInitializeClient() {
-        openSandboxViewerKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
-            "Open Sandbox Viewer",
-            GLFW.GLFW_KEY_V,
-            KeyMapping.Category.MISC
-        ));
-        
-        openWidgetCustomizationKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
-            "Open Widget Customization",
-            GLFW.GLFW_KEY_B,
-            KeyMapping.Category.MISC
-        ));
+        FilePathManager.initialize();
 
-        toggleWidgetKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
-            "Toggle Widget",
-            GLFW.GLFW_KEY_H,
-            KeyMapping.Category.MISC
-        ));
-
-        openPositioningHudKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
-            "Open Positioning HUD",
-            GLFW.GLFW_KEY_J,
-            KeyMapping.Category.MISC
-        ));
+        openSandboxViewerKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+            "key.ir.open_sandbox_viewer", GLFW.GLFW_KEY_V, KeyMapping.Category.MISC));
+        openWidgetCustomizationKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+            "key.ir.open_widget_customization", GLFW.GLFW_KEY_B, KeyMapping.Category.MISC));
+        toggleWidgetKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+            "key.ir.toggle_widget", GLFW.GLFW_KEY_H, KeyMapping.Category.MISC));
+        openPositioningHudKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+            "key.ir.open_positioning_hud", GLFW.GLFW_KEY_J, KeyMapping.Category.MISC));
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (openSandboxViewerKey.consumeClick() || shouldOpenSandboxViewer) {
-                client.execute(() -> client.setScreen(new SandboxViewer()));
                 shouldOpenSandboxViewer = false;
+                client.gui.setScreen(new SandboxViewer());
             }
-            
             if (openWidgetCustomizationKey.consumeClick() || shouldOpenWidgetCustomization) {
-                client.execute(() -> client.setScreen(new WidgetCustomizationMenu()));
                 shouldOpenWidgetCustomization = false;
+                client.gui.setScreen(new WidgetCustomizationMenu());
             }
-
             if (toggleWidgetKey.consumeClick()) {
-                client.execute(() -> {
-                    SandboxWidget widget = SandboxWidget.getInstance();
-                    boolean newState = !widget.isEnabled();
-                    widget.setEnabled(newState);
-                    if (newState) {
-                        // If enabled with a recipe selected previously in SandboxViewer, keep it; else no-op
-                    }
-                });
+                SandboxWidget widget = SandboxWidget.getInstance();
+                widget.setEnabled(!widget.isEnabled());
             }
-
             if (openPositioningHudKey.consumeClick()) {
-                client.execute(() -> client.setScreen(new WidgetCustomizationMenu(true)));
+                client.gui.setScreen(new WidgetCustomizationMenu(true));
             }
-            
-            if (client.player != null && client.level != null) {
-                if (tickCounter >= 1) {
-                    checkInventory(client);
-                    tickCounter = 0;
-                } else {
-                    tickCounter++;
-                }
+            if (client.player != null && client.level != null && ++tickCounter >= 2) {
+                tickCounter = 0;
+                checkInventory(client);
             }
         });
 
-		ReminderManager.initialize();
+        StorageViewerMod.register();
+        IrCommandManager.register();
+        SackChatListener.register();
+        ReminderManager.initialize();
         WelcomeManager.initialize();
-		
-		InventoryReader.LOGGER.info("Initialized Inventory Reader client components");
-        
-        // scheduler.scheduleAtFixedRate(this::saveData, 0, 5, TimeUnit.SECONDS);
         SandboxWidget.getInstance();
+        InventoryReader.LOGGER.info("Initialized Inventory Reader client components");
     }
 
-    private Map<String, Map<String, Integer>> loadAllInventoryDataFromFile() {
-        Type mapType = new TypeToken<Map<String, Map<String, Integer>>>() {}.getType();
-        try (FileReader reader = new FileReader(DATA_FILE)) {
-            Map<String, Map<String, Integer>> data = gson.fromJson(reader, mapType);
-            return data != null ? data : new HashMap<>();
-        } catch (IOException e) {
-            InventoryReader.LOGGER.error("Failed to read inventory data from file", e);
-            return new HashMap<>();
-        }
+    /** Forgets the remembered inventory (after a reset deleted the file). */
+    public static void clearInventorySnapshot() {
+        lastInventory = null;
     }
 
-    private void checkInventory(Minecraft client) {
-        assert client.player != null;
+    private static void checkInventory(Minecraft client) {
         Inventory inventory = client.player.getInventory();
-        if (inventory != null) {
-            String title = "Player Inventory";
-            saveInventoryContents(inventory, title);
-        }
-    }
-
-    private void saveInventoryContents(Inventory inventory, String title) {
-        Map<String, Integer> currentInventoryData = new HashMap<>();
+        Map<String, Integer> current = new HashMap<>();
         for (int i = 0; i < inventory.getContainerSize(); i++) {
             ItemStack stack = inventory.getItem(i);
-            String itemName = stack.getHoverName().getString();
-            int itemCount = stack.getCount();
             if (!stack.isEmpty()) {
-                if (currentInventoryData.containsKey(itemName)) {
-                    itemCount += currentInventoryData.get(itemName);
-                }
-                currentInventoryData.put(itemName, itemCount);
+                current.merge(stack.getHoverName().getString(), stack.getCount(), Integer::sum);
             }
         }
 
-        Map<String, Map<String, Integer>> fileSaveInventoryData = loadAllInventoryDataFromFile();
-        if (!fileSaveInventoryData.containsKey(title)) {
-            fileSaveInventoryData.put(title, currentInventoryData);
-            changesData.putAll(currentInventoryData);
-        } else {
-            fileSaveInventoryData = compareInventoryData(currentInventoryData, title, fileSaveInventoryData);
+        if (lastInventory == null) {
+            Map<String, Map<String, Integer>> saved = JsonFiles.read(FilePathManager.INVENTORY_JSON, DATA_TYPE);
+            Map<String, Integer> previous = saved != null ? saved.get(INVENTORY_KEY) : null;
+            lastInventory = previous != null ? previous : new HashMap<>();
         }
-        saveDataToFile(fileSaveInventoryData);
-    }
+        if (current.equals(lastInventory)) return;
 
-    private Map<String, Map<String, Integer>> compareInventoryData(Map<String, Integer> newData, String title, Map<String, Map<String, Integer>> fileSaveInventoryData) {
-        Map<String, Integer> previousData = fileSaveInventoryData.getOrDefault(title, new HashMap<>());
-
-        newData.forEach((itemName, newCount) -> {
-            int previousCount = previousData.getOrDefault(itemName, 0);
-            if (newCount != previousCount) {
-                changesData.put(itemName, changesData.getOrDefault(itemName, 0) + newCount - previousCount);
-                previousData.put(itemName, newCount);
-            }
+        Map<String, Integer> changes = new HashMap<>();
+        current.forEach((name, count) -> {
+            int delta = count - lastInventory.getOrDefault(name, 0);
+            if (delta != 0) changes.put(name, delta);
+        });
+        lastInventory.forEach((name, count) -> {
+            if (!current.containsKey(name) && count != 0) changes.put(name, -count);
         });
 
-        for (Map.Entry<String, Integer> entry : previousData.entrySet()) {
-            if (!newData.containsKey(entry.getKey()) && entry.getValue() > 0) {
-                changesData.put(entry.getKey(), changesData.getOrDefault(entry.getKey(), 0) - entry.getValue());
-            }
-        }
-        previousData.entrySet().removeIf(entry -> !newData.containsKey(entry.getKey()) || entry.getValue() == 0);
-        fileSaveInventoryData.put(title, previousData);
-        return fileSaveInventoryData;
-    }
-
-    private void saveDataToFile(Map<String, Map<String, Integer>> allInventoryData) {
-        try (FileWriter writer = new FileWriter(DATA_FILE)) {
-            gson.toJson(allInventoryData, writer);
-        } catch (IOException e) {
-            InventoryReader.LOGGER.error("Failed to save inventory data to file", e);
-        }
-        ResourcesManager RESOURCES_MANAGER = ResourcesManager.getInstance();
-        RESOURCES_MANAGER.saveData(changesData);
-        changesData.clear();
+        lastInventory = current;
+        Map<String, Map<String, Integer>> data = new HashMap<>();
+        data.put(INVENTORY_KEY, current);
+        JsonFiles.write(FilePathManager.INVENTORY_JSON, data);
+        ResourcesManager.getInstance().saveData(changes);
     }
 }

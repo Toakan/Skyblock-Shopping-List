@@ -28,8 +28,8 @@ public class ReminderManager {
                         .append(Component.literal(" to stop this reminder.")
                             .withStyle(ChatFormatting.WHITE));
                     
-                    Minecraft.getInstance().gui.getChat()
-                        .addMessage(message);
+                    Minecraft.getInstance().gui.hud.getChat()
+                        .addClientSystemMessage(message);
                 }
             } else {
                 tickCounter = 0;

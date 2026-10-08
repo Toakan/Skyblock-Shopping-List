@@ -31,20 +31,46 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class RemoteRecipeFetcher {
     private static final Logger LOGGER = LoggerFactory.getLogger("IR-RemoteRecipeFetcher");
     private static final Gson GSON = new Gson();
-    private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(6)).build();
+    private static final HttpClient HTTP = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(6))
+            .followRedirects(HttpClient.Redirect.NORMAL)
+            .build();
+    public static final String DEFAULT_NEU_REPO_URL = "https://codeload.github.com/NotEnoughUpdates/NotEnoughUpdates-REPO/zip/refs/heads/master";
+    /**
+     * Bump when the way recipes are extracted from the repo changes, so cached snapshots are rebuilt
+     * even if the remote reports "not modified".
+     */
+    private static final String PARSER_VERSION = "2";
+    private static final String PARSER_VERSION_KEY = "parser-version";
+    private static final long MAX_ZIP_ENTRIES = 200_000;
+    private static final long MAX_EXTRACTED_BYTES = 2L * 1024 * 1024 * 1024;
+    private static final AtomicBoolean RUNNING = new AtomicBoolean(false);
+    private static final ExecutorService EXECUTOR = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "IR-RecipeFetch");
+        t.setDaemon(true);
+        return t;
+    });
     private RemoteRecipeFetcher() {}
 
+    /** Starts a background fetch unless one is already running. */
     public static void fetchAsync() {
-        CompletableFuture.runAsync(RemoteRecipeFetcher::runFetchSafe);
-    }
-
-    private static void runFetchSafe() {
-        try { runFetch(); } catch (Throwable t) { LOGGER.warn("Remote fetch failed: {}", t.toString()); }
+        if (!RUNNING.compareAndSet(false, true)) return;
+        EXECUTOR.execute(() -> {
+            try {
+                runFetch();
+            } catch (Throwable t) {
+                LOGGER.warn("Remote fetch failed: {}", t.toString());
+            } finally {
+                RUNNING.set(false);
+            }
+        });
     }
 
     private static void runFetch() throws Exception {
@@ -77,9 +103,10 @@ public final class RemoteRecipeFetcher {
 
     private static boolean fetchDirectJson(String url) {
         try {
+            if (!isHttps(url)) { LOGGER.warn("Ignoring non-https recipe source {}", url); return false; }
             Map<String, String> meta = readMeta(FilePathManager.REMOTE_META_JSON);
             String etagKey = "etag::" + url;
-            String etag = meta.getOrDefault(etagKey, "");
+            String etag = cacheIsCurrent(meta) ? meta.getOrDefault(etagKey, "") : "";
 
             HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(url))
                     .timeout(Duration.ofSeconds(15))
@@ -98,10 +125,11 @@ public final class RemoteRecipeFetcher {
             writeRemoteSnapshot(parsed);
 
             String newEtag = resp.headers().firstValue("etag").orElse("");
-            if (!newEtag.isEmpty()) { meta.put(etagKey, newEtag); writeMeta(FilePathManager.REMOTE_META_JSON, meta); }
+            if (!newEtag.isEmpty()) meta.put(etagKey, newEtag);
+            meta.put(PARSER_VERSION_KEY, PARSER_VERSION);
+            writeMeta(FilePathManager.REMOTE_META_JSON, meta);
 
             inventoryreader.ir.RecipeManager.getInstance().reload();
-            RecipeRegistry.bootstrap();
             return true;
         } catch (Exception e) {
             LOGGER.warn("fetchDirectJson failed: {}", e.toString());
@@ -112,6 +140,7 @@ public final class RemoteRecipeFetcher {
     private static boolean fetchNeuZip(String url) {
         try {
             Map<String, String> meta = readMeta(FilePathManager.REMOTE_META_JSON);
+            boolean cacheCurrent = cacheIsCurrent(meta);
 
             InputStream inputStream;
             String metaKey;
@@ -126,19 +155,24 @@ public final class RemoteRecipeFetcher {
                     metaKey = "mtime::" + f.getAbsolutePath();
                     String prev = meta.getOrDefault(metaKey, "");
                     String cur = Long.toString(f.lastModified());
-                    if (!prev.isEmpty() && prev.equals(cur)) { LOGGER.info("NEU ZIP file unchanged (mtime cache)"); return true; }
+                    if (cacheCurrent && !prev.isEmpty() && prev.equals(cur)) { LOGGER.info("NEU ZIP file unchanged (mtime cache)"); return true; }
                     inputStream = new java.io.FileInputStream(f);
                     metaValToWrite = cur;
                 } else {
+                    if (!"https".equalsIgnoreCase(scheme)) { LOGGER.warn("Ignoring non-https recipe source {}", url); return false; }
                     String etagKey = "etag::" + url;
-                    String etag = meta.getOrDefault(etagKey, "");
+                    String etag = cacheCurrent ? meta.getOrDefault(etagKey, "") : "";
                     HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(url))
                             .timeout(Duration.ofSeconds(30))
                             .GET();
                     if (!etag.isEmpty()) b.header("If-None-Match", etag);
                     HttpResponse<java.io.InputStream> resp = HTTP.send(b.build(), HttpResponse.BodyHandlers.ofInputStream());
-                    if (resp.statusCode() == 304) { LOGGER.info("NEU ZIP not modified (ETag)"); return true; }
-                    if (resp.statusCode() / 100 != 2) { LOGGER.warn("NEU ZIP fetch HTTP {}", resp.statusCode()); return false; }
+                    if (resp.statusCode() / 100 != 2) {
+                        resp.body().close();
+                        if (resp.statusCode() == 304) { LOGGER.info("NEU ZIP not modified (ETag)"); return true; }
+                        LOGGER.warn("NEU ZIP fetch HTTP {}", resp.statusCode());
+                        return false;
+                    }
                     inputStream = resp.body();
                     metaKey = etagKey;
                     metaValToWrite = resp.headers().firstValue("etag").orElse("");
@@ -149,14 +183,16 @@ public final class RemoteRecipeFetcher {
                 metaKey = "mtime::" + f.getAbsolutePath();
                 String prev = meta.getOrDefault(metaKey, "");
                 String cur = Long.toString(f.lastModified());
-                if (!prev.isEmpty() && prev.equals(cur)) { LOGGER.info("NEU ZIP file unchanged (mtime cache)"); return true; }
+                if (cacheCurrent && !prev.isEmpty() && prev.equals(cur)) { LOGGER.info("NEU ZIP file unchanged (mtime cache)"); return true; }
                 inputStream = new java.io.FileInputStream(f);
                 metaValToWrite = cur;
             }
 
             Path repoExtracted = FilePathManager.NEU_REPO_EXTRACTED.toPath();
             deleteDirectoryRecursively(repoExtracted);
-            extractZipStrippingRoot(inputStream, repoExtracted);
+            try (InputStream in = inputStream) {
+                extractZipStrippingRoot(in, repoExtracted);
+            }
             LOGGER.info("NEU ZIP extracted to {}", repoExtracted);
 
             NEURepository neuRepo = NEURepository.of(repoExtracted);
@@ -188,28 +224,22 @@ public final class RemoteRecipeFetcher {
                 }
             }
 
+            // Forge recipes win over crafting recipes for the same item; keeping both would double-count.
+            craftingByInternal.keySet().removeAll(forgeByInternal.keySet());
             Map<String, Map<String, Integer>> craftingWire = resolveToDisplayNames(craftingByInternal, internalToDisplay);
             Map<String, Map<String, Integer>> forgeWire    = resolveToDisplayNames(forgeByInternal,    internalToDisplay);
 
             if (!craftingWire.isEmpty()) writeRemoteSnapshot(craftingWire);
             if (!forgeWire.isEmpty())    writeForgeSnapshot(forgeWire);
 
-            java.util.Set<String> names = new java.util.LinkedHashSet<>();
-            names.addAll(craftingWire.keySet());
-            for (Map<String, Integer> m : craftingWire.values()) names.addAll(m.keySet());
-            names.addAll(forgeWire.keySet());
-            for (Map<String, Integer> m : forgeWire.values()) names.addAll(m.keySet());
-            inventoryreader.ir.FilePathManager.ensureResourceNames(names);
-
             LOGGER.info("NEU repo parsed (library): {} crafting, {} forge recipes", craftingWire.size(), forgeWire.size());
             inventoryreader.ir.RecipeManager.getInstance().reload();
 
             if (metaValToWrite != null && !metaValToWrite.isEmpty()) {
                 meta.put(metaKey, metaValToWrite);
-                writeMeta(FilePathManager.REMOTE_META_JSON, meta);
             }
-
-            RecipeRegistry.bootstrap();
+            meta.put(PARSER_VERSION_KEY, PARSER_VERSION);
+            writeMeta(FilePathManager.REMOTE_META_JSON, meta);
             return true;
         } catch (Exception e) {
             LOGGER.warn("fetchNeuZip failed: {}", e.toString());
@@ -217,21 +247,29 @@ public final class RemoteRecipeFetcher {
         }
     }
 
-    /** Adds {@code output → {ingredient: count}} mappings into {@code target}, keyed by internal SkyBlock ID. */
+    /**
+     * Adds an {@code output → {ingredient: count per output item}} mapping into {@code target}, keyed by
+     * internal SkyBlock ID. Only the first recipe per output is kept: items with alternative recipes
+     * would otherwise have the ingredients of every alternative summed together.
+     */
     private static void collectRecipeIngredients(
             Map<String, Map<String, Integer>> target,
             Collection<NEUIngredient> outputs,
             Collection<NEUIngredient> inputs) {
-        if (outputs == null || outputs.isEmpty()) return;
+        if (outputs == null || outputs.isEmpty() || inputs == null) return;
         NEUIngredient output = outputs.iterator().next();
         if (output == null || NEUIngredient.NEU_SENTINEL_EMPTY.equals(output.getItemId())) return;
-        Map<String, Integer> ing = target.computeIfAbsent(output.getItemId(), k -> new LinkedHashMap<>());
-        if (inputs == null) return;
+        if (target.containsKey(output.getItemId())) return;
+        double outputCount = Math.max(1, output.getAmount());
+        Map<String, Double> totals = new LinkedHashMap<>();
         for (NEUIngredient in : inputs) {
             if (in == null || NEUIngredient.NEU_SENTINEL_EMPTY.equals(in.getItemId())) continue;
-            int amt = (int) Math.max(1, Math.ceil(in.getAmount()));
-            ing.merge(in.getItemId(), amt, Integer::sum);
+            totals.merge(in.getItemId(), in.getAmount(), Double::sum);
         }
+        if (totals.isEmpty()) return;
+        Map<String, Integer> ing = new LinkedHashMap<>();
+        totals.forEach((id, amount) -> ing.put(id, (int) Math.max(1, Math.ceil(amount / outputCount))));
+        target.put(output.getItemId(), ing);
     }
 
     /** Returns a new map with all internal SkyBlock IDs replaced by their display names. */
@@ -241,6 +279,8 @@ public final class RemoteRecipeFetcher {
         Map<String, Map<String, Integer>> wire = new LinkedHashMap<>(byInternal.size());
         for (Map.Entry<String, Map<String, Integer>> e : byInternal.entrySet()) {
             String outDisplay = internalToDisplay.getOrDefault(e.getKey(), e.getKey());
+            // Different items can share a display name (e.g. upgrade stones); keep them apart.
+            if (wire.containsKey(outDisplay)) outDisplay = outDisplay + " [" + e.getKey() + "]";
             Map<String, Integer> ingDisplay = new LinkedHashMap<>();
             for (Map.Entry<String, Integer> in : e.getValue().entrySet()) {
                 ingDisplay.put(internalToDisplay.getOrDefault(in.getKey(), in.getKey()), in.getValue());
@@ -256,10 +296,13 @@ public final class RemoteRecipeFetcher {
      */
     private static void extractZipStrippingRoot(InputStream inputStream, Path targetDir) throws Exception {
         Files.createDirectories(targetDir);
+        long entries = 0;
+        long bytes = 0;
         try (java.util.zip.ZipInputStream zin = new java.util.zip.ZipInputStream(inputStream)) {
             java.util.zip.ZipEntry ze;
             while ((ze = zin.getNextEntry()) != null) {
                 if (ze.isDirectory()) continue;
+                if (++entries > MAX_ZIP_ENTRIES) throw new java.io.IOException("ZIP has too many entries");
                 String name = ze.getName();
                 int slash = name.indexOf('/');
                 if (slash < 0) continue;                        // no subdirectory — skip
@@ -271,7 +314,8 @@ public final class RemoteRecipeFetcher {
                     continue;
                 }
                 Files.createDirectories(dest.getParent());
-                Files.copy(zin, dest, StandardCopyOption.REPLACE_EXISTING);
+                bytes += Files.copy(zin, dest, StandardCopyOption.REPLACE_EXISTING);
+                if (bytes > MAX_EXTRACTED_BYTES) throw new java.io.IOException("ZIP extracts to more than " + MAX_EXTRACTED_BYTES + " bytes");
             }
         }
     }
@@ -347,6 +391,18 @@ public final class RemoteRecipeFetcher {
         try (FileWriter fw = new FileWriter(f, StandardCharsets.UTF_8)) {
             GSON.toJson(meta, fw);
         } catch (Exception ignored) {}
+    }
+
+    private static boolean cacheIsCurrent(Map<String, String> meta) {
+        return PARSER_VERSION.equals(meta.get(PARSER_VERSION_KEY));
+    }
+
+    private static boolean isHttps(String url) {
+        try {
+            return "https".equalsIgnoreCase(URI.create(url).getScheme());
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
     }
 
     private static String stripMC(String s) {

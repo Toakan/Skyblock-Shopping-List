@@ -3,10 +3,13 @@ package inventoryreader.ir;
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 import java.io.File;
-import java.io.FileReader;
 import java.io.IOException;
+import java.io.Reader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.*;
 
 public class RecipeManager {
@@ -14,9 +17,10 @@ public class RecipeManager {
     private volatile Map<String, Map<String, Integer>> recipes = Collections.emptyMap();
     private volatile List<String> recipeNames = Collections.emptyList();
 
-    private RecipeManager() {
-        loadRecipes();
-    }
+    /** Recipe trees are acyclic after sanitising; this only stops pathological data from overflowing the stack. */
+    private static final int MAX_DEPTH = 64;
+
+    private RecipeManager() {}
 
     public static RecipeManager getInstance() {
         return INSTANCE;
@@ -51,23 +55,23 @@ public class RecipeManager {
 
             Set<String> allNames = new LinkedHashSet<>(sanitized.keySet());
             for (Map<String, Integer> m : sanitized.values()) allNames.addAll(m.keySet());
-            FilePathManager.ensureResourceNames(allNames);
+            ResourcesManager.getInstance().ensureResourceNames(allNames);
 
             recipes = Collections.unmodifiableMap(sanitized);
             recipeNames = Collections.unmodifiableList(newNames);
-        } catch (IOException e) {
-            e.printStackTrace();
+        } catch (IOException | JsonParseException e) {
+            InventoryReader.LOGGER.error("Failed to load recipes", e);
         }
     }
 
-    /** Re-read all recipe files. Called by RemoteRecipeFetcher after a successful fetch. */
+    /** Re-reads all recipe files. Called at startup and by RemoteRecipeFetcher after a successful fetch. */
     public synchronized void reload() {
         loadRecipes();
     }
 
     private Map<String, Map<String, Integer>> readRecipeMap(Gson gson, File file) throws IOException {
         if (file == null || !file.exists() || file.length() == 0) return null;
-        try (FileReader fr = new FileReader(file)) {
+        try (Reader fr = Files.newBufferedReader(file.toPath(), StandardCharsets.UTF_8)) {
             JsonElement parsed = JsonParser.parseReader(fr);
             if (parsed == null || parsed.isJsonNull()) return null;
             JsonObject root = parsed.isJsonObject() ? parsed.getAsJsonObject() : null;
@@ -101,15 +105,17 @@ public class RecipeManager {
     }
 
     public RecipeNode expandRecipe(String currentName, int multiplier) {
-        if (!recipes.containsKey(currentName)) {
+        return expandRecipe(currentName, multiplier, 0);
+    }
+
+    private RecipeNode expandRecipe(String currentName, int multiplier, int depth) {
+        Map<String, Integer> recipe = recipes.get(currentName);
+        if (recipe == null || depth > MAX_DEPTH) {
             return new RecipeNode(currentName, multiplier, Collections.emptyList());
         }
         List<RecipeNode> ingredients = new ArrayList<>();
-        for (Map.Entry<String, Integer> entry : recipes.get(currentName).entrySet()) {
-            String item = entry.getKey();
-            int qty = entry.getValue();
-            RecipeNode expanded = expandRecipe(item, qty * multiplier);
-            ingredients.add(expanded);
+        for (Map.Entry<String, Integer> entry : recipe.entrySet()) {
+            ingredients.add(expandRecipe(entry.getKey(), entry.getValue() * multiplier, depth + 1));
         }
         return new RecipeNode(currentName, multiplier, ingredients);
     }
@@ -118,16 +124,6 @@ public class RecipeManager {
         return new LinkedHashMap<>(recipes);
     }
 
-    public RecipeResponse getRecipe(String name, int amt) {
-        if (!recipes.containsKey(name)) {
-            return null; 
-        }
-        
-        Map<String, Integer> simpleRecipe = getSimpleRecipe(name, amt);
-        RecipeNode fullRecipe = expandRecipe(name, amt);
-        
-        return new RecipeResponse(name, simpleRecipe, fullRecipe);
-    }
 
     private Map<String, Map<String, Integer>> sanitizeRecipes(Map<String, Map<String, Integer>> input) {
         if (input == null || input.isEmpty()) return Collections.emptyMap();
@@ -175,31 +171,7 @@ public class RecipeManager {
             out.put(output, cleaned);
         }
 
-        // --- Pass 3: remove redundant co-ingredients ---
-        // If a recipe lists both ingredient X and ingredient Y, and Y's own recipe
-        // is made purely from X (e.g., Enchanted Redstone Dust requires both
-        // "Redstone Dust: 160" AND "Block of Redstone: 160", while Block of Redstone
-        // is itself crafted from Redstone Dust), then Y is redundant and causes the
-        // recipe tree to bloat with a duplicate, deeper Redstone Dust subtree.
-        // Strip the derived ingredient (Y) and keep only the base (X).
-        for (Map.Entry<String, Map<String, Integer>> entry : out.entrySet()) {
-            Map<String, Integer> ingredients = entry.getValue();
-            if (ingredients == null || ingredients.size() < 2) continue;
-            Set<String> ingredientKeys = new HashSet<>(ingredients.keySet());
-            for (String candidate : ingredientKeys) {
-                if (!out.containsKey(candidate)) continue; // candidate is a leaf, skip
-                Map<String, Integer> candidateRecipe = out.get(candidate);
-                if (candidateRecipe == null || candidateRecipe.isEmpty()) continue;
-                // If every ingredient of 'candidate' is already present in this recipe,
-                // then 'candidate' is derivable on-the-fly from existing ingredients —
-                // listing it separately is redundant and will cause duplicate expansion.
-                if (ingredientKeys.containsAll(candidateRecipe.keySet())) {
-                    ingredients.remove(candidate);
-                }
-            }
-        }
-
-        // --- Pass 4: DFS cycle-breaker safety net ---
+        // --- Pass 3: DFS cycle-breaker safety net ---
         // Catches any remaining cycles not covered by the explicit rules above
         // (e.g., newly added remote recipes that introduce new circular paths).
         // When a back-edge is found, the ingredient edge creating the cycle is removed.
@@ -242,26 +214,6 @@ public class RecipeManager {
         inStack.remove(node);
     }
 
-    public static class RecipeResponse {
-        public String name;
-        public Map<String, Integer> simple_recipe;
-        public RecipeNode full_recipe;
-        public Map<String, Integer> messages;
-        
-        public RecipeResponse(String name, Map<String, Integer> simpleRecipe, RecipeNode fullRecipe) {
-            this.name = name;
-            this.simple_recipe = simpleRecipe;
-            this.full_recipe = fullRecipe;
-            this.messages = new LinkedHashMap<>();
-        }
-        
-        public RecipeResponse(String name, Map<String, Integer> simpleRecipe, RecipeNode fullRecipe, Map<String, Integer> messages) {
-            this.name = name;
-            this.simple_recipe = simpleRecipe;
-            this.full_recipe = fullRecipe;
-            this.messages = messages;
-        }
-    }
 
     public static class RecipeNode {
         public String name;

@@ -1,25 +1,24 @@
 package inventoryreader.ir;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
-import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.io.IOException;
 import java.lang.reflect.Type;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 
+/**
+ * Remembers the contents of each storage container (backpacks, ender chest pages, forge, accessory bag)
+ * by title, and passes changes since the last time it was seen to {@link ResourcesManager}.
+ */
 public class StorageReader {
-    private static final File DATA_FILE = new File(FilePathManager.DATA_DIR, "allcontainerData.json");
-    private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
-    private static final ResourcesManager RESOURCES_MANAGER = ResourcesManager.getInstance();
+    private static final Type TYPE = new TypeToken<Map<String, Map<String, Integer>>>() {}.getType();
     private static final StorageReader INSTANCE = new StorageReader();
+
+    private Map<String, Map<String, Integer>> containers;
 
     private StorageReader() {}
 
@@ -27,103 +26,51 @@ public class StorageReader {
         return INSTANCE;
     }
 
-    private final Map<String, Integer> changesData = new HashMap<>();
-
-    public Map<String, Map<String, Integer>> loadAllContainerDataFromFile() {
-        Type type = new TypeToken<Map<String, Map<String, Integer>>>() {}.getType();
-        if (!DATA_FILE.exists()) {
-            return new HashMap<>();
-        }
-        try (FileReader reader = new FileReader(DATA_FILE)) {
-            Map<String, Map<String, Integer>> data = gson.fromJson(reader, type);
-            return data != null ? data : new HashMap<>();
-        } catch (IOException e) {
-            InventoryReader.LOGGER.error("Failed to read data from file", e);
-            return new HashMap<>();
-        }
+    public static boolean isTrackedContainer(String title) {
+        return title.contains("Backpack") || title.contains("Ender Chest")
+            || title.contains("The Forge") || title.contains("Accessory Bag");
     }
 
-    private void saveAllContainerDataToFile(Map<String, Map<String, Integer>> allcontainerData) {
-        try (FileWriter writer = new FileWriter(DATA_FILE)) {
-            gson.toJson(allcontainerData, writer);
-        } catch (IOException e) {
-            InventoryReader.LOGGER.error("Failed to save data to file", e);
+    private Map<String, Map<String, Integer>> containers() {
+        if (containers == null) {
+            Map<String, Map<String, Integer>> loaded = JsonFiles.read(FilePathManager.CONTAINER_JSON, TYPE);
+            containers = loaded != null ? new HashMap<>(loaded) : new HashMap<>();
         }
+        return containers;
     }
 
-    public void saveContainerContents(AbstractContainerMenu handler, String title) {
-        Map<String, Map<String, Integer>> fileSaveContainerData = loadAllContainerDataFromFile();
+    /** Forgets the in-memory copy (after a reset deleted the file). */
+    public synchronized void clear() {
+        containers = null;
+    }
 
-        if (!title.contains("Backpack") && !title.contains("Ender Chest") && !title.contains("The Forge") && !title.contains("Accessory Bag")) {
-            return;
-        }
+    public synchronized void saveContainerContents(AbstractContainerMenu handler, String title) {
+        if (!isTrackedContainer(title)) return;
 
-        if (fileSaveContainerData.containsKey(title)) {
-            compareContainerData(handler, title, fileSaveContainerData);
-            return;
-        }
-
+        Map<String, Integer> newData = new LinkedHashMap<>();
         List<Slot> slots = handler.slots;
-        int slotsToIterate = slots.size() - 36;
-        Map<String, Integer> newData = new HashMap<>();
-
-        for (int i = 0; i < slotsToIterate; i++) {
-            Slot slot = slots.get(i);
-            ItemStack stack = slot.getItem();
+        // The last 36 slots are the player's own inventory, which is tracked separately.
+        for (int i = 0; i < slots.size() - 36; i++) {
+            ItemStack stack = slots.get(i).getItem();
             if (!stack.isEmpty()) {
-                String itemName = stack.getHoverName().getString();
-                int itemCount = stack.getCount();
-                newData.put(itemName, newData.getOrDefault(itemName, 0) + itemCount);
-            }
-        }
-        fileSaveContainerData.put(title, newData);
-        saveAllContainerDataToFile(fileSaveContainerData);
-        RESOURCES_MANAGER.saveData(newData);
-    }
-
-    public void compareContainerData(AbstractContainerMenu handler, String title, Map<String, Map<String, Integer>> allcontainerData) {
-        List<Slot> slots = handler.slots;
-        int slotsToIterate = slots.size() - 36;
-
-        Map<String, Integer> previousData = allcontainerData.get(title);
-        Map<String, Integer> newData = new HashMap<>();
-
-        for (int i = 0; i < slotsToIterate; i++) {
-            Slot slot = slots.get(i);
-            ItemStack stack = slot.getItem();
-            if (!stack.isEmpty()) {
-                String itemName = stack.getHoverName().getString();
-                int itemCount = stack.getCount();
-                newData.put(itemName, newData.getOrDefault(itemName, 0) + itemCount);
+                newData.merge(stack.getHoverName().getString(), stack.getCount(), Integer::sum);
             }
         }
 
-        for (Map.Entry<String, Integer> entry : newData.entrySet()) {
-            String itemName = entry.getKey();
-            int newCount = entry.getValue();
-            int previousCount = previousData.getOrDefault(itemName, 0);
+        Map<String, Integer> previous = containers().getOrDefault(title, Map.of());
+        if (previous.equals(newData)) return;
 
-            if (newCount != previousCount) {
-                changesData.put(itemName, newCount-previousCount);
-                previousData.put(itemName, newCount);
-            }
-        }
+        Map<String, Integer> changes = new HashMap<>();
+        newData.forEach((name, count) -> {
+            int delta = count - previous.getOrDefault(name, 0);
+            if (delta != 0) changes.put(name, delta);
+        });
+        previous.forEach((name, count) -> {
+            if (!newData.containsKey(name) && count != 0) changes.put(name, -count);
+        });
 
-        for (Map.Entry<String, Integer> entry : previousData.entrySet()) {
-            if (!newData.containsKey(entry.getKey()) && entry.getValue() > 0) {
-                changesData.put(entry.getKey(), -entry.getValue());
-            }
-        }
-
-        previousData.entrySet().removeIf(entry -> !newData.containsKey(entry.getKey()) || entry.getValue() == 0);
-
-        allcontainerData.put(title, previousData);
-        saveAllContainerDataToFile(allcontainerData);
-        RESOURCES_MANAGER.saveData(changesData);
-        changesData.clear();
-    }
-
-    public void clearAllData() {
-        changesData.clear();
+        containers.put(title, newData);
+        JsonFiles.write(FilePathManager.CONTAINER_JSON, containers);
+        ResourcesManager.getInstance().saveData(changes);
     }
 }

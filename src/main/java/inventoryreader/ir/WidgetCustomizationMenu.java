@@ -6,7 +6,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.input.MouseButtonEvent;
@@ -67,7 +67,7 @@ public class WidgetCustomizationMenu extends Screen {
         this.currentTab = Tab.RECIPE_SELECTION;
         if (selectedRecipe != null) {
             ResourcesManager.RemainingResponse response = resourcesManager.getRemainingIngredients(selectedRecipe, craftAmount);
-            this.recipeTree = convertResourceNodeToRecipeNode(response.full_recipe);
+            this.recipeTree = response.full_recipe;
         }
     }
 
@@ -98,25 +98,25 @@ public class WidgetCustomizationMenu extends Screen {
         updateTabButtonStyles();
         if (currentTab == Tab.RECIPE_SELECTION) {
             initRecipeTab();
-            
+
             Button toggleButton = Button.builder(
                 widget.isEnabled() ? Component.literal("Disable Widget") : Component.literal("Enable Widget"),
                 button -> {
                     boolean newState = !widget.isEnabled();
                     widget.setEnabled(newState);
                     button.setMessage(newState ? Component.literal("Disable Widget") : Component.literal("Enable Widget"));
-                    
+
                     if (selectedRecipe != null && newState) {
                         widget.setSelectedRecipe(selectedRecipe);
                         widget.setCraftAmount(craftAmount);
                     }
                     widget.saveConfiguration();
-                    
+
                     Minecraft client = Minecraft.getInstance();
                     if (client.player != null) {
                         Component message = Component.literal("Widget " + (newState ? "enabled!" : "disabled!"))
                             .setStyle(Style.EMPTY.withColor(newState ? ChatFormatting.GREEN : ChatFormatting.RED));
-                        client.player.displayClientMessage(message, true);
+                        client.player.sendOverlayMessage(message);
                     }
                 }
             )
@@ -181,7 +181,7 @@ public class WidgetCustomizationMenu extends Screen {
                 if (client.player != null) {
                     Component message = Component.literal("Widget position reset!")
                         .setStyle(Style.EMPTY.withColor(ChatFormatting.GREEN));
-                    client.player.displayClientMessage(message, true);
+                    client.player.sendOverlayMessage(message);
                 }
             }
         )
@@ -204,8 +204,8 @@ public class WidgetCustomizationMenu extends Screen {
     }
 
     @Override
-    public void renderBackground(GuiGraphics context, int mouseX, int mouseY, float delta) {
-        
+    public void extractBackground(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
+
     }
 
     private void updateFilteredRecipes(String searchTerm) {
@@ -223,18 +223,18 @@ public class WidgetCustomizationMenu extends Screen {
     private void updateCraftAmount(String text) {
         try {
             int amount = Integer.parseInt(text);
-            this.craftAmount = Math.max(1, amount); 
+            this.craftAmount = Math.max(1, amount);
         }catch (NumberFormatException e) {
             this.craftAmount = 1;
         }
         if (selectedRecipe != null) {
             ResourcesManager.RemainingResponse response = resourcesManager.getRemainingIngredients(selectedRecipe, craftAmount);
-            recipeTree = convertResourceNodeToRecipeNode(response.full_recipe);
+            recipeTree = response.full_recipe;
         }
     }
 
     @Override
-    public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
+    public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
         if (currentTab == Tab.RECIPE_SELECTION) {
             renderRecipeTab(context, mouseX, mouseY);
         } else {
@@ -242,91 +242,87 @@ public class WidgetCustomizationMenu extends Screen {
         }
         int activeTabX = currentTab == Tab.RECIPE_SELECTION ? 20 : 180;
         context.fill(activeTabX, 42, activeTabX + 150, 44, 0xFF5FAF3F);
-        super.render(context, mouseX, mouseY, delta);
+        super.extractRenderState(context, mouseX, mouseY, delta);
     }
 
-    private void renderRecipeTab(GuiGraphics context, int mouseX, int mouseY) {
+    private void renderRecipeTab(GuiGraphicsExtractor context, int mouseX, int mouseY) {
         context.fill(0, 0, width, height, 0xFF0E0E0E);
-        drawBorder(context, 0, 0, width, height, 0x88608C35);
+        context.outline(0, 0, width, height, 0x88608C35);
 
         context.fill(0, 0, width, 22, 0xFF17293A);
-        drawBorder(context, 0, 0, width, 22, 0xFF223344);
+        context.outline(0, 0, width, 22, 0xFF223344);
         String modTitle = "Widget Customization";
-        context.drawString(font, modTitle, width / 2 - font.width(modTitle) / 2, 7, GOLD, false);
+        context.text(font, modTitle, width / 2 - font.width(modTitle) / 2, 7, GOLD, false);
 
         context.fill(0, 22, width, 44, 0xFF131313);
 
-        context.drawString(font,
+        context.text(font,
             Component.literal("Recipe Selection").setStyle(Style.EMPTY.withColor(ChatFormatting.GOLD).withBold(true)),
             20, 47, GOLD, false);
-        context.drawString(font,
+        context.text(font,
             Component.literal("Recipe Tree Preview (" + craftAmount + "×)").setStyle(Style.EMPTY.withColor(ChatFormatting.GOLD).withBold(true)),
             treeViewX, treeViewY - 15, GOLD, false);
-        context.drawString(font, "Craft:", 236, 57, 0xFFCCCCCC, false);
-        int yPos = 85; 
+        context.text(font, "Craft:", 236, 57, 0xFFCCCCCC, false);
+        int yPos = 85;
         int itemHeight = 20;
         int endIndex = Math.min(scrollOffset + MAX_RECIPES_SHOWN, filteredRecipes.size());
 
         context.fill(20, yPos - 5, 270, yPos + MAX_RECIPES_SHOWN * itemHeight + 15, 0xFC271910);
 
         int listBorderColor = 0xFFDAA520;
-        for (int i = 0; i < 2; i++) { 
-            drawBorder(
-                context,
-                20 - i,
-                yPos - 5 - i, 
-                250 + i * 2, 
-                MAX_RECIPES_SHOWN * itemHeight + 20 + i * 2, 
+        for (int i = 0; i < 2; i++) {
+            context.outline(20 - i,
+                yPos - 5 - i,
+                250 + i * 2,
+                MAX_RECIPES_SHOWN * itemHeight + 20 + i * 2,
                 listBorderColor
             );
         }
         if (filteredRecipes.isEmpty()) {
-            context.drawString(font, "No recipes found", 30, yPos + 10, 0xFFAAAAAA, false);
+            context.text(font, "No recipes found", 30, yPos + 10, 0xFFAAAAAA, false);
         } else {
             for (int i = scrollOffset; i < endIndex; i++) {
                 String recipe = filteredRecipes.get(i);
                 boolean isSelected = recipe.equals(selectedRecipe);
                 if (isSelected) {
                     context.fill(20, yPos, 270, yPos + itemHeight, 0x99608C35);
-                    context.drawString(font, recipe, 30, yPos + 5, 0xFFFFB728, false);
+                    context.text(font, recipe, 30, yPos + 5, 0xFFFFB728, false);
                 } else {
                     boolean isHovered = mouseX >= 20 && mouseX <= 270 && mouseY >= yPos && mouseY <= yPos + itemHeight;
                     if (isHovered) {
                         context.fill(20, yPos, 270, yPos + itemHeight, 0x553E6428);
                     }
-                    context.drawString(font, recipe, 30, yPos + 5, 0xFFE0E0E0, false);
+                    context.text(font, recipe, 30, yPos + 5, 0xFFE0E0E0, false);
                 }
                 yPos += itemHeight;
             }
             if (scrollOffset > 0) {
                 String up = "▲";
-                context.drawString(font, up, 145 - font.width(up) / 2, 75, GOLD, false);
+                context.text(font, up, 145 - font.width(up) / 2, 75, GOLD, false);
             }
             if (endIndex < filteredRecipes.size()) {
                 String down = "▼";
-                context.drawString(font, down, 145 - font.width(down) / 2, yPos + 5, GOLD, false);
+                context.text(font, down, 145 - font.width(down) / 2, yPos + 5, GOLD, false);
             }
         }
 
         context.fill(treeViewX, treeViewY, treeViewX + treeViewWidth, treeViewY + treeViewHeight, 0xFC271910);
-        
+
         int treeBorderColor = 0xFFDAA520;
         int borderThickness = 2;
         for (int i = 0; i < borderThickness; i++) {
-            drawBorder(
-                context,
-                treeViewX - i,
-                treeViewY - i, 
-                treeViewWidth + i * 2, 
-                treeViewHeight + i * 2, 
+            context.outline(treeViewX - i,
+                treeViewY - i,
+                treeViewWidth + i * 2,
+                treeViewHeight + i * 2,
                 treeBorderColor
             );
         }
-        
+
         context.enableScissor(
-            treeViewX, 
-            treeViewY, 
-            treeViewX + treeViewWidth, 
+            treeViewX,
+            treeViewY,
+            treeViewX + treeViewWidth,
             treeViewY + treeViewHeight
         );
         if (recipeTree != null) {
@@ -335,11 +331,11 @@ public class WidgetCustomizationMenu extends Screen {
             if (totalHeight > treeViewHeight) {
                 if (treeScrollOffset > 0) {
                     String up = "▲";
-                    context.drawString(font, up, treeViewX + treeViewWidth - 15 - font.width(up) / 2, treeViewY + 15, GOLD, false);
+                    context.text(font, up, treeViewX + treeViewWidth - 15 - font.width(up) / 2, treeViewY + 15, GOLD, false);
                 }
                 if (treeScrollOffset < totalHeight - treeViewHeight + 20) {
                     String down = "▼";
-                    context.drawString(font, down, treeViewX + treeViewWidth - 15 - font.width(down) / 2, treeViewY + treeViewHeight - 15, GOLD, false);
+                    context.text(font, down, treeViewX + treeViewWidth - 15 - font.width(down) / 2, treeViewY + treeViewHeight - 15, GOLD, false);
                 }
                 int scrollbarWidth = 12;
                 int scrollbarHeight = Math.max(40, treeViewHeight * treeViewHeight / totalHeight);
@@ -348,33 +344,33 @@ public class WidgetCustomizationMenu extends Screen {
                 context.fill(treeViewX + treeViewWidth - scrollbarWidth - 4, scrollbarY, treeViewX + treeViewWidth - 4, scrollbarY + scrollbarHeight, 0xFFDAA520);
             }
         } else if (selectedRecipe != null) {
-            context.drawString(font, "Loading recipe tree...", treeViewX + 20, treeViewY + 20, 0xFFAAAAAA, false);
+            context.text(font, "Loading recipe tree...", treeViewX + 20, treeViewY + 20, 0xFFAAAAAA, false);
         } else {
-            context.drawString(font, "Select a recipe to preview", treeViewX + 20, treeViewY + 20, 0xFFAAAAAA, false);
+            context.text(font, "Select a recipe to preview", treeViewX + 20, treeViewY + 20, 0xFFAAAAAA, false);
         }
         context.disableScissor();
     }
 
-    private void renderPositioningTab(GuiGraphics context, int mouseX, int mouseY) {
+    private void renderPositioningTab(GuiGraphicsExtractor context, int mouseX, int mouseY) {
         context.fill(0, 0, width, height, 0xFF0E0E0E);
-        drawBorder(context, 0, 0, width, height, 0x88608C35);
+        context.outline(0, 0, width, height, 0x88608C35);
 
         context.fill(0, 0, width, 22, 0xFF17293A);
-        drawBorder(context, 0, 0, width, 22, 0xFF223344);
+        context.outline(0, 0, width, 22, 0xFF223344);
         String modTitle = "Widget Customization";
-        context.drawString(font, modTitle, width / 2 - font.width(modTitle) / 2, 7, GOLD, false);
+        context.text(font, modTitle, width / 2 - font.width(modTitle) / 2, 7, GOLD, false);
 
         context.fill(0, 22, width, 44, 0xFF131313);
 
         String posTitle = "Widget Positioning";
-        context.drawString(font, posTitle, width / 2 - font.width(posTitle) / 2, 52, 0xFFE0E0E0, false);
+        context.text(font, posTitle, width / 2 - font.width(posTitle) / 2, 52, 0xFFE0E0E0, false);
 
         String hint = "Drag the widget preview to reposition   |   Drag corner handles to resize";
-        context.drawString(font, hint, width / 2 - font.width(hint) / 2, 65, 0xFFBBBBBB, false);
+        context.text(font, hint, width / 2 - font.width(hint) / 2, 65, 0xFFBBBBBB, false);
 
         String posInfo = "X=" + widgetPositionX + "  Y=" + widgetPositionY
             + "  W=" + getPreviewWidth() + "  H=" + getPreviewHeight();
-        context.drawString(font, posInfo, width / 2 - font.width(posInfo) / 2, 78, GOLD, false);
+        context.text(font, posInfo, width / 2 - font.width(posInfo) / 2, 78, GOLD, false);
     int previewWidth = getPreviewWidth();
     int previewHeight = getPreviewHeight();
         for (int x = 0; x < width; x += 50) {
@@ -388,12 +384,10 @@ public class WidgetCustomizationMenu extends Screen {
         int borderColor = isDraggingWidget ? 0xFFFFDD00 : 0xFFDAA520;
         int borderThickness = 2;
         for (int i = 0; i < borderThickness; i++) {
-            drawBorder(
-                context,
-                widgetPositionX - i,
-                widgetPositionY - i, 
-                previewWidth + i * 2, 
-                previewHeight + i * 2, 
+            context.outline(widgetPositionX - i,
+                widgetPositionY - i,
+                previewWidth + i * 2,
+                previewHeight + i * 2,
                 borderColor
             );
         }
@@ -417,7 +411,7 @@ public class WidgetCustomizationMenu extends Screen {
                 int contentX = widgetPositionX + 10;
                 int contentY = widgetPositionY + 50;
                 int contentWidth = Math.max(20, previewWidth - 20);
-                int totalLines = getExpandedNodeHeight(recipeTree, selectedRecipe) / 16; 
+                int totalLines = getExpandedNodeHeight(recipeTree, selectedRecipe) / 16;
                 totalLines = Math.max(totalLines, 1);
                 int availableHeight = Math.max(10, previewHeight - (contentY - widgetPositionY) - 10);
                 int lineHeight = Math.min(16, Math.max(6, availableHeight / totalLines));
@@ -449,10 +443,10 @@ public class WidgetCustomizationMenu extends Screen {
         }
         if (isDraggingWidget || resizing) {
             String hint2 = resizing ? "Release to resize" : "Release to place widget";
-            context.drawString(font, hint2, widgetPositionX + previewWidth / 2 - font.width(hint2) / 2, widgetPositionY + previewHeight - 15, 0xFFAAAAFF, false);
+            context.text(font, hint2, widgetPositionX + previewWidth / 2 - font.width(hint2) / 2, widgetPositionY + previewHeight - 15, 0xFFAAAAFF, false);
         } else {
             String hint2 = "Drag to reposition";
-            context.drawString(font, hint2, widgetPositionX + previewWidth / 2 - font.width(hint2) / 2, widgetPositionY + previewHeight - 15, 0xFF888888, false);
+            context.text(font, hint2, widgetPositionX + previewWidth / 2 - font.width(hint2) / 2, widgetPositionY + previewHeight - 15, 0xFF888888, false);
         }
 
     drawHandle(context, widgetPositionX - RESIZE_HANDLE_SIZE/2, widgetPositionY - RESIZE_HANDLE_SIZE/2);
@@ -461,9 +455,9 @@ public class WidgetCustomizationMenu extends Screen {
     drawHandle(context, widgetPositionX + previewWidth - RESIZE_HANDLE_SIZE/2, widgetPositionY + previewHeight - RESIZE_HANDLE_SIZE/2);
     }
 
-    
 
-    private int renderStaticWidgetStyleTreeScaled(GuiGraphics context, RecipeManager.RecipeNode node, int x, int y, int level, int availableWidth, String pathKey, int lineHeight, int indentUnit) {
+
+    private int renderStaticWidgetStyleTreeScaled(GuiGraphicsExtractor context, RecipeManager.RecipeNode node, int x, int y, int level, int availableWidth, String pathKey, int lineHeight, int indentUnit) {
         if (node == null) return y;
         int indent = level * indentUnit;
         boolean hasChildren = node.ingredients != null && !node.ingredients.isEmpty();
@@ -473,12 +467,12 @@ public class WidgetCustomizationMenu extends Screen {
         int bgColor = 0x99271910;
         context.fill(x + indent, y, x + indent + nodeWidth, y + lineHeight, bgColor);
         int borderColor = hasEnough ? 0x88608C35 : 0x88FF5555;
-        drawBorder(context, x + indent, y, nodeWidth, lineHeight, borderColor);
+        context.outline(x + indent, y, nodeWidth, lineHeight, borderColor);
 
         String nextKey = SandboxWidget.makePathKey(pathKey, node.name);
         boolean isExpanded = widget.isNodeExpanded(nextKey);
         if (hasChildren) {
-            context.drawString(
+            context.text(
                 font,
                 isExpanded ? "▼" : "▶",
                 x + indent + Math.max(3, Math.round(5 * (lineHeight / 16.0f))),
@@ -505,8 +499,8 @@ public class WidgetCustomizationMenu extends Screen {
         context.pose().pushMatrix();
         context.pose().translate(nameX, y + Math.max(1, Math.round(4 * (lineHeight / 16.0f))));
         context.pose().scale(textScale, textScale);
-        context.drawString(font, Component.literal(amountText), 0, 0, amountColor, false);
-        context.drawString(font, itemName, amountWidth, 0, 0xFFFFFFFF, false);
+        context.text(font, Component.literal(amountText), 0, 0, amountColor, false);
+        context.text(font, itemName, amountWidth, 0, 0xFFFFFFFF, false);
         context.pose().popMatrix();
 
         y += lineHeight;
@@ -527,12 +521,12 @@ public class WidgetCustomizationMenu extends Screen {
         return y;
     }
 
-    private void drawCraftablePreview(GuiGraphics context, int x, int y, int width, int maxY) {
+    private void drawCraftablePreview(GuiGraphicsExtractor context, int x, int y, int width, int maxY) {
         Minecraft client = Minecraft.getInstance();
         List<String> msgs = SandboxWidget.getInstance().getMessagesSnapshot();
         if (msgs == null || msgs.isEmpty()) {
             Component header = Component.literal("Craftable -").setStyle(Style.EMPTY.withColor(ChatFormatting.YELLOW).withBold(true));
-            if (y + 10 <= maxY) context.drawString(client.font, header, x + 5, y, 0xFFFFFFFF, false);
+            if (y + 10 <= maxY) context.text(client.font, header, x + 5, y, 0xFFFFFFFF, false);
             return;
         }
         int baseHeader = 13;
@@ -550,7 +544,7 @@ public class WidgetCustomizationMenu extends Screen {
             context.pose().pushMatrix();
             context.pose().translate(x + 5, y);
             context.pose().scale(scale, scale);
-            context.drawString(client.font, header, 0, 0, 0xFFFFFFFF, false);
+            context.text(client.font, header, 0, 0, 0xFFFFFFFF, false);
             context.pose().popMatrix();
         } else {
             return;
@@ -580,7 +574,7 @@ public class WidgetCustomizationMenu extends Screen {
                     context.pose().pushMatrix();
                     context.pose().translate(x + 5, y);
                     context.pose().scale(scale, scale);
-                    context.drawString(client.font, line.toString(), 0, 0, textColor, false);
+                    context.text(client.font, line.toString(), 0, 0, textColor, false);
                     context.pose().popMatrix();
                     y += Math.round(baseLine * scale);
                     line = new StringBuilder(message.startsWith("   ") ? "      " : "   ").append(word).append(" ");
@@ -593,7 +587,7 @@ public class WidgetCustomizationMenu extends Screen {
                 context.pose().pushMatrix();
                 context.pose().translate(x + 5, y);
                 context.pose().scale(scale, scale);
-                context.drawString(client.font, line.toString(), 0, 0, textColor, false);
+                context.text(client.font, line.toString(), 0, 0, textColor, false);
                 context.pose().popMatrix();
                 y += Math.round((baseLine - 1) * scale);
             }
@@ -625,18 +619,18 @@ public class WidgetCustomizationMenu extends Screen {
         return max;
     }
 
-    private void drawHandle(GuiGraphics context, int x, int y) {
+    private void drawHandle(GuiGraphicsExtractor context, int x, int y) {
         context.fill(x, y, x + RESIZE_HANDLE_SIZE, y + RESIZE_HANDLE_SIZE, 0xFFFFB728);
     }
 
-    private void drawFittedTextWithShadow(GuiGraphics context, Component text, int x, int y, int color, int maxWidth) {
+    private void drawFittedTextWithShadow(GuiGraphicsExtractor context, Component text, int x, int y, int color, int maxWidth) {
         int width = font.width(text);
         float scale = width > maxWidth ? (float)maxWidth / (float)width : 1.0f;
         scale = Math.min(scale, getMaxTextScale());
         context.pose().pushMatrix();
         context.pose().translate(x, y);
         context.pose().scale(scale, scale);
-        context.drawString(font, text, 0, 0, color);
+        context.text(font, text, 0, 0, color);
         context.pose().popMatrix();
     }
 
@@ -644,9 +638,9 @@ public class WidgetCustomizationMenu extends Screen {
         return 1.0f;
     }
 
-    
 
-    private int renderRecipeTree(GuiGraphics context, RecipeManager.RecipeNode node, int x, int y, int level, String pathKey) {
+
+    private int renderRecipeTree(GuiGraphicsExtractor context, RecipeManager.RecipeNode node, int x, int y, int level, String pathKey) {
         if (node == null) return y;
         Minecraft client = Minecraft.getInstance();
         int indent = level * RECIPE_LEVEL_INDENT;
@@ -655,22 +649,23 @@ public class WidgetCustomizationMenu extends Screen {
         boolean isExpanded = widget.isNodeExpanded(nodeKey);
         boolean hasChildren = node.ingredients != null && !node.ingredients.isEmpty();
         int bgColor = 0x99271910;
-        
+
         int mouseX = (int)(client.mouseHandler.xpos() / client.getWindow().getGuiScale());
         int mouseY = (int)(client.mouseHandler.ypos() / client.getWindow().getGuiScale());
-        boolean isHovered = mouseX >= x + indent && mouseX <= x + indent + (treeViewWidth - 20 - indent) && 
+        boolean isHovered = mouseX >= x + indent && mouseX <= x + indent + (treeViewWidth - 20 - indent) &&
                            mouseY >= y && mouseY <= y + 16;
-        int hoverEffect = isHovered ? 0x22FFFFFF : 0;
-        
         int nodeWidth = treeViewWidth - 20 - indent;
-        context.fill(x + indent, y, x + indent + nodeWidth, y + 16, bgColor + hoverEffect);
-        
+        context.fill(x + indent, y, x + indent + nodeWidth, y + 16, bgColor);
+        if (isHovered) {
+            context.fill(x + indent, y, x + indent + nodeWidth, y + 16, 0x22FFFFFF);
+        }
+
         int borderColor = hasEnough ? 0x88608C35 : 0x88FF5555;
-        drawBorder(context, x + indent, y, nodeWidth, 16, borderColor);
+        context.outline(x + indent, y, nodeWidth, 16, borderColor);
 
         if (hasChildren) {
             String expandIcon = isExpanded ? "▼" : "▶";
-            context.drawString(
+            context.text(
                 client.font,
                 expandIcon,
                 x + indent + 5,
@@ -679,22 +674,22 @@ public class WidgetCustomizationMenu extends Screen {
                 false
             );
         }
-        
+
         int nameX = x + indent + (hasChildren ? 25 : 10);
-        
+
         int textColor;
         boolean isBold = (level == 0);
         if (level == 0) {
-            textColor = GOLD; 
+            textColor = GOLD;
         } else {
             textColor = hasEnough ? 0xFFFFFFFF : 0xFFFF6B6B;
         }
-        
+
         String prefix = "";
         String amountText = node.amount + "×";
         int amountColor = hasEnough ? 0xFF6EFF6E : 0xFFFF6B6B;
-        
-        context.drawString(
+
+        context.text(
             client.font,
             prefix,
             nameX,
@@ -702,8 +697,8 @@ public class WidgetCustomizationMenu extends Screen {
             0xFFFFFFFF,
             false
         );
-        
-        context.drawString(
+
+        context.text(
             client.font,
             amountText,
             nameX + client.font.width(prefix),
@@ -711,12 +706,12 @@ public class WidgetCustomizationMenu extends Screen {
             amountColor,
             false
         );
-        
+
         Component itemName = Component.literal(node.name)
             .setStyle(Style.EMPTY.withColor(textColor)
             .withBold(isBold));
-        
-        context.drawString(
+
+        context.text(
             client.font,
             itemName,
             nameX + client.font.width(prefix + amountText + " "),
@@ -724,9 +719,9 @@ public class WidgetCustomizationMenu extends Screen {
             0xFFFFFFFF,
             false
         );
-        
+
         y += 16;
-        
+
     if (hasChildren && isExpanded && node.ingredients.size() > 0) {
             int lineColor = 0xFF777777;
             for (int i = 0; i < node.ingredients.size(); i++) {
@@ -734,10 +729,10 @@ public class WidgetCustomizationMenu extends Screen {
                 int lineStartX = x + indent + 6;
                 int vertLineY = y;
                 int childIndentX = x + indent + RECIPE_LEVEL_INDENT;
-                
+
                 context.fill(lineStartX, vertLineY, lineStartX + 1, vertLineY + 8, lineColor);
                 context.fill(lineStartX, vertLineY + 8, childIndentX, vertLineY + 9, lineColor);
-                
+
                 y = renderRecipeTree(context, child, x, y, level + 1, nodeKey);
             }
         }
@@ -747,16 +742,17 @@ public class WidgetCustomizationMenu extends Screen {
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
         if (currentTab == Tab.RECIPE_SELECTION && mouseX >= 20 && mouseX <= 270 && mouseY >= 80) {
-            if (verticalAmount < 0 && scrollOffset > 0) {
+            // Wheel down (negative) moves the list down, matching the tree view and vanilla lists.
+            if (verticalAmount > 0 && scrollOffset > 0) {
                 scrollOffset--;
                 return true;
-            } else if (verticalAmount > 0 && scrollOffset + MAX_RECIPES_SHOWN < filteredRecipes.size()) {
+            } else if (verticalAmount < 0 && scrollOffset + MAX_RECIPES_SHOWN < filteredRecipes.size()) {
                 scrollOffset++;
                 return true;
             }
         }
-        if (currentTab == Tab.RECIPE_SELECTION && 
-            mouseX >= treeViewX && mouseX <= treeViewX + treeViewWidth && 
+        if (currentTab == Tab.RECIPE_SELECTION &&
+            mouseX >= treeViewX && mouseX <= treeViewX + treeViewWidth &&
             mouseY >= treeViewY && mouseY <= treeViewY + treeViewHeight) {
             if (verticalAmount != 0 && recipeTree != null) {
                 int totalTreeHeight = getExpandedNodeHeight(recipeTree, selectedRecipe);
@@ -807,14 +803,14 @@ public class WidgetCustomizationMenu extends Screen {
                 if (actualIndex >= 0 && actualIndex < filteredRecipes.size() && recipeIndex < MAX_RECIPES_SHOWN) {
                     selectedRecipe = filteredRecipes.get(actualIndex);
                     ResourcesManager.RemainingResponse response = resourcesManager.getRemainingIngredients(selectedRecipe, craftAmount);
-                    recipeTree = convertResourceNodeToRecipeNode(response.full_recipe);
+                    recipeTree = response.full_recipe;
                     if (recipeTree != null) {
                         widget.setNodeExpansion(SandboxWidget.getNodeKey(recipeTree), true);
                     }
                     return true;
                 }
             }
-            if (recipeTree != null && mouseX >= treeViewX && mouseX <= treeViewX + treeViewWidth && 
+            if (recipeTree != null && mouseX >= treeViewX && mouseX <= treeViewX + treeViewWidth &&
                 mouseY >= treeViewY && mouseY <= treeViewY + treeViewHeight) {
                 return handleTreeNodeClick(mouseX, mouseY);
             }
@@ -888,7 +884,7 @@ public class WidgetCustomizationMenu extends Screen {
                         if (newHeight < minH) newHeight = minH;
                     }
                     case NONE -> {
-                        
+
                     }
                 }
                 widgetPositionX = Math.max(0, newX);
@@ -949,10 +945,10 @@ public class WidgetCustomizationMenu extends Screen {
 
     private boolean checkNodeClick(RecipeManager.RecipeNode node, double mouseX, double mouseY, int x, int y, int level, String pathKey) {
         if (node == null) return false;
-        
+
         if (y + 16 < treeViewY || y > treeViewY + treeViewHeight) {
             y += 16;
-            if (node.ingredients != null && !node.ingredients.isEmpty() && 
+            if (node.ingredients != null && !node.ingredients.isEmpty() &&
                 widget.isNodeExpanded(SandboxWidget.makePathKey(pathKey, node.name))) {
                 for (RecipeManager.RecipeNode child : node.ingredients) {
                     boolean childResult = checkNodeClick(child, mouseX, mouseY, x, y, level + 1, SandboxWidget.makePathKey(pathKey, node.name));
@@ -962,20 +958,20 @@ public class WidgetCustomizationMenu extends Screen {
             }
             return false;
         }
-        
+
         int indent = level * RECIPE_LEVEL_INDENT;
         int nodeHeight = 16;
         boolean hasChildren = node.ingredients != null && !node.ingredients.isEmpty();
         int nodeWidth = treeViewWidth - 20 - indent;
-        
-    if (mouseY >= y && mouseY <= y + nodeHeight && 
+
+    if (mouseY >= y && mouseY <= y + nodeHeight &&
             mouseY >= treeViewY && mouseY <= treeViewY + treeViewHeight) {
             if (mouseX >= x + indent && mouseX <= x + indent + nodeWidth) {
         String nodeKey = SandboxWidget.makePathKey(pathKey, node.name);
                 if (hasChildren && mouseX <= x + indent + 25) {
                     widget.toggleNodeExpansion(nodeKey);
                     return true;
-                } 
+                }
                 else if (hasChildren) {
                     widget.toggleNodeExpansion(nodeKey);
                     return true;
@@ -988,15 +984,15 @@ public class WidgetCustomizationMenu extends Screen {
                     Component message = Component.literal("You have " + available + "/" + node.amount + " of " + node.name)
                         .setStyle(Style.EMPTY.withColor(hasEnough ? ChatFormatting.GREEN : ChatFormatting.RED));
                     if (client.player != null) {
-                        client.player.displayClientMessage(message, true);
+                        client.player.sendOverlayMessage(message);
                     }
                     return true;
                 }
             }
         }
-        
+
         y += nodeHeight;
-        
+
     if (hasChildren && widget.isNodeExpanded(SandboxWidget.makePathKey(pathKey, node.name))) {
             for (RecipeManager.RecipeNode child : node.ingredients) {
         if (checkNodeClick(child, mouseX, mouseY, x, y, level + 1, SandboxWidget.makePathKey(pathKey, node.name))) {
@@ -1011,7 +1007,7 @@ public class WidgetCustomizationMenu extends Screen {
     private int getExpandedNodeHeight(RecipeManager.RecipeNode node, String pathKey) {
         if (node == null) return 0;
         int height = 16;
-        if (node.ingredients != null && !node.ingredients.isEmpty() && 
+        if (node.ingredients != null && !node.ingredients.isEmpty() &&
         widget.isNodeExpanded(SandboxWidget.makePathKey(pathKey, node.name))) {
         for (RecipeManager.RecipeNode child : node.ingredients) {
         height += getExpandedNodeHeight(child, SandboxWidget.makePathKey(pathKey, node.name));
@@ -1026,12 +1022,12 @@ public class WidgetCustomizationMenu extends Screen {
             widget.setCraftAmount(craftAmount);
         }
         widget.setWidgetPosition(widgetPositionX, widgetPositionY);
-        
+
         Minecraft client = Minecraft.getInstance();
         if (client.player != null) {
             Component message = Component.literal("Widget configuration applied!")
                 .setStyle(Style.EMPTY.withColor(ChatFormatting.GREEN));
-            client.player.displayClientMessage(message, true);
+            client.player.sendOverlayMessage(message);
         }
     }
 
@@ -1041,7 +1037,7 @@ public class WidgetCustomizationMenu extends Screen {
         if (client.player != null) {
             Component message = Component.literal("Widget configuration saved!")
                 .setStyle(Style.EMPTY.withColor(ChatFormatting.GREEN));
-            client.player.displayClientMessage(message, true);
+            client.player.sendOverlayMessage(message);
         }
     }
 
@@ -1057,22 +1053,5 @@ public class WidgetCustomizationMenu extends Screen {
         super.onClose();
     }
 
-    private RecipeManager.RecipeNode convertResourceNodeToRecipeNode(ResourcesManager.RecipeNode resourceNode) {
-        if (resourceNode == null) return null;
-        List<RecipeManager.RecipeNode> ingredients = new ArrayList<>();
-        if (resourceNode.ingredients != null) {
-            for (ResourcesManager.RecipeNode child : resourceNode.ingredients) {
-                ingredients.add(convertResourceNodeToRecipeNode(child));
-            }
-        }
-        return new RecipeManager.RecipeNode(resourceNode.name, resourceNode.amount, ingredients);
-    }
 
-    // Helper method to draw borders since drawBorder was removed from the rendering API in 1.21.10
-    private static void drawBorder(GuiGraphics context, int x, int y, int width, int height, int color) {
-        context.fill(x, y, x + width, y + 1, color);
-        context.fill(x, y + height - 1, x + width, y + height, color);
-        context.fill(x, y, x + 1, y + height, color);
-        context.fill(x + width - 1, y, x + width, y + height, color);
-    }
 }
