@@ -21,6 +21,8 @@ public class SandboxWidget {
     private static final int HEADER_BG = 0xCC2C4A1B;
     private static final int GOLD = 0xFFFFB728;
     private static final int RECIPE_LEVEL_INDENT = 10;
+    /** Gap between the panel edge and the tree rows, on both sides. */
+    private static final int TREE_PADDING = 6;
     private static final SandboxWidget INSTANCE = new SandboxWidget();
     /** Expansion-key root for the top-level nodes (Total and each recipe). */
     public static final String LIST_KEY = "list";
@@ -431,7 +433,7 @@ public class SandboxWidget {
     currentNodeLineHeight = computedLine;
     currentTreeScale = currentNodeLineHeight / 16.0f;
     int treeEndY = y;
-    for (RecipeManager.RecipeNode top : root.ingredients) treeEndY = renderRecipeTree(context, top, panelX, treeEndY, 0, LIST_KEY);
+    for (RecipeManager.RecipeNode top : root.ingredients) treeEndY = renderRecipeTree(context, top, panelX + TREE_PADDING, treeEndY, 0, LIST_KEY);
 
         if (messageSectionHeight > 0) {
             context.fill(panelX, treeEndY, panelX + panelWidth, treeEndY + 1, 0x99608C35);
@@ -470,7 +472,7 @@ public class SandboxWidget {
         int bgColor = 0x99271910;
         int mouseX = (int)(client.mouseHandler.xpos() / client.getWindow().getGuiScale());
         int mouseY = (int)(client.mouseHandler.ypos() / client.getWindow().getGuiScale());
-        int nodeBaseWidth = Math.max(100, widgetWidth - 20); // account for panel padding
+        int nodeBaseWidth = Math.max(100, widgetWidth - 2 * TREE_PADDING);
         int nodeHeight = Math.max(6, currentNodeLineHeight);
         boolean isHovered = mouseX >= x + indent && mouseX <= x + indent + nodeBaseWidth - indent &&
                             mouseY >= y && mouseY <= y + nodeHeight;
@@ -560,7 +562,7 @@ public class SandboxWidget {
             Component messagesHeader = Component.literal("Craftable -")
                 .setStyle(Style.EMPTY.withColor(ChatFormatting.YELLOW).withBold(true));
             context.pose().pushMatrix();
-            context.pose().translate(x + 5, y);
+            context.pose().translate(x + (width - client.font.width(messagesHeader) * scale) / 2f, y);
             context.pose().scale(scale, scale);
             context.text(
                 client.font,
@@ -603,11 +605,12 @@ public class SandboxWidget {
                 if (client.font.width(line.toString() + word) > unscaledWrapWidth) {
                     if (y + Math.round(baseLine * scale) > maxY) return;
                     context.pose().pushMatrix();
-                    context.pose().translate(x + 5, y);
+                    String centred = line.toString().trim();
+                    context.pose().translate(x + (width - client.font.width(centred) * scale) / 2f, y);
                     context.pose().scale(scale, scale);
                     context.text(
                         client.font,
-                        line.toString(),
+                        centred,
                         0,
                         0,
                         textColor,
@@ -623,11 +626,12 @@ public class SandboxWidget {
             if (line.length() > 0) {
                 if (y + Math.round((baseLine - 1) * scale) > maxY) return;
                 context.pose().pushMatrix();
-                context.pose().translate(x + 5, y);
+                String centred = line.toString().trim();
+                context.pose().translate(x + (width - client.font.width(centred) * scale) / 2f, y);
                 context.pose().scale(scale, scale);
                 context.text(
                     client.font,
-                    line.toString(),
+                    centred,
                     0,
                     0,
                     textColor,

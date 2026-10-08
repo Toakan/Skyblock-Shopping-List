@@ -594,7 +594,7 @@ public class WidgetCustomizationMenu extends Screen {
         if (y + Math.round(baseLine * scale) <= maxY) {
             Component header = Component.literal("Craftable -").setStyle(Style.EMPTY.withColor(ChatFormatting.YELLOW).withBold(true));
             context.pose().pushMatrix();
-            context.pose().translate(x + 5, y);
+            context.pose().translate(x + (width - client.font.width(header) * scale) / 2f, y);
             context.pose().scale(scale, scale);
             context.text(client.font, header, 0, 0, 0xFFFFFFFF, false);
             context.pose().popMatrix();
@@ -624,9 +624,10 @@ public class WidgetCustomizationMenu extends Screen {
                 if (client.font.width(line.toString() + word) > unscaledWrapWidth) {
                     if (y + Math.round(baseLine * scale) > maxY) return;
                     context.pose().pushMatrix();
-                    context.pose().translate(x + 5, y);
+                    String centred = line.toString().trim();
+                    context.pose().translate(x + (width - client.font.width(centred) * scale) / 2f, y);
                     context.pose().scale(scale, scale);
-                    context.text(client.font, line.toString(), 0, 0, textColor, false);
+                    context.text(client.font, centred, 0, 0, textColor, false);
                     context.pose().popMatrix();
                     y += Math.round(baseLine * scale);
                     line = new StringBuilder(message.startsWith("   ") ? "      " : "   ").append(word).append(" ");
@@ -637,9 +638,10 @@ public class WidgetCustomizationMenu extends Screen {
             if (line.length() > 0) {
                 if (y + Math.round((baseLine - 1) * scale) > maxY) return;
                 context.pose().pushMatrix();
-                context.pose().translate(x + 5, y);
+                String centred = line.toString().trim();
+                context.pose().translate(x + (width - client.font.width(centred) * scale) / 2f, y);
                 context.pose().scale(scale, scale);
-                context.text(client.font, line.toString(), 0, 0, textColor, false);
+                context.text(client.font, centred, 0, 0, textColor, false);
                 context.pose().popMatrix();
                 y += Math.round((baseLine - 1) * scale);
             }
