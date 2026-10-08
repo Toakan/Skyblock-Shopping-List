@@ -47,6 +47,8 @@ public class SandboxWidget {
     /** Update thread only: forge version and minute the forging lines were built for. */
     private long forgingVersion = -1;
     private long forgingMinute = -1;
+    /** Update thread only: a recipe has everything but something in its tree is still cooking in the Forge. */
+    private boolean waitingOnForge = false;
     private volatile boolean showTotal = true;
     private volatile boolean notifications = true;
     private volatile boolean autoRemove = true;
@@ -301,9 +303,15 @@ public class SandboxWidget {
             // Forge countdowns move every minute even when nothing else changes.
             long minute = System.currentTimeMillis() / 60_000;
             if (ForgeTracker.getVersion() != forgingVersion || minute != forgingMinute) {
+                boolean forgeChanged = ForgeTracker.getVersion() != forgingVersion;
                 forgingVersion = ForgeTracker.getVersion();
                 forgingMinute = minute;
-                updateForgingLines();
+                // A held-back "Ready to craft" may be due now that time passed or the forge changed.
+                if (waitingOnForge || forgeChanged) {
+                    updateRecipeData();
+                } else {
+                    updateForgingLines();
+                }
             }
         } catch (RuntimeException e) {
             // Never let an exception escape: it would cancel the scheduled refresh for good.
@@ -330,6 +338,8 @@ public class SandboxWidget {
 
         List<String> toRemove = new ArrayList<>();
         Set<String> names = new HashSet<>();
+        Set<String> cooking = cookingNames();
+        waitingOnForge = false;
         for (int i = 0; i < entries.size(); i++) {
             ShoppingListEntry entry = entries.get(i);
             RecipeManager.RecipeNode tree = response.trees.get(i);
@@ -345,6 +355,11 @@ public class SandboxWidget {
             achievedEntries.remove(entry.recipe);
             boolean ready = tree.ingredients != null && !tree.ingredients.isEmpty()
                 && tree.ingredients.stream().allMatch(child -> child.amount <= 0);
+            // Forge items count as owned while cooking, but can't be used until they are done.
+            if (ready && !cooking.isEmpty() && containsAny(tree, cooking)) {
+                ready = false;
+                waitingOnForge = true;
+            }
             if (!ready) {
                 readyEntries.remove(entry.recipe);
             } else if (readyEntries.add(entry.recipe) && announce) {
@@ -386,6 +401,26 @@ public class SandboxWidget {
         for (RecipeManager.RecipeNode tree : response.trees) collectNames(tree, itemNames);
         listItemNames = itemNames;
         updateForgingLines();
+    }
+
+    /** Normalised names of Forge items that are still cooking. */
+    private static Set<String> cookingNames() {
+        long now = System.currentTimeMillis();
+        Set<String> out = new HashSet<>();
+        for (ForgeTracker.Entry entry : ForgeTracker.getEntries()) {
+            if (entry.endsAt > now) out.add(ItemNames.normalize(entry.name));
+        }
+        return out;
+    }
+
+    private static boolean containsAny(RecipeManager.RecipeNode node, Set<String> names) {
+        if (names.contains(ItemNames.normalize(node.name))) return true;
+        if (node.ingredients != null) {
+            for (RecipeManager.RecipeNode child : node.ingredients) {
+                if (containsAny(child, names)) return true;
+            }
+        }
+        return false;
     }
 
     private static void collectNames(RecipeManager.RecipeNode node, Set<String> out) {
