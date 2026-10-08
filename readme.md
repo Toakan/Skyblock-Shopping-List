@@ -28,7 +28,7 @@ The mod only knows what you have shown it. Open each of your sacks, backpacks an
 
 ## Menu
 Press `V` (or `/ssl menu`) to open the menu. It has five tabs:
-- **List** (opens first): search recipes, type how many you want and click a recipe to add it (up to 3 by default). Each entry has its own amount box and an × to remove it, plus **Clear list**. Below is a preview of what the HUD shows.
+- **List** (opens first): search recipes, type how many you want and click a recipe to add it (up to 3 by default). Each entry has ▲ / ▼ to change its order, its own amount box and an × to remove it, plus **Clear list**. Order is priority: when recipes share materials, the higher one gets them first. Below is a preview of what the HUD shows.
 - **Resources**: your item counts with search. Type in a box or use − / + to correct a count; changes save straight away. **Show all** also lists items you have none of.
 - **Recipes**: browse any recipe's full tree for a chosen amount, and **Add to list**.
 - **Forge**: what you still need for one recipe, with **Add to list**.

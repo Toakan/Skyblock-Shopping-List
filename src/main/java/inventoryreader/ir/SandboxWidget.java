@@ -125,6 +125,22 @@ public class SandboxWidget {
             }
         }
     }
+    /**
+     * Moves an entry up (negative) or down (positive) the list. Order is priority: entries higher up get shared
+     * stock first.
+     */
+    public synchronized void moveEntry(String recipe, int delta) {
+        for (int i = 0; i < shoppingList.size(); i++) {
+            if (!shoppingList.get(i).recipe.equals(recipe)) continue;
+            int target = i + delta;
+            if (target < 0 || target >= shoppingList.size()) return;
+            ShoppingListEntry moved = shoppingList.get(i);
+            shoppingList.set(i, shoppingList.get(target));
+            shoppingList.set(target, moved);
+            listChanged();
+            return;
+        }
+    }
     public synchronized void removeFromList(String recipe) {
         if (shoppingList.removeIf(e -> e.recipe.equals(recipe))) listChanged();
     }
