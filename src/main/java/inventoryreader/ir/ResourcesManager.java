@@ -60,7 +60,8 @@ public class ResourcesManager {
             resources = new LinkedHashMap<>();
             if (fromFile != null) {
                 fromFile.forEach((k, v) -> {
-                    if (!ItemNames.isJunk(k)) resources.put(k, v == null ? 0 : v);
+                    // Re-clean saved names so entries written before a cleaning rule existed merge with new ones.
+                    if (!ItemNames.isJunk(k)) resources.merge(ItemNames.clean(k), v == null ? 0 : v, Integer::sum);
                 });
             }
             rebuildIndex();

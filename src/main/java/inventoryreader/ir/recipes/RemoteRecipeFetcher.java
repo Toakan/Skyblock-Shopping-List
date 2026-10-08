@@ -48,7 +48,7 @@ public final class RemoteRecipeFetcher {
      * Bump when the way recipes are extracted from the repo changes, so cached snapshots are rebuilt
      * even if the remote reports "not modified".
      */
-    private static final String PARSER_VERSION = "4";
+    private static final String PARSER_VERSION = "5";
     /** NEU's pseudo item for coin costs in shop recipes. */
     private static final String COIN_ID = "SKYBLOCK_COIN";
     public static final String COINS_NAME = "Coins";
@@ -449,7 +449,6 @@ public final class RemoteRecipeFetcher {
     }
 
     private static String stripMC(String s) {
-        if (s == null) return "";
-        return s.replaceAll("§.", "").trim();
+        return inventoryreader.ir.ItemNames.clean(s);
     }
 }
