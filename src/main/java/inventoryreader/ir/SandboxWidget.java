@@ -338,7 +338,9 @@ public class SandboxWidget {
 
         List<String> toRemove = new ArrayList<>();
         Set<String> names = new HashSet<>();
-        Set<String> cooking = cookingNames();
+        Map<String, Integer> cooking = cookingCounts();
+        // Finished (not cooking) stock left per item, shared out in list order like the shopping list does.
+        Map<String, Integer> finishedLeft = new HashMap<>();
         waitingOnForge = false;
         for (int i = 0; i < entries.size(); i++) {
             ShoppingListEntry entry = entries.get(i);
@@ -355,8 +357,9 @@ public class SandboxWidget {
             achievedEntries.remove(entry.recipe);
             boolean ready = tree.ingredients != null && !tree.ingredients.isEmpty()
                 && tree.ingredients.stream().allMatch(child -> child.amount <= 0);
-            // Forge items count as owned while cooking, but can't be used until they are done.
-            if (ready && !cooking.isEmpty() && containsAny(tree, cooking)) {
+            // Forge items count as owned while cooking, but can't be used until they are done: hold the pop-up
+            // only if this recipe needs more of an item than is already finished.
+            if (!cooking.isEmpty() && needsCooking(tree, cooking, finishedLeft) && ready) {
                 ready = false;
                 waitingOnForge = true;
             }
@@ -403,24 +406,49 @@ public class SandboxWidget {
         updateForgingLines();
     }
 
-    /** Normalised names of Forge items that are still cooking. */
-    private static Set<String> cookingNames() {
+    /** How many of each Forge item (by normalised name) are still cooking. */
+    private static Map<String, Integer> cookingCounts() {
         long now = System.currentTimeMillis();
-        Set<String> out = new HashSet<>();
+        Map<String, Integer> out = new HashMap<>();
         for (ForgeTracker.Entry entry : ForgeTracker.getEntries()) {
-            if (entry.endsAt > now) out.add(ItemNames.normalize(entry.name));
+            if (entry.endsAt > now) out.merge(ItemNames.normalize(entry.name), entry.count, Integer::sum);
         }
         return out;
     }
 
-    private static boolean containsAny(RecipeManager.RecipeNode node, Set<String> names) {
-        if (names.contains(ItemNames.normalize(node.name))) return true;
-        if (node.ingredients != null) {
-            for (RecipeManager.RecipeNode child : node.ingredients) {
-                if (containsAny(child, names)) return true;
+    /**
+     * True if the tree takes more of a cooking item from stock than is already finished. Uses up
+     * {@code finishedLeft} as it goes (every node is visited), so later recipes only get what is left. The root
+     * is skipped: it never draws on stock of itself.
+     */
+    private boolean needsCooking(RecipeManager.RecipeNode root, Map<String, Integer> cooking, Map<String, Integer> finishedLeft) {
+        boolean short_ = false;
+        if (root.ingredients != null) {
+            for (RecipeManager.RecipeNode child : root.ingredients) {
+                if (useStock(child, cooking, finishedLeft)) short_ = true;
             }
         }
-        return false;
+        return short_;
+    }
+
+    private boolean useStock(RecipeManager.RecipeNode node, Map<String, Integer> cooking, Map<String, Integer> finishedLeft) {
+        boolean short_ = false;
+        String key = ItemNames.normalize(node.name);
+        Integer cookingCount = cooking.get(key);
+        if (cookingCount != null) {
+            // What this node takes from items already held (not missing, not still to craft).
+            int used = Math.max(0, node.required - node.amount - node.toCraft);
+            int left = finishedLeft.computeIfAbsent(key,
+                k -> Math.max(0, resourcesManager.getResourceByName(node.name) - cookingCount));
+            if (used > left) short_ = true;
+            finishedLeft.put(key, Math.max(0, left - used));
+        }
+        if (node.ingredients != null) {
+            for (RecipeManager.RecipeNode child : node.ingredients) {
+                if (useStock(child, cooking, finishedLeft)) short_ = true;
+            }
+        }
+        return short_;
     }
 
     private static void collectNames(RecipeManager.RecipeNode node, Set<String> out) {
