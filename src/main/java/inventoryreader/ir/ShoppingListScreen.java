@@ -103,6 +103,17 @@ public class ShoppingListScreen extends Screen {
         int moveWidth = treeViewWidth >= 184 ? 20 : treeViewWidth >= 148 ? 12 : 0;
         int controlsLeft = moveWidth > 0 ? 76 + 2 * moveWidth : 70;
         listNameWidth = treeViewWidth - controlsLeft - 8;
+        // On the header line: whether amounts are a total to have or how many more to make.
+        Component goal = Component.literal(widget.isHaveTotal() ? "Have total" : "Add more");
+        int goalWidth = font.width(goal) + 12;
+        addRenderableWidget(Button.builder(goal, button -> {
+            widget.setHaveTotal(!widget.isHaveTotal());
+            rebuildWidgets();
+        }).bounds(treeViewX + treeViewWidth - goalWidth - 6, PANEL_TOP - 16, goalWidth, 14)
+          .tooltip(Tooltip.create(Component.literal(
+              "Have total: the amount is how many you want in total; what you already hold counts.\n"
+                  + "Add more: the amount is how many more to make on top of what you hold.")))
+          .build());
         int rows = Math.min(list.size(), PANEL_MAX_ROWS);
         for (int i = 0; i < rows; i++) {
             ShoppingListEntry entry = list.get(i);

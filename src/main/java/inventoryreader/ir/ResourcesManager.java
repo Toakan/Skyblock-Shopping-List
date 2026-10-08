@@ -186,6 +186,14 @@ public class ResourcesManager {
      * order and each one only gets what earlier entries left over, so nothing is counted twice.
      */
     public ShoppingResponse getShoppingList(List<ShoppingListEntry> entries) {
+        return getShoppingList(entries, false);
+    }
+
+    /**
+     * As above. With {@code countHeld} ("Have total") each entry first takes what is already held of the item
+     * itself, so the amount is a total to reach; without it ("Add more") the amount is how many more to make.
+     */
+    public ShoppingResponse getShoppingList(List<ShoppingListEntry> entries, boolean countHeld) {
         Map<String, Map<String, Integer>> forging = RecipeManager.getInstance().getAllRecipes();
         Map<String, Integer> highestPossibleResources = getAllResources();
         Map<String, Integer> currentAvailableResources = new LinkedHashMap<>(highestPossibleResources);
@@ -198,18 +206,33 @@ public class ResourcesManager {
 
         // Phase 1: craft what can be crafted, entry by entry, and note how many of each are still to make.
         int[] toCraft = new int[entries.size()];
+        int[] fromStock = new int[entries.size()];
         for (int i = 0; i < entries.size(); i++) {
             ShoppingListEntry entry = entries.get(i);
+            int need = entry.amount;
+            if (countHeld) {
+                // Held copies of the item itself count towards the total and are kept from later entries.
+                int held = Math.max(0, currentAvailableResources.getOrDefault(entry.recipe, 0));
+                fromStock[i] = Math.min(held, need);
+                need -= fromStock[i];
+                currentAvailableResources.put(entry.recipe, held - fromStock[i]);
+                highestPossibleResources.merge(entry.recipe, -fromStock[i], Integer::sum);
+            }
             int old = highestPossibleResources.getOrDefault(entry.recipe, 0);
-            buildRecipe(entry.recipe, entry.amount, forging, highestPossibleResources, currentAvailableResources, messages, 0);
+            if (need > 0) {
+                buildRecipe(entry.recipe, need, forging, highestPossibleResources, currentAvailableResources, messages, 0);
+            }
             int crafted = highestPossibleResources.getOrDefault(entry.recipe, 0) - old;
-            toCraft[i] = crafted >= entry.amount ? crafted - entry.amount : entry.amount - crafted;
+            toCraft[i] = Math.max(0, need - crafted);
         }
 
         // Phase 2: expand what is still missing. A root does not draw on existing stock of itself: the
         // player asked for this many more. Phase 1 counted items craftable from materials as stock; owned
         // tells them apart from items actually held.
         Map<String, Integer> owned = getAllResources();
+        for (int i = 0; i < entries.size(); i++) {
+            if (fromStock[i] > 0) owned.merge(entries.get(i).recipe, -fromStock[i], Integer::sum);
+        }
         List<RecipeManager.RecipeNode> trees = new ArrayList<>();
         for (int i = 0; i < entries.size(); i++) {
             ShoppingListEntry entry = entries.get(i);

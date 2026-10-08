@@ -54,6 +54,8 @@ public class SandboxWidget {
     private volatile boolean showTotal = true;
     private volatile boolean notifications = true;
     private volatile boolean autoRemove = true;
+    /** List amounts are a total to have (counting what is held) rather than how many more to make. */
+    private volatile boolean haveTotal = true;
     private volatile boolean staleSackWarning = true;
     private volatile int maxRecipes = 3;
     /** Update thread only: entries already announced as ready / achieved, so each toast fires once. */
@@ -221,6 +223,7 @@ public class SandboxWidget {
         config.showTotal = showTotal;
         config.notifications = notifications;
         config.autoRemove = autoRemove;
+        config.haveTotal = haveTotal;
         config.staleSackWarning = staleSackWarning;
         config.maxRecipes = maxRecipes;
         JsonFiles.write(FilePathManager.WIDGET_CONFIG_JSON, config);
@@ -242,6 +245,7 @@ public class SandboxWidget {
         if (config.showTotal != null) this.showTotal = config.showTotal;
         if (config.notifications != null) this.notifications = config.notifications;
         if (config.autoRemove != null) this.autoRemove = config.autoRemove;
+        if (config.haveTotal != null) this.haveTotal = config.haveTotal;
         if (config.staleSackWarning != null) this.staleSackWarning = config.staleSackWarning;
         if (config.maxRecipes != null) this.maxRecipes = clampMaxRecipes(config.maxRecipes);
         if (config.widgetWidth > 0) this.widgetWidth = config.widgetWidth;
@@ -278,6 +282,7 @@ public class SandboxWidget {
         showTotal = true;
         notifications = true;
         autoRemove = true;
+        haveTotal = true;
         staleSackWarning = true;
         maxRecipes = 3;
         messages.clear();
@@ -305,6 +310,7 @@ public class SandboxWidget {
         Boolean showTotal;
         Boolean notifications;
         Boolean autoRemove;
+        Boolean haveTotal;
         Boolean staleSackWarning;
         Integer maxRecipes;
     }
@@ -354,7 +360,8 @@ public class SandboxWidget {
             return;
         }
 
-        ResourcesManager.ShoppingResponse response = resourcesManager.getShoppingList(entries);
+        boolean total = haveTotal;
+        ResourcesManager.ShoppingResponse response = resourcesManager.getShoppingList(entries, total);
         boolean announce = baselineSet;
         baselineSet = true;
 
@@ -368,7 +375,8 @@ public class SandboxWidget {
             ShoppingListEntry entry = entries.get(i);
             RecipeManager.RecipeNode tree = response.trees.get(i);
             names.add(entry.recipe);
-            boolean achieved = resourcesManager.getResourceByName(entry.recipe) >= entry.startCount + entry.amount;
+            // Have total: done once you hold the amount. Add more: once you hold that many more than when added.
+            boolean achieved = resourcesManager.getResourceByName(entry.recipe) >= (total ? 0 : entry.startCount) + entry.amount;
             if (achieved) {
                 if (achievedEntries.add(entry.recipe) && announce) {
                     notifyPlayer(ACHIEVED_TOAST, "Item achieved", entry.amount + "× " + entry.recipe);
@@ -1009,6 +1017,12 @@ public class SandboxWidget {
     public boolean isNotifications() { return notifications; }
     public void setNotifications(boolean notifications) {
         this.notifications = notifications;
+        saveConfiguration();
+    }
+    public boolean isHaveTotal() { return haveTotal; }
+    public void setHaveTotal(boolean haveTotal) {
+        this.haveTotal = haveTotal;
+        requestRefresh();
         saveConfiguration();
     }
     public boolean isAutoRemove() { return autoRemove; }
