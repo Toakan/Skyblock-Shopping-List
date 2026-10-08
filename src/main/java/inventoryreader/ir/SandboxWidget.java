@@ -17,12 +17,6 @@ import java.util.concurrent.TimeUnit;
 
 public class SandboxWidget {
     private static final Identifier SANDBOX_WIDGET_LAYER = Identifier.fromNamespaceAndPath(InventoryReader.MOD_ID, "sandbox_widget");
-    private static final int DARK_PANEL_BG = 0x99271910;
-    private static final int HEADER_BG = 0xCC2C4A1B;
-    private static final int GOLD = 0xFFFFB728;
-    private static final int RECIPE_LEVEL_INDENT = 10;
-    /** Gap between the panel edge and the tree rows, on both sides. */
-    private static final int TREE_PADDING = 6;
     private static final SandboxWidget INSTANCE = new SandboxWidget();
     /** Expansion-key root for the top-level nodes (Total and each recipe). */
     public static final String LIST_KEY = "list";
@@ -50,7 +44,6 @@ public class SandboxWidget {
     /** Update thread only: forge version and minute the forging lines were built for. */
     private long forgingVersion = -1;
     private long forgingMinute = -1;
-    private volatile boolean showRemaining = true;
     private volatile boolean showTotal = true;
     private volatile boolean notifications = true;
     private volatile boolean autoRemove = true;
@@ -65,8 +58,11 @@ public class SandboxWidget {
     private final ScheduledExecutorService scheduler;
     /** Resource version the current tree was computed from; -1 forces a recompute. */
     private volatile long computedVersion = -1;
+    /** Render thread only: row size and panel width of the HUD being drawn. */
     private int currentNodeLineHeight = 16;
+    private int currentRowGap = 0;
     private float currentTreeScale = 1.0f;
+    private int currentPanelWidth = 250;
 
     private SandboxWidget() {
         this.resourcesManager = ResourcesManager.getInstance();
@@ -196,7 +192,6 @@ public class SandboxWidget {
         config.widgetHeight = widgetHeight;
         config.expandedNodes = new HashMap<>(expandedNodes);
         config.shoppingList = getShoppingList();
-        config.showRemaining = showRemaining;
         config.showTotal = showTotal;
         config.notifications = notifications;
         config.autoRemove = autoRemove;
@@ -213,7 +208,11 @@ public class SandboxWidget {
         if (config.expandedNodes != null) {
             this.expandedNodes = new ConcurrentHashMap<>(config.expandedNodes);
         }
-        if (config.showRemaining != null) this.showRemaining = config.showRemaining;
+        // "Show remaining" became Settings > Appearance > Amount format; carry an old OFF over once.
+        if (Boolean.FALSE.equals(config.showRemaining) && !HudStyle.isSaved()) {
+            HudStyle.get().amountFormat = HudStyle.AmountFormat.REQUIRED;
+            HudStyle.save();
+        }
         if (config.showTotal != null) this.showTotal = config.showTotal;
         if (config.notifications != null) this.notifications = config.notifications;
         if (config.autoRemove != null) this.autoRemove = config.autoRemove;
@@ -244,7 +243,6 @@ public class SandboxWidget {
         widgetWidth = 250;
         widgetHeight = 300;
         expandedNodes = new ConcurrentHashMap<>();
-        showRemaining = true;
         showTotal = true;
         notifications = true;
         autoRemove = true;
@@ -267,6 +265,7 @@ public class SandboxWidget {
         /** Read only, for configs written before the shopping list existed. */
         Integer craftAmount;
         // Boxed so configs written before an option existed get its default.
+        /** Read only, for configs written before Settings > Appearance existed. */
         Boolean showRemaining;
         Boolean showTotal;
         Boolean notifications;
@@ -418,203 +417,172 @@ public class SandboxWidget {
     }
 
     private void render(GuiGraphicsExtractor context) {
+        int screenHeight = Minecraft.getInstance().getWindow().getGuiScaledHeight();
+        renderAt(context, widgetX, widgetY, widgetWidth, Math.min(screenHeight - 40, widgetHeight));
+    }
+
+    /**
+     * Draws the HUD panel at the given place, as tall as its content needs up to {@code panelMaxHeight}. The
+     * Move HUD preview uses this too, so it always matches the real HUD. Render thread only.
+     */
+    public void renderAt(GuiGraphicsExtractor context, int panelX, int panelY, int panelWidth, int panelMaxHeight) {
         RecipeManager.RecipeNode root = this.recipeTree;
-        if (!enabled || root == null) {
-            return;
-        }
-    Minecraft client = Minecraft.getInstance();
-    int height = client.getWindow().getGuiScaledHeight();
-    int panelWidth = widgetWidth;
-    int visibleLines = 0;
-    for (RecipeManager.RecipeNode top : root.ingredients) visibleLines += countVisibleRecipeTreeLines(top, LIST_KEY);
-    int panelMaxHeight = Math.min(height - 40, widgetHeight);
+        if (root == null) return;
+        HudStyle style = HudStyle.get();
+        Minecraft client = Minecraft.getInstance();
+        int screenHeight = client.getWindow().getGuiScaledHeight();
+        currentPanelWidth = panelWidth;
 
-    int recipeTreeHeightMax = Math.max(0, visibleLines * 16);
-    int messageLinesRaw = countMessageLines(client, panelWidth);
-    int availableForMessagesMax = Math.max(0, Math.min((int)(height * 0.4), panelMaxHeight - 20 - recipeTreeHeightMax - 15));
-    int messageSectionHeightEst = messageLinesRaw > 0 ? Math.min(messageLinesRaw * 10 + 20, availableForMessagesMax) : 0;
+        int rowStep = style.rowHeight + style.rowGap;
+        int visibleLines = 0;
+        for (RecipeManager.RecipeNode top : root.ingredients) visibleLines += countVisibleRecipeTreeLines(top, LIST_KEY);
+        int lineUnit = Math.round(10 * style.textScale);
+        int messageLinesRaw = countMessageLines(client, panelWidth);
+        int availableForMessagesMax = Math.max(0, Math.min((int)(screenHeight * 0.4), panelMaxHeight - 20 - visibleLines * rowStep - 15));
+        int messageSectionHeightEst = messageLinesRaw > 0 ? Math.min(messageLinesRaw * lineUnit + 20, availableForMessagesMax) : 0;
 
-    int availableTreeHeight1 = Math.max(0, panelMaxHeight - 22 - (messageSectionHeightEst > 0 ? (messageSectionHeightEst + 15) : 0));
-    int safeLines = Math.max(1, visibleLines);
-    int computedLine1 = safeLines > 0 ? Math.max(6, (int)Math.floor((float)availableTreeHeight1 / (float)safeLines)) : 16;
-    computedLine1 = Math.min(16, computedLine1);
-    int treeHeightActual = safeLines * computedLine1;
+        // Rows shrink (down to 6px) when the panel can't fit them at the chosen height.
+        int availableTreeHeight = Math.max(0, panelMaxHeight - 22 - (messageSectionHeightEst > 0 ? (messageSectionHeightEst + 15) : 0));
+        int safeLines = Math.max(1, visibleLines);
+        int step = Math.min(rowStep, Math.max(6, availableTreeHeight / safeLines));
+        float fit = (float) step / rowStep;
+        currentNodeLineHeight = Math.max(6, Math.round(style.rowHeight * fit));
+        currentRowGap = Math.round(style.rowGap * fit);
+        currentTreeScale = currentNodeLineHeight / 16.0f;
+        int treeHeightActual = safeLines * (currentNodeLineHeight + currentRowGap);
 
-    int availableForMessages2 = Math.max(0, Math.min((int)(height * 0.4), panelMaxHeight - 20 - treeHeightActual - 15));
-    int messageSectionHeight = messageLinesRaw > 0 ? Math.min(messageLinesRaw * 10 + 20, availableForMessages2) : 0;
-    int desiredPanelHeight = 20 + treeHeightActual + messageSectionHeight + 15;
-    int panelHeight = Math.min(panelMaxHeight, desiredPanelHeight);
+        int availableForMessages = Math.max(0, Math.min((int)(screenHeight * 0.4), panelMaxHeight - 20 - treeHeightActual - 15));
+        int messageSectionHeight = messageLinesRaw > 0 ? Math.min(messageLinesRaw * lineUnit + 20, availableForMessages) : 0;
+        int panelHeight = Math.min(panelMaxHeight, 20 + treeHeightActual + messageSectionHeight + 15);
 
-        int panelX = widgetX;
-        int panelY = widgetY;
-
-    context.fill(panelX, panelY, panelX + panelWidth, panelY + panelHeight, DARK_PANEL_BG);
-
-        context.fill(panelX, panelY, panelX + panelWidth, panelY + 20, HEADER_BG);
-
-        int borderColor = 0xFFDAA520;
-        int borderThickness = 2;
-        for (int i = 0; i < borderThickness; i++) {
-            context.outline(panelX - i,
-                panelY - i,
-                panelWidth + i * 2,
-                panelHeight + i * 2,
-                borderColor
-            );
+        context.fill(panelX, panelY, panelX + panelWidth, panelY + panelHeight, style.panelBackground);
+        context.fill(panelX, panelY, panelX + panelWidth, panelY + 20, style.headerBackground);
+        for (int i = 0; i < style.panelBorderWidth; i++) {
+            context.outline(panelX - i, panelY - i, panelWidth + i * 2, panelHeight + i * 2, style.panelBorder);
         }
 
-        Component title = Component.literal(getTitle())
-            .setStyle(Style.EMPTY.withColor(ChatFormatting.GOLD).withBold(true));
+        Component title = style.text(getTitle(), style.titleText, true);
         int titleWidth = client.font.width(title);
         int maxTitleWidth = Math.max(20, panelWidth - 10);
-        float titleScale = titleWidth > maxTitleWidth ? (float)maxTitleWidth / (float)titleWidth : 1.0f;
+        float titleScale = Math.min(style.textScale, (float) maxTitleWidth / Math.max(1, titleWidth));
         context.pose().pushMatrix();
-        context.pose().translate(panelX + (panelWidth - Math.min(titleWidth, maxTitleWidth)) / 2f, panelY + 5);
+        context.pose().translate(panelX + (panelWidth - titleWidth * titleScale) / 2f, panelY + (20 - 8 * titleScale) / 2f);
         context.pose().scale(titleScale, titleScale);
-        context.text(
-            client.font,
-            title,
-            0,
-            0,
-            0xFFFFFFFF,
-            false
-        );
+        context.text(client.font, title, 0, 0, 0xFFFFFFFF, style.textShadow);
         context.pose().popMatrix();
+        context.fill(panelX, panelY + 19, panelX + panelWidth, panelY + 20, style.divider);
 
-
-        context.fill(panelX, panelY + 19, panelX + panelWidth, panelY + 20, 0x99608C35);
-
-    int y = panelY + 22;
-    int availableTreeHeight = Math.max(0, panelHeight - 22 - (messageSectionHeight > 0 ? (messageSectionHeight + 15) : 0));
-    int computedLine = safeLines > 0 ? Math.max(6, (int)Math.floor((float)availableTreeHeight / (float)safeLines)) : 16;
-    computedLine = Math.min(16, computedLine);
-    currentNodeLineHeight = computedLine;
-    currentTreeScale = currentNodeLineHeight / 16.0f;
-    int treeEndY = y;
-    for (RecipeManager.RecipeNode top : root.ingredients) treeEndY = renderRecipeTree(context, top, panelX + TREE_PADDING, treeEndY, 0, LIST_KEY);
+        int treeEndY = panelY + 22;
+        for (RecipeManager.RecipeNode top : root.ingredients) {
+            treeEndY = renderRecipeTree(context, top, panelX + style.padding, treeEndY, 0, LIST_KEY);
+        }
 
         if (messageSectionHeight > 0) {
-            context.fill(panelX, treeEndY, panelX + panelWidth, treeEndY + 1, 0x99608C35);
-
-            int messageY = treeEndY + 6;
-
-            int maxMessageY = panelY + panelHeight - 5;
-
-            drawMessages(context, panelX, messageY, panelWidth, maxMessageY);
+            context.fill(panelX, treeEndY, panelX + panelWidth, treeEndY + 1, style.divider);
+            drawMessages(context, panelX, treeEndY + 6, panelWidth, panelY + panelHeight - 5);
         }
     }
+
     private int countVisibleRecipeTreeLines(RecipeManager.RecipeNode node, String pathKey) {
         if (node == null) return 0;
         int count = 1;
-
-        // Use path-based key to keep expansion stable regardless of amounts
+        // Path-based key keeps expansion stable regardless of amounts.
         String nodeKey = makePathKey(pathKey, node.name);
-        boolean isExpanded = expandedNodes.getOrDefault(nodeKey, false);
-
-        if (node.ingredients != null && !node.ingredients.isEmpty() && isExpanded) {
+        if (node.ingredients != null && !node.ingredients.isEmpty() && expandedNodes.getOrDefault(nodeKey, false)) {
             for (RecipeManager.RecipeNode child : node.ingredients) {
-                count += countVisibleRecipeTreeLines(child, makePathKey(pathKey, node.name));
+                count += countVisibleRecipeTreeLines(child, nodeKey);
             }
         }
         return count;
     }
+
     private int renderRecipeTree(GuiGraphicsExtractor context, RecipeManager.RecipeNode node, int x, int y, int level, String pathKey) {
         if (node == null) return y;
+        HudStyle style = HudStyle.get();
         Minecraft client = Minecraft.getInstance();
-        int unitIndent = Math.max(4, Math.round(RECIPE_LEVEL_INDENT * currentTreeScale));
+        int unitIndent = Math.max(2, Math.round(style.indent * currentTreeScale));
         int indent = level * unitIndent;
-        boolean hasEnough = (node.amount <= 0 && node.toCraft <= 0);
+        boolean hasEnough = node.amount <= 0 && node.toCraft <= 0;
         String nodeKey = makePathKey(pathKey, node.name);
         boolean isExpanded = expandedNodes.getOrDefault(nodeKey, false);
         boolean hasChildren = node.ingredients != null && !node.ingredients.isEmpty();
-        int bgColor = 0x99271910;
-        int mouseX = (int)(client.mouseHandler.xpos() / client.getWindow().getGuiScale());
-        int mouseY = (int)(client.mouseHandler.ypos() / client.getWindow().getGuiScale());
-        int nodeBaseWidth = Math.max(100, widgetWidth - 2 * TREE_PADDING);
-        int nodeHeight = Math.max(6, currentNodeLineHeight);
-        boolean isHovered = mouseX >= x + indent && mouseX <= x + indent + nodeBaseWidth - indent &&
-                            mouseY >= y && mouseY <= y + nodeHeight;
-        int nodeWidth = nodeBaseWidth - indent;
-        context.fill(x + indent, y, x + indent + nodeWidth, y + nodeHeight, bgColor);
-        if (isHovered) {
-            context.fill(x + indent, y, x + indent + nodeWidth, y + nodeHeight, 0x22FFFFFF);
+        boolean showRemaining = isShowRemaining();
+        int nodeHeight = currentNodeLineHeight;
+        int nodeWidth = Math.max(100, currentPanelWidth - 2 * style.padding) - indent;
+        int statusColor = progressColor(node, showRemaining);
+
+        if (style.showRowBoxes) {
+            context.fill(x + indent, y, x + indent + nodeWidth, y + nodeHeight, style.rowBackground);
+            int border = progressBorderColor(node, showRemaining);
+            for (int i = 0; i < style.rowBorderWidth; i++) {
+                context.outline(x + indent + i, y + i, nodeWidth - 2 * i, nodeHeight - 2 * i, border);
+            }
         }
-        context.outline(x + indent, y, nodeWidth, nodeHeight, progressBorderColor(node, showRemaining));
+
+        float rowScale = currentTreeScale * style.textScale;
+        int iconOffset = hasChildren ? Math.max(14, Math.round(25 * currentTreeScale)) : Math.max(6, Math.round(10 * currentTreeScale));
         if (hasChildren) {
-            String expandIcon = isExpanded ? "▼" : "▶";
-            context.text(
-                client.font,
-                expandIcon,
-                x + indent + Math.max(3, Math.round(5 * currentTreeScale)),
-                y + Math.max(1, Math.round(4 * currentTreeScale)),
-                0xFFFFFFFF,
-                false
-            );
+            drawScaled(context, style.text(isExpanded ? "▼" : "▶", style.itemText, false),
+                x + indent + Math.max(3, Math.round(5 * currentTreeScale)), textY(y, nodeHeight, rowScale), rowScale, style.textShadow);
         }
-    int nameX = x + indent + (hasChildren ? Math.max(14, Math.round(25 * currentTreeScale)) : Math.max(6, Math.round(10 * currentTreeScale)));
-        int textColor;
-        boolean isBold = (level == 0);
-        if (level == 0) {
-            textColor = GOLD;
-        } else {
-            textColor = hasEnough ? 0xFFFFFFFF : progressColor(node, showRemaining);
-        }
-        String amountText = displayedAmount(node, showRemaining) + "× ";
-        int amountColor = progressColor(node, showRemaining);
-        Component itemName = Component.literal(node.name)
-            .setStyle(Style.EMPTY.withColor(textColor).withBold(isBold));
-        int amountWidth = client.font.width(amountText);
-        int itemWidth = client.font.width(itemName);
-        int totalTextWidth = amountWidth + itemWidth;
-        int maxTextWidth = Math.max(10, nodeWidth - (hasChildren ? Math.max(14, Math.round(25 * currentTreeScale)) : Math.max(6, Math.round(10 * currentTreeScale))));
-        int adjustedMaxTextWidth = (int)Math.floor(maxTextWidth / Math.max(0.01f, currentTreeScale));
-        float textScaleLocal = totalTextWidth > adjustedMaxTextWidth ? (float)adjustedMaxTextWidth / (float)totalTextWidth : 1.0f;
-        float textScale = Math.min(1.0f, textScaleLocal) * currentTreeScale;
+
+        int nameColor = level == 0 ? style.rootText : hasEnough ? style.itemText : statusColor;
+        Component mark = style.showMarks ? style.text(hasEnough || node.amount <= 0 ? "✔ " : "✖ ", statusColor, false) : Component.empty();
+        Component amount = style.text(amountText(node) + " ", statusColor, false);
+        Component name = style.text(node.name, nameColor, level == 0 && style.boldRootNames);
+        int markWidth = client.font.width(mark);
+        int amountWidth = client.font.width(amount);
+        int totalTextWidth = markWidth + amountWidth + client.font.width(name);
+        int maxTextWidth = Math.max(10, nodeWidth - iconOffset);
+        float textScale = Math.min(rowScale, (float) maxTextWidth / Math.max(1, totalTextWidth));
+
         context.pose().pushMatrix();
-        context.pose().translate(nameX, y + Math.max(1, Math.round(4 * currentTreeScale)));
+        context.pose().translate(x + indent + iconOffset, textY(y, nodeHeight, textScale));
         context.pose().scale(textScale, textScale);
-        context.text(
-            client.font,
-            amountText,
-            0,
-            0,
-            amountColor,
-            false
-        );
-        context.text(
-            client.font,
-            itemName,
-            amountWidth,
-            0,
-            0xFFFFFFFF,
-            false
-        );
+        context.text(client.font, mark, 0, 0, 0xFFFFFFFF, style.textShadow);
+        context.text(client.font, amount, markWidth, 0, 0xFFFFFFFF, style.textShadow);
+        context.text(client.font, name, markWidth + amountWidth, 0, 0xFFFFFFFF, style.textShadow);
         context.pose().popMatrix();
-        y += nodeHeight;
-    if (hasChildren && isExpanded && node.ingredients.size() > 0) {
-            int lineColor = 0xFF777777;
-            for (int i = 0; i < node.ingredients.size(); i++) {
-                RecipeManager.RecipeNode child = node.ingredients.get(i);
-                int lineStartX = x + indent + Math.max(4, Math.round(6 * currentTreeScale));
-                int vertLineY = y;
-                int childIndentX = x + indent + unitIndent;
-                int vertLen = Math.max(3, Math.round(8 * currentTreeScale));
-                context.fill(lineStartX, vertLineY, lineStartX + 1, vertLineY + vertLen, lineColor);
-                context.fill(lineStartX, vertLineY + vertLen, childIndentX, vertLineY + vertLen + 1, lineColor);
-        int nextY = renderRecipeTree(context, child, x, y, level + 1, nodeKey);
-                y = nextY;
+        y += nodeHeight + currentRowGap;
+
+        if (hasChildren && isExpanded) {
+            for (RecipeManager.RecipeNode child : node.ingredients) {
+                if (style.showTreeLines) {
+                    int lineStartX = x + indent + Math.max(4, Math.round(6 * currentTreeScale));
+                    int childIndentX = x + indent + unitIndent;
+                    int vertLen = Math.max(3, nodeHeight / 2);
+                    context.fill(lineStartX, y - currentRowGap, lineStartX + 1, y + vertLen, style.treeLines);
+                    context.fill(lineStartX, y + vertLen, childIndentX, y + vertLen + 1, style.treeLines);
+                }
+                y = renderRecipeTree(context, child, x, y, level + 1, nodeKey);
             }
         }
         return y;
     }
+
+    /** Top of text of the given scale, centred in a row. */
+    private static float textY(int rowY, int rowHeight, float scale) {
+        return rowY + Math.max(0, (rowHeight - 8 * scale) / 2f);
+    }
+
+    private static void drawScaled(GuiGraphicsExtractor context, Component text, float x, float y, float scale, boolean shadow) {
+        context.pose().pushMatrix();
+        context.pose().translate(x, y);
+        context.pose().scale(scale, scale);
+        context.text(Minecraft.getInstance().font, text, 0, 0, 0xFFFFFFFF, shadow);
+        context.pose().popMatrix();
+    }
+
     private void drawMessages(GuiGraphicsExtractor context, int x, int y, int width, int maxY) {
         Minecraft client = Minecraft.getInstance();
+        HudStyle style = HudStyle.get();
         int baseHeader = 13;
         int baseLine = 10;
         int availableHeight = Math.max(0, maxY - y);
         int lines = countMessageLines(client, width);
-        int desiredHeight = baseHeader + Math.max(0, (lines - 1) * baseLine);
-        float scale = desiredHeight > 0 ? Math.min(1.0f, Math.max(0.4f, (float)availableHeight / (float)desiredHeight)) : 1.0f;
+        int desiredHeight = Math.round((baseHeader + Math.max(0, (lines - 1) * baseLine)) * style.textScale);
+        float fit = desiredHeight > 0 ? Math.min(1.0f, Math.max(0.4f, (float) availableHeight / (float) desiredHeight)) : 1.0f;
+        float scale = fit * style.textScale;
 
         List<String> craftable = new ArrayList<>(messages);
         craftable.remove("Craftable -");
@@ -626,31 +594,26 @@ public class SandboxWidget {
         }
     }
 
-    /** Draws a centred yellow header and its wrapped, centred lines. Returns the next y, or -1 when out of room. */
+    /** Draws a centred header and its wrapped, centred lines. Returns the next y, or -1 when out of room. */
     private int drawSection(GuiGraphicsExtractor context, String header, List<String> lines, int x, int y, int width,
                             int maxY, float scale) {
         Minecraft client = Minecraft.getInstance();
+        HudStyle style = HudStyle.get();
         int baseHeader = 13;
         int baseLine = 10;
         if (y + Math.round(baseLine * scale) > maxY) return -1;
-        Component headerText = Component.literal(header)
-            .setStyle(Style.EMPTY.withColor(ChatFormatting.YELLOW).withBold(true));
-        context.pose().pushMatrix();
-        context.pose().translate(x + (width - client.font.width(headerText) * scale) / 2f, y);
-        context.pose().scale(scale, scale);
-        context.text(client.font, headerText, 0, 0, 0xFFFFFFFF, false);
-        context.pose().popMatrix();
+        drawCentred(context, style.text(header, style.sectionHeader, true), x, y, width, scale);
         y += Math.round(baseHeader * scale);
 
-        int unscaledWrapWidth = Math.max(10, (int)Math.floor((width - 15) / Math.max(0.01f, scale)));
+        int unscaledWrapWidth = Math.max(10, (int) Math.floor((width - 15) / Math.max(0.01f, scale)));
         for (String message : lines) {
-            int textColor = message.endsWith(" - Ready") ? DONE_GREEN : message.startsWith("   ") ? 0xFFFF9D00 : 0xFFFFFFFF;
+            int textColor = message.endsWith(" - Ready") ? style.done : style.sectionText;
             String[] words = message.split(" ");
             StringBuilder line = new StringBuilder();
             for (String word : words) {
-                if (client.font.width(line.toString() + word) > unscaledWrapWidth) {
+                if (client.font.width(style.text(line + word, textColor, false)) > unscaledWrapWidth) {
                     if (y + Math.round(baseLine * scale) > maxY) return -1;
-                    drawCentred(context, line.toString().trim(), x, y, width, scale, textColor);
+                    drawCentred(context, style.text(line.toString().trim(), textColor, false), x, y, width, scale);
                     y += Math.round(baseLine * scale);
                     line = new StringBuilder(message.startsWith("   ") ? "      " : "   ").append(word).append(" ");
                 } else {
@@ -659,19 +622,19 @@ public class SandboxWidget {
             }
             if (line.length() > 0) {
                 if (y + Math.round((baseLine - 1) * scale) > maxY) return -1;
-                drawCentred(context, line.toString().trim(), x, y, width, scale, textColor);
+                drawCentred(context, style.text(line.toString().trim(), textColor, false), x, y, width, scale);
                 y += Math.round((baseLine - 1) * scale);
             }
         }
         return y;
     }
 
-    private static void drawCentred(GuiGraphicsExtractor context, String text, int x, int y, int width, float scale, int color) {
+    private static void drawCentred(GuiGraphicsExtractor context, Component text, int x, int y, int width, float scale) {
         Minecraft client = Minecraft.getInstance();
         context.pose().pushMatrix();
         context.pose().translate(x + (width - client.font.width(text) * scale) / 2f, y);
         context.pose().scale(scale, scale);
-        context.text(client.font, text, 0, 0, color, false);
+        context.text(client.font, text, 0, 0, 0xFFFFFFFF, HudStyle.get().textShadow);
         context.pose().popMatrix();
     }
 
@@ -720,12 +683,9 @@ public class SandboxWidget {
         return lineCount;
     }
 
+    /** False when the amount format shows the full required amounts (colours then skip "partly gathered"). */
     public boolean isShowRemaining() {
-        return showRemaining;
-    }
-    public void setShowRemaining(boolean showRemaining) {
-        this.showRemaining = showRemaining;
-        saveConfiguration();
+        return HudStyle.get().amountFormat != HudStyle.AmountFormat.REQUIRED;
     }
     public boolean isShowTotal() { return showTotal; }
     public void setShowTotal(boolean showTotal) {
@@ -758,14 +718,17 @@ public class SandboxWidget {
         return Math.max(1, Math.min(MAX_RECIPES_LIMIT, value));
     }
 
-    private static final int DONE_GREEN = 0xFF6EFF6E;
-    private static final int PARTIAL_ORANGE = 0xFFFFA040;
-    private static final int CRAFT_YELLOW = 0xFFFFE45C;
-    private static final int MISSING_RED = 0xFFFF6B6B;
-
-    /** The number shown next to a node: what is still missing, or the full amount the recipe needs. */
-    public static int displayedAmount(RecipeManager.RecipeNode node, boolean showRemaining) {
-        return showRemaining ? node.amount + node.toCraft : node.required;
+    /**
+     * The amount shown next to a node, per Settings > Appearance > Amount format: still to get ("3×"),
+     * held of needed ("83/5,120"), or the full amount the recipe needs ("6×").
+     */
+    public static String amountText(RecipeManager.RecipeNode node) {
+        return switch (HudStyle.get().amountFormat) {
+            case REMAINING -> (node.amount + node.toCraft) + "×";
+            case REQUIRED -> node.required + "×";
+            case HAVE_NEED -> String.format(Locale.ROOT, "%,d/%,d",
+                Math.max(0, node.required - node.amount - node.toCraft), node.required);
+        };
     }
 
     /**
@@ -773,9 +736,10 @@ public class SandboxWidget {
      * orange when partly gathered and red when none yet.
      */
     public static int progressColor(RecipeManager.RecipeNode node, boolean showRemaining) {
-        if (node.amount <= 0) return node.toCraft > 0 ? CRAFT_YELLOW : DONE_GREEN;
-        if (showRemaining && node.amount < node.required) return PARTIAL_ORANGE;
-        return MISSING_RED;
+        HudStyle style = HudStyle.get();
+        if (node.amount <= 0) return node.toCraft > 0 ? style.craftable : style.done;
+        if (showRemaining && node.amount < node.required) return style.partial;
+        return style.missing;
     }
 
     /** Translucent version of {@link #progressColor} for node borders. */

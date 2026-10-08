@@ -48,6 +48,7 @@ public final class IrCommandManager {
                         SackReader.getInstance().clear();
                         CoinTracker.clear();
                         ForgeTracker.clear();
+                        HudStyle.clear();
                         InventoryReaderClient.clearInventorySnapshot();
                         SandboxWidget.getInstance().resetConfiguration();
                         SackReader.setNeedsReminder(true);
