@@ -199,6 +199,8 @@ public class ResourcesManager {
         // Phase 1: craft what can be crafted, entry by entry, and note how many of each are still to make.
         int[] toCraft = new int[entries.size()];
         int[] fromStock = new int[entries.size()];
+        // How many of each entry can be crafted right now from what is held (shown as "can craft", not as held).
+        int[] craftedNow = new int[entries.size()];
         for (int i = 0; i < entries.size(); i++) {
             ShoppingListEntry entry = entries.get(i);
             int need = entry.amount;
@@ -216,6 +218,7 @@ public class ResourcesManager {
                 buildRecipe(entry.recipe, need, forging, highestPossibleResources, currentAvailableResources, messages, 0);
             }
             int crafted = highestPossibleResources.getOrDefault(entry.recipe, 0) - old;
+            craftedNow[i] = Math.max(0, Math.min(need, crafted));
             toCraft[i] = Math.max(0, need - crafted);
         }
 
@@ -236,7 +239,9 @@ public class ResourcesManager {
                     ingredients.add(expandRequiredRecipe(ingredient.getKey(), ingredient.getValue() * toCraft[i], forging, highestPossibleResources, owned, 1));
                 }
             }
-            trees.add(new RecipeManager.RecipeNode(entry.recipe, toCraft[i], entry.amount, ingredients));
+            RecipeManager.RecipeNode root = new RecipeManager.RecipeNode(entry.recipe, toCraft[i], entry.amount, ingredients);
+            root.toCraft = craftedNow[i];
+            trees.add(root);
         }
         return new ShoppingResponse(trees, totalOf(trees), messages);
     }
