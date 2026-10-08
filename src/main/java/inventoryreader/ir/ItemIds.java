@@ -1,11 +1,16 @@
 package inventoryreader.ir;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.google.gson.reflect.TypeToken;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.CustomData;
 
 import java.lang.reflect.Type;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -15,6 +20,9 @@ import java.util.Map;
  */
 public final class ItemIds {
     private static final Type MAP_TYPE = new TypeToken<Map<String, String>>() {}.getType();
+    private static final String PET_ID = "PET";
+    /** Pet rarities in the order of the NEU pet ID suffix ("BEE;4" = Legendary Bee). */
+    private static final List<String> PET_TIERS = List.of("COMMON", "UNCOMMON", "RARE", "EPIC", "LEGENDARY", "MYTHIC");
     private static volatile Map<String, String> namesById;
 
     private ItemIds() {}
@@ -27,7 +35,7 @@ public final class ItemIds {
 
     /** The recipe name for this item if its SkyBlock ID is known, otherwise its shown name. */
     public static String nameOf(ItemStack stack) {
-        String id = stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag().getStringOr("id", "");
+        String id = skyblockId(stack);
         if (!id.isEmpty()) {
             Map<String, String> names = namesById;
             if (names == null) {
@@ -38,5 +46,32 @@ public final class ItemIds {
             if (name != null) return name;
         }
         return stack.getHoverName().getString();
+    }
+
+    /** True for a SkyBlock pet item. */
+    public static boolean isPet(ItemStack stack) {
+        return PET_ID.equals(customData(stack).getStringOr("id", ""));
+    }
+
+    /**
+     * The item's SkyBlock ID. Every pet has the ID "PET" with its type and rarity in the "petInfo" JSON, so pets
+     * get the NEU form "TYPE;rarity" ("BEE;4") that the recipe tables use.
+     */
+    private static String skyblockId(ItemStack stack) {
+        CompoundTag data = customData(stack);
+        String id = data.getStringOr("id", "");
+        if (!PET_ID.equals(id)) return id;
+        try {
+            JsonObject info = JsonParser.parseString(data.getStringOr("petInfo", "")).getAsJsonObject();
+            int tier = PET_TIERS.indexOf(info.get("tier").getAsString().toUpperCase(Locale.ROOT));
+            if (tier >= 0) return info.get("type").getAsString() + ";" + tier;
+        } catch (RuntimeException e) {
+            // Missing or unexpected petInfo; fall back to the shown name.
+        }
+        return id;
+    }
+
+    private static CompoundTag customData(ItemStack stack) {
+        return stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag();
     }
 }

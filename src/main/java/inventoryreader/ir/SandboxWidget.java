@@ -4,6 +4,7 @@ import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.toasts.SystemToast;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
 import net.minecraft.resources.Identifier;
@@ -20,10 +21,21 @@ public class SandboxWidget {
     private static final int HEADER_BG = 0xCC2C4A1B;
     private static final int GOLD = 0xFFFFB728;
     private static final int RECIPE_LEVEL_INDENT = 10;
+    /** Gap between the panel edge and the tree rows, on both sides. */
+    private static final int TREE_PADDING = 6;
     private static final SandboxWidget INSTANCE = new SandboxWidget();
+    /** Expansion-key root for the top-level nodes (Total and each recipe). */
+    public static final String LIST_KEY = "list";
+    public static final int MAX_RECIPES_LIMIT = 10;
+    private static final SystemToast.SystemToastId READY_TOAST = new SystemToast.SystemToastId(5000L);
+    private static final SystemToast.SystemToastId ACHIEVED_TOAST = new SystemToast.SystemToastId(5000L);
     private volatile boolean enabled = false;
-    private volatile String selectedRecipe = null;
-    /** Written by the update thread, read by the render thread; always replaced, never mutated. */
+    /** Entries are never mutated in place; changes replace the entry so the update thread sees whole values. */
+    private final List<ShoppingListEntry> shoppingList = new CopyOnWriteArrayList<>();
+    /**
+     * Written by the update thread, read by the render thread; always replaced, never mutated. A synthetic
+     * root whose children (Total, then one tree per recipe) are what the HUD shows.
+     */
     private volatile RecipeManager.RecipeNode recipeTree = null;
     private int widgetX = 10;
     private int widgetY = 40;
@@ -31,8 +43,24 @@ public class SandboxWidget {
     private int widgetHeight = 300;
     private Map<String, Boolean> expandedNodes = new ConcurrentHashMap<>();
     private final List<String> messages = new CopyOnWriteArrayList<>();
-    private volatile int craftAmount = 1;
+    /** "Forging -" lines: forge slots making something the shopping list needs. */
+    private final List<String> forgingLines = new CopyOnWriteArrayList<>();
+    /** Update thread only: every item name in the current shopping-list trees. */
+    private Set<String> listItemNames = Set.of();
+    /** Update thread only: forge version and minute the forging lines were built for. */
+    private long forgingVersion = -1;
+    private long forgingMinute = -1;
     private volatile boolean showRemaining = true;
+    private volatile boolean showTotal = true;
+    private volatile boolean notifications = true;
+    private volatile boolean autoRemove = true;
+    private volatile boolean staleSackWarning = true;
+    private volatile int maxRecipes = 3;
+    /** Update thread only: entries already announced as ready / achieved, so each toast fires once. */
+    private final Set<String> readyEntries = new HashSet<>();
+    private final Set<String> achievedEntries = new HashSet<>();
+    /** Update thread only: the first computation after start-up sets the baseline without toasting. */
+    private boolean baselineSet = false;
     private final ResourcesManager resourcesManager;
     private final ScheduledExecutorService scheduler;
     /** Resource version the current tree was computed from; -1 forces a recompute. */
@@ -48,7 +76,7 @@ public class SandboxWidget {
             return t;
         });
         HudElementRegistry.addLast(SANDBOX_WIDGET_LAYER, (context, tickCounter) -> {
-            if (enabled && selectedRecipe != null && recipeTree != null && SkyblockDetector.isOnSkyblock()) {
+            if (enabled && !shoppingList.isEmpty() && recipeTree != null && SkyblockDetector.isOnSkyblock()) {
                 render(context);
             }
         });
@@ -61,25 +89,65 @@ public class SandboxWidget {
     }
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
-        if (!enabled) {
-            this.recipeTree = null;
-        }
         requestRefresh();
         saveConfiguration();
     }
     public boolean isEnabled() {
         return this.enabled;
     }
-    public void setSelectedRecipe(String recipeName) {
-        this.selectedRecipe = recipeName;
-        if (recipeName != null) {
-            expandedNodes.put(recipeName, true);
+    public enum AddResult { ADDED, INCREASED, FULL }
+
+    /** Adds a recipe, or raises its amount if it is already on the list. Refused when the list is full. */
+    public synchronized AddResult addToList(String recipe, int amount) {
+        amount = Math.max(1, amount);
+        for (int i = 0; i < shoppingList.size(); i++) {
+            ShoppingListEntry e = shoppingList.get(i);
+            if (e.recipe.equals(recipe)) {
+                shoppingList.set(i, new ShoppingListEntry(recipe, e.amount + amount, e.startCount));
+                listChanged();
+                return AddResult.INCREASED;
+            }
         }
+        if (shoppingList.size() >= maxRecipes) return AddResult.FULL;
+        shoppingList.add(new ShoppingListEntry(recipe, amount, resourcesManager.getResourceByName(recipe)));
+        expandedNodes.putIfAbsent(makePathKey(LIST_KEY, recipe), true);
+        listChanged();
+        return AddResult.ADDED;
+    }
+    public synchronized void setEntryAmount(String recipe, int amount) {
+        for (int i = 0; i < shoppingList.size(); i++) {
+            ShoppingListEntry e = shoppingList.get(i);
+            if (e.recipe.equals(recipe) && e.amount != Math.max(1, amount)) {
+                shoppingList.set(i, new ShoppingListEntry(recipe, Math.max(1, amount), e.startCount));
+                listChanged();
+                return;
+            }
+        }
+    }
+    public synchronized void removeFromList(String recipe) {
+        if (shoppingList.removeIf(e -> e.recipe.equals(recipe))) listChanged();
+    }
+    public synchronized void clearList() {
+        if (shoppingList.isEmpty()) return;
+        shoppingList.clear();
+        listChanged();
+    }
+    public List<ShoppingListEntry> getShoppingList() {
+        List<ShoppingListEntry> copy = new ArrayList<>();
+        for (ShoppingListEntry e : shoppingList) copy.add(e.copy());
+        return copy;
+    }
+    private void listChanged() {
         requestRefresh();
         saveConfiguration();
     }
-    public String getSelectedRecipe() {
-        return this.selectedRecipe;
+    /** HUD heading. The recipes themselves are the top-level rows underneath. */
+    public String getTitle() {
+        return "Shopping List";
+    }
+    /** The synthetic root the HUD draws (children: Total, then one tree per recipe), or null. */
+    public RecipeManager.RecipeNode getDisplayRoot() {
+        return recipeTree;
     }
     public int getWidgetX() {
         return widgetX;
@@ -102,9 +170,6 @@ public class SandboxWidget {
         this.widgetHeight = Math.max(120, Math.min(height, screenH - 20));
         saveConfiguration();
     }
-    public static String getNodeKey(RecipeManager.RecipeNode node) {
-        return node.name + "_" + node.amount;
-    }
     public boolean isNodeExpanded(String nodeKey) {
         Boolean result = expandedNodes.getOrDefault(nodeKey, false);
         return result != null ? result : false;
@@ -123,74 +188,91 @@ public class SandboxWidget {
         saveConfiguration();
     }
     public void saveConfiguration() {
-        WidgetConfig config = new WidgetConfig(
-            enabled,
-            selectedRecipe,
-            widgetX,
-            widgetY,
-            widgetWidth,
-            widgetHeight,
-            new HashMap<>(expandedNodes),
-            craftAmount,
-            showRemaining
-        );
+        WidgetConfig config = new WidgetConfig();
+        config.enabled = enabled;
+        config.widgetX = widgetX;
+        config.widgetY = widgetY;
+        config.widgetWidth = widgetWidth;
+        config.widgetHeight = widgetHeight;
+        config.expandedNodes = new HashMap<>(expandedNodes);
+        config.shoppingList = getShoppingList();
+        config.showRemaining = showRemaining;
+        config.showTotal = showTotal;
+        config.notifications = notifications;
+        config.autoRemove = autoRemove;
+        config.staleSackWarning = staleSackWarning;
+        config.maxRecipes = maxRecipes;
         JsonFiles.write(FilePathManager.WIDGET_CONFIG_JSON, config);
     }
     private void loadConfiguration() {
         WidgetConfig config = JsonFiles.read(FilePathManager.WIDGET_CONFIG_JSON, WidgetConfig.class);
         if (config == null) return;
         this.enabled = config.enabled;
-        this.selectedRecipe = config.selectedRecipe;
         this.widgetX = config.widgetX;
         this.widgetY = config.widgetY;
         if (config.expandedNodes != null) {
             this.expandedNodes = new ConcurrentHashMap<>(config.expandedNodes);
         }
-        if (config.craftAmount > 0) {
-            this.craftAmount = config.craftAmount;
-        }
         if (config.showRemaining != null) this.showRemaining = config.showRemaining;
+        if (config.showTotal != null) this.showTotal = config.showTotal;
+        if (config.notifications != null) this.notifications = config.notifications;
+        if (config.autoRemove != null) this.autoRemove = config.autoRemove;
+        if (config.staleSackWarning != null) this.staleSackWarning = config.staleSackWarning;
+        if (config.maxRecipes != null) this.maxRecipes = clampMaxRecipes(config.maxRecipes);
         if (config.widgetWidth > 0) this.widgetWidth = config.widgetWidth;
         if (config.widgetHeight > 0) this.widgetHeight = config.widgetHeight;
+        shoppingList.clear();
+        if (config.shoppingList != null) {
+            for (ShoppingListEntry e : config.shoppingList) {
+                if (e != null && e.recipe != null && !e.recipe.isBlank()) {
+                    shoppingList.add(new ShoppingListEntry(e.recipe, Math.max(1, e.amount), e.startCount));
+                }
+            }
+        } else if (config.selectedRecipe != null) {
+            // Config from before the shopping list: keep the one recipe it tracked.
+            int amount = config.craftAmount != null && config.craftAmount > 0 ? config.craftAmount : 1;
+            shoppingList.add(new ShoppingListEntry(config.selectedRecipe, amount, resourcesManager.getResourceByName(config.selectedRecipe)));
+        }
     }
     /** Restores defaults after a reset deleted the config file. */
     public void resetConfiguration() {
         enabled = false;
-        selectedRecipe = null;
+        shoppingList.clear();
         recipeTree = null;
         widgetX = 10;
         widgetY = 40;
         widgetWidth = 250;
         widgetHeight = 300;
         expandedNodes = new ConcurrentHashMap<>();
-        craftAmount = 1;
         showRemaining = true;
+        showTotal = true;
+        notifications = true;
+        autoRemove = true;
+        staleSackWarning = true;
+        maxRecipes = 3;
         messages.clear();
         saveConfiguration();
+        requestRefresh();
     }
     private static class WidgetConfig {
         boolean enabled;
-        String selectedRecipe;
         int widgetX;
         int widgetY;
-    int widgetWidth;
-    int widgetHeight;
+        int widgetWidth;
+        int widgetHeight;
         Map<String, Boolean> expandedNodes;
-        int craftAmount;
-        /** Boxed so configs written before this option existed default to on. */
+        List<ShoppingListEntry> shoppingList;
+        /** Read only, for configs written before the shopping list existed. */
+        String selectedRecipe;
+        /** Read only, for configs written before the shopping list existed. */
+        Integer craftAmount;
+        // Boxed so configs written before an option existed get its default.
         Boolean showRemaining;
-    public WidgetConfig(boolean enabled, String selectedRecipe, int widgetX, int widgetY, int widgetWidth, int widgetHeight,
-                Map<String, Boolean> expandedNodes, int craftAmount, boolean showRemaining) {
-            this.enabled = enabled;
-            this.selectedRecipe = selectedRecipe;
-            this.widgetX = widgetX;
-            this.widgetY = widgetY;
-        this.widgetWidth = widgetWidth;
-        this.widgetHeight = widgetHeight;
-            this.expandedNodes = expandedNodes;
-            this.craftAmount = craftAmount;
-            this.showRemaining = showRemaining;
-        }
+        Boolean showTotal;
+        Boolean notifications;
+        Boolean autoRemove;
+        Boolean staleSackWarning;
+        Integer maxRecipes;
     }
     /** Marks the tree stale; the update thread recomputes it within a second. */
     private void requestRefresh() {
@@ -202,9 +284,17 @@ public class SandboxWidget {
     private void refreshIfStale() {
         try {
             long version = resourcesManager.getVersion();
-            if (version == computedVersion) return;
-            computedVersion = version;
-            updateRecipeData();
+            if (version != computedVersion) {
+                computedVersion = version;
+                updateRecipeData();
+            }
+            // Forge countdowns move every minute even when nothing else changes.
+            long minute = System.currentTimeMillis() / 60_000;
+            if (ForgeTracker.getVersion() != forgingVersion || minute != forgingMinute) {
+                forgingVersion = ForgeTracker.getVersion();
+                forgingMinute = minute;
+                updateForgingLines();
+            }
         } catch (RuntimeException e) {
             // Never let an exception escape: it would cancel the scheduled refresh for good.
             InventoryReader.LOGGER.error("Failed to update HUD recipe", e);
@@ -212,42 +302,131 @@ public class SandboxWidget {
     }
 
     private void updateRecipeData() {
-        String recipe = selectedRecipe;
-        if (!enabled || recipe == null) {
+        List<ShoppingListEntry> entries = getShoppingList();
+        if (entries.isEmpty()) {
+            recipeTree = null;
+            messages.clear();
+            listItemNames = Set.of();
+            forgingLines.clear();
+            readyEntries.clear();
+            achievedEntries.clear();
+            baselineSet = true;
             return;
         }
 
-        ResourcesManager.RemainingResponse response = resourcesManager.getRemainingIngredients(recipe, craftAmount);
+        ResourcesManager.ShoppingResponse response = resourcesManager.getShoppingList(entries);
+        boolean announce = baselineSet;
+        baselineSet = true;
+
+        List<String> toRemove = new ArrayList<>();
+        Set<String> names = new HashSet<>();
+        for (int i = 0; i < entries.size(); i++) {
+            ShoppingListEntry entry = entries.get(i);
+            RecipeManager.RecipeNode tree = response.trees.get(i);
+            names.add(entry.recipe);
+            boolean achieved = resourcesManager.getResourceByName(entry.recipe) >= entry.startCount + entry.amount;
+            if (achieved) {
+                if (achievedEntries.add(entry.recipe) && announce) {
+                    notifyPlayer(ACHIEVED_TOAST, "Item achieved", entry.amount + "× " + entry.recipe);
+                }
+                if (autoRemove) toRemove.add(entry.recipe);
+                continue;
+            }
+            achievedEntries.remove(entry.recipe);
+            boolean ready = tree.ingredients != null && !tree.ingredients.isEmpty()
+                && tree.ingredients.stream().allMatch(child -> child.amount <= 0);
+            if (!ready) {
+                readyEntries.remove(entry.recipe);
+            } else if (readyEntries.add(entry.recipe) && announce) {
+                notifyPlayer(READY_TOAST, "Ready to craft", entry.amount + "× " + entry.recipe);
+            }
+        }
+        readyEntries.retainAll(names);
+        achievedEntries.retainAll(names);
+        if (!toRemove.isEmpty()) {
+            // Removing schedules another refresh, which redraws without these entries.
+            for (String recipe : toRemove) removeFromList(recipe);
+            return;
+        }
 
         List<String> newMessages = new ArrayList<>();
         newMessages.add("Craftable -");
-        if (response.messages != null) {
-            List<Map.Entry<String, Integer>> sortedEntries = new ArrayList<>(response.messages.entrySet());
-            sortedEntries.sort((e1, e2) -> e2.getValue().compareTo(e1.getValue()));
-            for (Map.Entry<String, Integer> entry : sortedEntries) {
-                if (entry.getValue() != null && entry.getValue() > 0) {
-                    newMessages.add("   " + entry.getValue() + "× " + entry.getKey());
-                }
+        List<Map.Entry<String, Integer>> sortedEntries = new ArrayList<>(response.craftable.entrySet());
+        sortedEntries.sort((e1, e2) -> e2.getValue().compareTo(e1.getValue()));
+        for (Map.Entry<String, Integer> entry : sortedEntries) {
+            if (entry.getValue() != null && entry.getValue() > 0) {
+                newMessages.add("   " + entry.getValue() + "× " + entry.getKey());
             }
         }
-        RecipeManager.RecipeNode tree = response.full_recipe;
-        if (tree != null) {
-            expandedNodes.putIfAbsent(makePathKey(recipe, tree.name), true);
+
+        List<RecipeManager.RecipeNode> tops = new ArrayList<>();
+        if (showTotal && !response.total.ingredients.isEmpty()) {
+            tops.add(response.total);
+            expandedNodes.putIfAbsent(makePathKey(LIST_KEY, response.total.name), true);
+        }
+        for (RecipeManager.RecipeNode tree : response.trees) {
+            tops.add(tree);
+            expandedNodes.putIfAbsent(makePathKey(LIST_KEY, tree.name), true);
         }
         messages.clear();
         messages.addAll(newMessages);
-        recipeTree = tree;
+        recipeTree = new RecipeManager.RecipeNode("Shopping list", 0, 0, tops);
+
+        Set<String> itemNames = new HashSet<>();
+        for (RecipeManager.RecipeNode tree : response.trees) collectNames(tree, itemNames);
+        listItemNames = itemNames;
+        updateForgingLines();
     }
+
+    private static void collectNames(RecipeManager.RecipeNode node, Set<String> out) {
+        out.add(ItemNames.normalize(node.name));
+        if (node.ingredients != null) {
+            for (RecipeManager.RecipeNode child : node.ingredients) collectNames(child, out);
+        }
+    }
+
+    /** Forge slots making something on the list, grouped by item and finish minute; soonest first. */
+    private void updateForgingLines() {
+        long now = System.currentTimeMillis();
+        Map<String, int[]> counts = new LinkedHashMap<>();
+        Map<String, ForgeTracker.Entry> firstOf = new LinkedHashMap<>();
+        List<ForgeTracker.Entry> relevant = new ArrayList<>();
+        for (ForgeTracker.Entry entry : ForgeTracker.getEntries()) {
+            if (listItemNames.contains(ItemNames.normalize(entry.name))) relevant.add(entry);
+        }
+        relevant.sort(java.util.Comparator.comparingLong(e -> e.endsAt));
+        for (ForgeTracker.Entry entry : relevant) {
+            String key = entry.name + "|" + ForgeTracker.formatRemaining(entry.endsAt, now);
+            counts.computeIfAbsent(key, k -> new int[1])[0] += entry.count;
+            firstOf.putIfAbsent(key, entry);
+        }
+        List<String> lines = new ArrayList<>();
+        for (Map.Entry<String, int[]> e : counts.entrySet()) {
+            ForgeTracker.Entry entry = firstOf.get(e.getKey());
+            lines.add("   " + e.getValue()[0] + "× " + entry.name + " - " + ForgeTracker.formatRemaining(entry.endsAt, now));
+        }
+        forgingLines.clear();
+        forgingLines.addAll(lines);
+    }
+
+    /** Client-side toast; never sent anywhere. Off when notifications are disabled or outside SkyBlock. */
+    private void notifyPlayer(SystemToast.SystemToastId id, String title, String message) {
+        if (!notifications || !SkyblockDetector.isOnSkyblock()) return;
+        Minecraft client = Minecraft.getInstance();
+        client.execute(() -> SystemToast.add(client.gui.toastManager(), id,
+            Component.literal(title).withStyle(ChatFormatting.GOLD), Component.literal(message)));
+    }
+
     private void render(GuiGraphicsExtractor context) {
-        RecipeManager.RecipeNode recipeTree = this.recipeTree;
-        String selectedRecipe = this.selectedRecipe;
-        if (!enabled || selectedRecipe == null || recipeTree == null) {
+        RecipeManager.RecipeNode root = this.recipeTree;
+        if (!enabled || root == null) {
             return;
         }
     Minecraft client = Minecraft.getInstance();
     int height = client.getWindow().getGuiScaledHeight();
     int panelWidth = widgetWidth;
-    int visibleLines = countVisibleRecipeTreeLines(recipeTree, selectedRecipe);
+    int visibleLines = 0;
+    for (RecipeManager.RecipeNode top : root.ingredients) visibleLines += countVisibleRecipeTreeLines(top, LIST_KEY);
     int panelMaxHeight = Math.min(height - 40, widgetHeight);
 
     int recipeTreeHeightMax = Math.max(0, visibleLines * 16);
@@ -284,7 +463,7 @@ public class SandboxWidget {
             );
         }
 
-        Component title = Component.literal("Recipe: " + selectedRecipe)
+        Component title = Component.literal(getTitle())
             .setStyle(Style.EMPTY.withColor(ChatFormatting.GOLD).withBold(true));
         int titleWidth = client.font.width(title);
         int maxTitleWidth = Math.max(20, panelWidth - 10);
@@ -311,7 +490,8 @@ public class SandboxWidget {
     computedLine = Math.min(16, computedLine);
     currentNodeLineHeight = computedLine;
     currentTreeScale = currentNodeLineHeight / 16.0f;
-    int treeEndY = renderRecipeTree(context, recipeTree, panelX, y, 0, selectedRecipe);
+    int treeEndY = y;
+    for (RecipeManager.RecipeNode top : root.ingredients) treeEndY = renderRecipeTree(context, top, panelX + TREE_PADDING, treeEndY, 0, LIST_KEY);
 
         if (messageSectionHeight > 0) {
             context.fill(panelX, treeEndY, panelX + panelWidth, treeEndY + 1, 0x99608C35);
@@ -343,14 +523,14 @@ public class SandboxWidget {
         Minecraft client = Minecraft.getInstance();
         int unitIndent = Math.max(4, Math.round(RECIPE_LEVEL_INDENT * currentTreeScale));
         int indent = level * unitIndent;
-        boolean hasEnough = (node.amount <= 0);
+        boolean hasEnough = (node.amount <= 0 && node.toCraft <= 0);
         String nodeKey = makePathKey(pathKey, node.name);
         boolean isExpanded = expandedNodes.getOrDefault(nodeKey, false);
         boolean hasChildren = node.ingredients != null && !node.ingredients.isEmpty();
         int bgColor = 0x99271910;
         int mouseX = (int)(client.mouseHandler.xpos() / client.getWindow().getGuiScale());
         int mouseY = (int)(client.mouseHandler.ypos() / client.getWindow().getGuiScale());
-        int nodeBaseWidth = Math.max(100, widgetWidth - 20); // account for panel padding
+        int nodeBaseWidth = Math.max(100, widgetWidth - 2 * TREE_PADDING);
         int nodeHeight = Math.max(6, currentNodeLineHeight);
         boolean isHovered = mouseX >= x + indent && mouseX <= x + indent + nodeBaseWidth - indent &&
                             mouseY >= y && mouseY <= y + nodeHeight;
@@ -436,64 +616,41 @@ public class SandboxWidget {
         int desiredHeight = baseHeader + Math.max(0, (lines - 1) * baseLine);
         float scale = desiredHeight > 0 ? Math.min(1.0f, Math.max(0.4f, (float)availableHeight / (float)desiredHeight)) : 1.0f;
 
-        if (y + Math.round(baseLine * scale) <= maxY) {
-            Component messagesHeader = Component.literal("Craftable -")
-                .setStyle(Style.EMPTY.withColor(ChatFormatting.YELLOW).withBold(true));
-            context.pose().pushMatrix();
-            context.pose().translate(x + 5, y);
-            context.pose().scale(scale, scale);
-            context.text(
-                client.font,
-                messagesHeader,
-                0,
-                0,
-                0xFFFFFFFF,
-                false
-            );
-            context.pose().popMatrix();
-        } else {
-            return;
+        List<String> craftable = new ArrayList<>(messages);
+        craftable.remove("Craftable -");
+        craftable.sort((a, b) -> Integer.compare(extractAmount(b), extractAmount(a)));
+        y = drawSection(context, "Craftable -", craftable, x, y, width, maxY, scale);
+        List<String> forging = new ArrayList<>(forgingLines);
+        if (y >= 0 && !forging.isEmpty()) {
+            drawSection(context, "Forging -", forging, x, y + Math.round(3 * scale), width, maxY, scale);
         }
+    }
 
-        if (messages.size() == 1 && messages.get(0).equals("Craftable -")) {
-            return;
-        }
+    /** Draws a centred yellow header and its wrapped, centred lines. Returns the next y, or -1 when out of room. */
+    private int drawSection(GuiGraphicsExtractor context, String header, List<String> lines, int x, int y, int width,
+                            int maxY, float scale) {
+        Minecraft client = Minecraft.getInstance();
+        int baseHeader = 13;
+        int baseLine = 10;
+        if (y + Math.round(baseLine * scale) > maxY) return -1;
+        Component headerText = Component.literal(header)
+            .setStyle(Style.EMPTY.withColor(ChatFormatting.YELLOW).withBold(true));
+        context.pose().pushMatrix();
+        context.pose().translate(x + (width - client.font.width(headerText) * scale) / 2f, y);
+        context.pose().scale(scale, scale);
+        context.text(client.font, headerText, 0, 0, 0xFFFFFFFF, false);
+        context.pose().popMatrix();
         y += Math.round(baseHeader * scale);
 
-        List<String> messagesCopy = new ArrayList<>(messages);
-        messagesCopy.sort((a, b) -> {
-            if (a.equals("Craftable -")) return -1;
-            if (b.equals("Craftable -")) return 1;
-            try {
-                int amountA = extractAmount(a);
-                int amountB = extractAmount(b);
-                return Integer.compare(amountB, amountA);
-            } catch (Exception e) {
-                return 0;
-            }
-        });
-
         int unscaledWrapWidth = Math.max(10, (int)Math.floor((width - 15) / Math.max(0.01f, scale)));
-        for (String message : messagesCopy) {
-            if (message.equals("Craftable -")) continue;
-            int textColor = message.startsWith("   ") ? 0xFFFF9D00 : 0xFFFFFFFF;
+        for (String message : lines) {
+            int textColor = message.endsWith(" - Ready") ? DONE_GREEN : message.startsWith("   ") ? 0xFFFF9D00 : 0xFFFFFFFF;
             String[] words = message.split(" ");
             StringBuilder line = new StringBuilder();
             for (String word : words) {
                 if (client.font.width(line.toString() + word) > unscaledWrapWidth) {
-                    if (y + Math.round(baseLine * scale) > maxY) return;
-                    context.pose().pushMatrix();
-                    context.pose().translate(x + 5, y);
-                    context.pose().scale(scale, scale);
-                    context.text(
-                        client.font,
-                        line.toString(),
-                        0,
-                        0,
-                        textColor,
-                        false
-                    );
-                    context.pose().popMatrix();
+                    if (y + Math.round(baseLine * scale) > maxY) return -1;
+                    drawCentred(context, line.toString().trim(), x, y, width, scale, textColor);
                     y += Math.round(baseLine * scale);
                     line = new StringBuilder(message.startsWith("   ") ? "      " : "   ").append(word).append(" ");
                 } else {
@@ -501,22 +658,21 @@ public class SandboxWidget {
                 }
             }
             if (line.length() > 0) {
-                if (y + Math.round((baseLine - 1) * scale) > maxY) return;
-                context.pose().pushMatrix();
-                context.pose().translate(x + 5, y);
-                context.pose().scale(scale, scale);
-                context.text(
-                    client.font,
-                    line.toString(),
-                    0,
-                    0,
-                    textColor,
-                    false
-                );
-                context.pose().popMatrix();
+                if (y + Math.round((baseLine - 1) * scale) > maxY) return -1;
+                drawCentred(context, line.toString().trim(), x, y, width, scale, textColor);
                 y += Math.round((baseLine - 1) * scale);
             }
         }
+        return y;
+    }
+
+    private static void drawCentred(GuiGraphicsExtractor context, String text, int x, int y, int width, float scale, int color) {
+        Minecraft client = Minecraft.getInstance();
+        context.pose().pushMatrix();
+        context.pose().translate(x + (width - client.font.width(text) * scale) / 2f, y);
+        context.pose().scale(scale, scale);
+        context.text(client.font, text, 0, 0, color, false);
+        context.pose().popMatrix();
     }
 
     private int extractAmount(String message) {
@@ -536,18 +692,13 @@ public class SandboxWidget {
     public List<String> getMessagesSnapshot() {
         return new ArrayList<>(this.messages);
     }
-    public int getCraftAmount() {
-        return craftAmount;
-    }
-    public void setCraftAmount(int craftAmount) {
-        if (craftAmount < 1) {
-            craftAmount = 1;
-        }
-        this.craftAmount = craftAmount;
-        requestRefresh();
-        saveConfiguration();
-    }
     private int countMessageLines(Minecraft client, int width) {
+        // Header + one line per forging slot group.
+        int forging = forgingLines.isEmpty() ? 0 : forgingLines.size() + 1;
+        return countCraftableLines(client, width) + forging;
+    }
+
+    private int countCraftableLines(Minecraft client, int width) {
         int lineCount = 1;
         if (messages.isEmpty()) return lineCount;
         if (messages.size() == 1 && messages.get(0).equals("Craftable -")) return lineCount;
@@ -576,19 +727,53 @@ public class SandboxWidget {
         this.showRemaining = showRemaining;
         saveConfiguration();
     }
+    public boolean isShowTotal() { return showTotal; }
+    public void setShowTotal(boolean showTotal) {
+        this.showTotal = showTotal;
+        requestRefresh();
+        saveConfiguration();
+    }
+    public boolean isNotifications() { return notifications; }
+    public void setNotifications(boolean notifications) {
+        this.notifications = notifications;
+        saveConfiguration();
+    }
+    public boolean isAutoRemove() { return autoRemove; }
+    public void setAutoRemove(boolean autoRemove) {
+        this.autoRemove = autoRemove;
+        requestRefresh();
+        saveConfiguration();
+    }
+    public boolean isStaleSackWarning() { return staleSackWarning; }
+    public void setStaleSackWarning(boolean staleSackWarning) {
+        this.staleSackWarning = staleSackWarning;
+        saveConfiguration();
+    }
+    public int getMaxRecipes() { return maxRecipes; }
+    public void setMaxRecipes(int maxRecipes) {
+        this.maxRecipes = clampMaxRecipes(maxRecipes);
+        saveConfiguration();
+    }
+    private static int clampMaxRecipes(int value) {
+        return Math.max(1, Math.min(MAX_RECIPES_LIMIT, value));
+    }
 
     private static final int DONE_GREEN = 0xFF6EFF6E;
     private static final int PARTIAL_ORANGE = 0xFFFFA040;
+    private static final int CRAFT_YELLOW = 0xFFFFE45C;
     private static final int MISSING_RED = 0xFFFF6B6B;
 
     /** The number shown next to a node: what is still missing, or the full amount the recipe needs. */
     public static int displayedAmount(RecipeManager.RecipeNode node, boolean showRemaining) {
-        return showRemaining ? node.amount : node.required;
+        return showRemaining ? node.amount + node.toCraft : node.required;
     }
 
-    /** Green when complete; with remaining mode on, orange when partly gathered and red when none yet. */
+    /**
+     * Green when held; yellow when the rest can be crafted from materials you have; with remaining mode on,
+     * orange when partly gathered and red when none yet.
+     */
     public static int progressColor(RecipeManager.RecipeNode node, boolean showRemaining) {
-        if (node.amount <= 0) return DONE_GREEN;
+        if (node.amount <= 0) return node.toCraft > 0 ? CRAFT_YELLOW : DONE_GREEN;
         if (showRemaining && node.amount < node.required) return PARTIAL_ORANGE;
         return MISSING_RED;
     }

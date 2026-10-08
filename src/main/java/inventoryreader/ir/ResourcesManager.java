@@ -60,7 +60,8 @@ public class ResourcesManager {
             resources = new LinkedHashMap<>();
             if (fromFile != null) {
                 fromFile.forEach((k, v) -> {
-                    if (!ItemNames.isJunk(k)) resources.put(k, v == null ? 0 : v);
+                    // Re-clean saved names so entries written before a cleaning rule existed merge with new ones.
+                    if (!ItemNames.isJunk(k)) resources.merge(ItemNames.clean(k), v == null ? 0 : v, Integer::sum);
                 });
             }
             rebuildIndex();
@@ -174,29 +175,91 @@ public class ResourcesManager {
         return list;
     }
 
+    /** Shopping list for a single recipe. */
     public RemainingResponse getRemainingIngredients(String name, int amt) {
+        ShoppingResponse response = getShoppingList(List.of(new ShoppingListEntry(name, amt, 0)));
+        return new RemainingResponse(name, response.trees.get(0), response.craftable);
+    }
+
+    /**
+     * Works out what is still missing for every entry together. Stock is shared: entries are handled in list
+     * order and each one only gets what earlier entries left over, so nothing is counted twice.
+     */
+    public ShoppingResponse getShoppingList(List<ShoppingListEntry> entries) {
         Map<String, Map<String, Integer>> forging = RecipeManager.getInstance().getAllRecipes();
         Map<String, Integer> highestPossibleResources = getAllResources();
         Map<String, Integer> currentAvailableResources = new LinkedHashMap<>(highestPossibleResources);
         Map<String, Integer> messages = new LinkedHashMap<>();
 
-        initializeResourceMaps(name, forging, highestPossibleResources, currentAvailableResources, new java.util.HashSet<>());
+        java.util.Set<String> visited = new java.util.HashSet<>();
+        for (ShoppingListEntry entry : entries) {
+            initializeResourceMaps(entry.recipe, forging, highestPossibleResources, currentAvailableResources, visited);
+        }
 
-        int old = highestPossibleResources.getOrDefault(name, 0);
-        buildRecipe(name, amt, forging, highestPossibleResources, currentAvailableResources, messages, 0);
-        int updated = highestPossibleResources.getOrDefault(name, 0);
+        // Phase 1: craft what can be crafted, entry by entry, and note how many of each are still to make.
+        int[] toCraft = new int[entries.size()];
+        for (int i = 0; i < entries.size(); i++) {
+            ShoppingListEntry entry = entries.get(i);
+            int old = highestPossibleResources.getOrDefault(entry.recipe, 0);
+            buildRecipe(entry.recipe, entry.amount, forging, highestPossibleResources, currentAvailableResources, messages, 0);
+            int crafted = highestPossibleResources.getOrDefault(entry.recipe, 0) - old;
+            toCraft[i] = crafted >= entry.amount ? crafted - entry.amount : entry.amount - crafted;
+        }
 
-        int toCraft = updated - old >= amt ? (updated - old) - amt : amt - (updated - old);
-        // The root does not draw on existing stock of itself: the player asked to craft amt more.
-        List<RecipeManager.RecipeNode> ingredients = new ArrayList<>();
-        Map<String, Integer> recipe = forging.get(name);
-        if (recipe != null) {
-            for (Map.Entry<String, Integer> entry : recipe.entrySet()) {
-                ingredients.add(expandRequiredRecipe(entry.getKey(), entry.getValue() * toCraft, forging, highestPossibleResources, 1));
+        // Phase 2: expand what is still missing. A root does not draw on existing stock of itself: the
+        // player asked for this many more. Phase 1 counted items craftable from materials as stock; owned
+        // tells them apart from items actually held.
+        Map<String, Integer> owned = getAllResources();
+        List<RecipeManager.RecipeNode> trees = new ArrayList<>();
+        for (int i = 0; i < entries.size(); i++) {
+            ShoppingListEntry entry = entries.get(i);
+            List<RecipeManager.RecipeNode> ingredients = new ArrayList<>();
+            Map<String, Integer> recipe = forging.get(entry.recipe);
+            if (recipe != null) {
+                for (Map.Entry<String, Integer> ingredient : recipe.entrySet()) {
+                    ingredients.add(expandRequiredRecipe(ingredient.getKey(), ingredient.getValue() * toCraft[i], forging, highestPossibleResources, owned, 1));
+                }
+            }
+            trees.add(new RecipeManager.RecipeNode(entry.recipe, toCraft[i], entry.amount, ingredients));
+        }
+        return new ShoppingResponse(trees, totalOf(trees), messages);
+    }
+
+    /** Raw materials (leaves) across all trees, summed; missing items first, most missing at the top. */
+    private static RecipeManager.RecipeNode totalOf(List<RecipeManager.RecipeNode> trees) {
+        Map<String, int[]> sums = new LinkedHashMap<>();
+        for (RecipeManager.RecipeNode tree : trees) {
+            if (tree.ingredients != null) {
+                for (RecipeManager.RecipeNode child : tree.ingredients) collectLeaves(child, sums);
             }
         }
-        RecipeManager.RecipeNode fullRecipe = new RecipeManager.RecipeNode(name, toCraft, amt, ingredients);
-        return new RemainingResponse(name, fullRecipe, messages);
+        List<RecipeManager.RecipeNode> leaves = new ArrayList<>();
+        int missing = 0;
+        int required = 0;
+        for (Map.Entry<String, int[]> e : sums.entrySet()) {
+            int[] v = e.getValue();
+            if (v[1] <= 0) continue;
+            leaves.add(new RecipeManager.RecipeNode(e.getKey(), v[0], v[1], Collections.emptyList()));
+            missing += v[0];
+            required += v[1];
+        }
+        leaves.sort((a, b) -> {
+            boolean aDone = a.amount <= 0;
+            boolean bDone = b.amount <= 0;
+            if (aDone != bDone) return aDone ? 1 : -1;
+            return Integer.compare(b.amount, a.amount);
+        });
+        return new RecipeManager.RecipeNode("Total", missing, required, leaves);
+    }
+
+    private static void collectLeaves(RecipeManager.RecipeNode node, Map<String, int[]> sums) {
+        if (node.ingredients == null || node.ingredients.isEmpty()) {
+            int[] v = sums.computeIfAbsent(node.name, k -> new int[2]);
+            v[0] += Math.max(0, node.amount);
+            v[1] += node.required;
+            return;
+        }
+        for (RecipeManager.RecipeNode child : node.ingredients) collectLeaves(child, sums);
     }
 
     private void buildRecipe(String currentItem, int multiplier, Map<String, Map<String, Integer>> forging,
@@ -298,24 +361,33 @@ public class ResourcesManager {
 
     /**
      * Builds the shopping-list node for {@code needed} of an item: stock the player has is used first,
-     * {@code amount} is what is still missing, and only that shortfall is expanded into ingredients.
+     * {@code amount} is what is still missing, and only that shortfall is expanded into ingredients. Stock
+     * beyond what is in {@code owned} is craftable from held materials and goes into {@code toCraft}.
      */
     private RecipeManager.RecipeNode expandRequiredRecipe(String currentName, int needed, Map<String, Map<String, Integer>> forging,
-                                                          Map<String, Integer> highestPossibleResources, int depth) {
+                                                          Map<String, Integer> highestPossibleResources, Map<String, Integer> owned,
+                                                          int depth) {
         int have = highestPossibleResources.getOrDefault(currentName, 0);
         int fromStock = Math.max(0, Math.min(have, needed));
         highestPossibleResources.put(currentName, have - fromStock);
         int missing = needed - fromStock;
+        int held = owned.getOrDefault(currentName, 0);
+        int fromHeld = Math.max(0, Math.min(held, fromStock));
+        owned.put(currentName, held - fromHeld);
 
         Map<String, Integer> recipe = forging.get(currentName);
+        RecipeManager.RecipeNode node;
         if (recipe == null || depth > MAX_DEPTH) {
-            return new RecipeManager.RecipeNode(currentName, missing, needed, Collections.emptyList());
+            node = new RecipeManager.RecipeNode(currentName, missing, needed, Collections.emptyList());
+        } else {
+            List<RecipeManager.RecipeNode> ingredients = new ArrayList<>();
+            for (Map.Entry<String, Integer> entry : recipe.entrySet()) {
+                ingredients.add(expandRequiredRecipe(entry.getKey(), entry.getValue() * missing, forging, highestPossibleResources, owned, depth + 1));
+            }
+            node = new RecipeManager.RecipeNode(currentName, missing, needed, ingredients);
         }
-        List<RecipeManager.RecipeNode> ingredients = new ArrayList<>();
-        for (Map.Entry<String, Integer> entry : recipe.entrySet()) {
-            ingredients.add(expandRequiredRecipe(entry.getKey(), entry.getValue() * missing, forging, highestPossibleResources, depth + 1));
-        }
-        return new RecipeManager.RecipeNode(currentName, missing, needed, ingredients);
+        node.toCraft = fromStock - fromHeld;
+        return node;
     }
 
     private void initializeResourceMaps(String targetItem, Map<String, Map<String, Integer>> forging,
@@ -344,6 +416,21 @@ public class ResourcesManager {
         public ResourceEntry(String name, int amount) {
             this.name = name;
             this.amount = amount;
+        }
+    }
+
+    public static class ShoppingResponse {
+        /** One tree per list entry, in list order. */
+        public final List<RecipeManager.RecipeNode> trees;
+        /** Raw materials across all entries; children are the individual items. */
+        public final RecipeManager.RecipeNode total;
+        /** What can be crafted right now from current stock, item name to count. */
+        public final Map<String, Integer> craftable;
+
+        public ShoppingResponse(List<RecipeManager.RecipeNode> trees, RecipeManager.RecipeNode total, Map<String, Integer> craftable) {
+            this.trees = trees;
+            this.total = total;
+            this.craftable = craftable;
         }
     }
 

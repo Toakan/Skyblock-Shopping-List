@@ -34,6 +34,7 @@ public class RecipeManager {
             Map<String, Map<String, Integer>> forging = readRecipeMap(gson, FilePathManager.FORGING_JSON);
             Map<String, Map<String, Integer>> remote   = readRecipeMap(gson, FilePathManager.REMOTE_RECIPES_JSON);
             Map<String, Map<String, Integer>> remoteForge = readRecipeMap(gson, FilePathManager.REMOTE_FORGE_JSON);
+            Map<String, Map<String, Integer>> remoteShop = readRecipeMap(gson, FilePathManager.REMOTE_SHOP_JSON);
 
             // Only use the hardcoded gemstone fallback when we have no remote data yet;
             // once the NEU fetch has produced remote recipes, those contain the gemstone
@@ -48,6 +49,8 @@ public class RecipeManager {
             if (gemstone != null)    working.putAll(gemstone);
             if (remote != null)      working.putAll(remote);
             if (remoteForge != null) working.putAll(remoteForge);
+            // Shop purchases never replace a crafting or forge recipe.
+            if (remoteShop != null) remoteShop.forEach(working::putIfAbsent);
 
             Map<String, Map<String, Integer>> sanitized = sanitizeRecipes(working);
 
@@ -221,6 +224,11 @@ public class RecipeManager {
         public int amount;
         /** How many this step needs in total, before counting what the player already has. */
         public int required;
+        /**
+         * Shopping-list trees only: of the amount not missing, how many you don't hold yet but can craft from
+         * materials you have.
+         */
+        public int toCraft;
         public List<RecipeNode> ingredients;
 
         public RecipeNode(String name, int amount, List<RecipeNode> ingredients) {

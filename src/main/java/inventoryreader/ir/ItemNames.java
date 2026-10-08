@@ -10,7 +10,11 @@ import java.util.regex.Pattern;
  */
 public final class ItemNames {
     private static final Pattern FORMATTING = Pattern.compile("§.");
-    private static final Pattern UPGRADE_GLYPHS = Pattern.compile("[✪➊➋➌➍➎]");
+    /**
+     * Star/upgrade glyphs, plus the Unicode private-use area: Hypixel's resource-pack icons (gem symbols in
+     * NEU names like " Perfect Sapphire Gemstone") that the vanilla font draws as boxes.
+     */
+    private static final Pattern UPGRADE_GLYPHS = Pattern.compile("[✪➊➋➌➍➎\\uE000-\\uF8FF]");
     private static final Pattern WHITESPACE = Pattern.compile("\\s+");
 
     private ItemNames() {}

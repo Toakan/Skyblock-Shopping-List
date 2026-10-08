@@ -18,6 +18,7 @@ repositories {
 	// for more information about repositories.
 	maven { url = "https://repo.nea.moe/releases" }
 	maven { url = "https://repo.hypixel.net/repository/Hypixel/" }
+	maven { url = "https://maven.isxander.dev/releases" }
 }
 
 dependencies {
@@ -36,6 +37,9 @@ dependencies {
 	// Official Hypixel Mod API, used for SkyBlock detection when the hypixel-mod-api mod is installed.
 	// Optional at runtime ("suggests" in fabric.mod.json), so it is compile-only and not bundled.
 	compileOnly "net.hypixel:mod-api:1.0.2"
+
+	// YetAnotherConfigLib for the Settings screen. Required at runtime ("depends" in fabric.mod.json), not bundled.
+	implementation "dev.isxander:yet-another-config-lib:${project.yacl_version}"
 
 }
 

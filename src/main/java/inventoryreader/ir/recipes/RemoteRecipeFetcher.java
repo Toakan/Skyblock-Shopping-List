@@ -6,7 +6,9 @@ import io.github.moulberry.repo.NEURepository;
 import io.github.moulberry.repo.NEURepositoryException;
 import io.github.moulberry.repo.data.NEUCraftingRecipe;
 import io.github.moulberry.repo.data.NEUForgeRecipe;
+import io.github.moulberry.repo.data.NEUNpcShopRecipe;
 import io.github.moulberry.repo.data.NEUIngredient;
+import io.github.moulberry.repo.data.NEUKatUpgradeRecipe;
 import io.github.moulberry.repo.data.NEUItem;
 import io.github.moulberry.repo.data.NEURecipe;
 import inventoryreader.ir.FilePathManager;
@@ -47,7 +49,11 @@ public final class RemoteRecipeFetcher {
      * Bump when the way recipes are extracted from the repo changes, so cached snapshots are rebuilt
      * even if the remote reports "not modified".
      */
-    private static final String PARSER_VERSION = "3";
+    private static final String PARSER_VERSION = "6";
+    /** NEU's pseudo item for coin costs in shop recipes. */
+    private static final String COIN_ID = "SKYBLOCK_COIN";
+    public static final String COINS_NAME = "Coins";
+    private static final String[] PET_RARITIES = {"Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic"};
     private static final String PARSER_VERSION_KEY = "parser-version";
     private static final long MAX_ZIP_ENTRIES = 200_000;
     private static final long MAX_EXTRACTED_BYTES = 2L * 1024 * 1024 * 1024;
@@ -68,6 +74,8 @@ public final class RemoteRecipeFetcher {
             } catch (Throwable t) {
                 LOGGER.warn("Remote fetch failed: {}", t.toString());
             } finally {
+                // The unpacked repo is only needed while parsing; the results live in the recipe JSON files.
+                deleteDirectoryRecursively(FilePathManager.NEU_REPO_EXTRACTED.toPath());
                 RUNNING.set(false);
             }
         });
@@ -208,34 +216,56 @@ public final class RemoteRecipeFetcher {
                 String id = item.getSkyblockItemId();
                 String display = stripMC(item.getDisplayName());
                 if (id != null && !id.isBlank() && display != null && !display.isBlank()) {
-                    internalToDisplay.putIfAbsent(id, display);
+                    internalToDisplay.putIfAbsent(id, petName(id, display));
                 }
             }
+            internalToDisplay.put(COIN_ID, COINS_NAME);
 
             Map<String, Map<String, Integer>> craftingByInternal = new LinkedHashMap<>();
             Map<String, Map<String, Integer>> forgeByInternal    = new LinkedHashMap<>();
+            Map<String, Map<String, Integer>> shopByInternal     = new LinkedHashMap<>();
+            Map<String, Map<String, Integer>> katByInternal      = new LinkedHashMap<>();
             for (NEUItem item : neuRepo.getItems().getItems().values()) {
                 for (NEURecipe recipe : item.getRecipes()) {
                     if (recipe instanceof NEUCraftingRecipe cr) {
                         collectRecipeIngredients(craftingByInternal, cr.getAllOutputs(), cr.getAllInputs());
                     } else if (recipe instanceof NEUForgeRecipe fr) {
                         collectRecipeIngredients(forgeByInternal, fr.getAllOutputs(), fr.getAllInputs());
+                    } else if (recipe instanceof NEUNpcShopRecipe shop) {
+                        collectRecipeIngredients(shopByInternal, shop.getAllOutputs(), shop.getAllInputs());
+                    } else if (recipe instanceof NEUKatUpgradeRecipe kat) {
+                        collectRecipeIngredients(katByInternal, kat.getAllOutputs(), kat.getAllInputs());
                     }
                 }
             }
 
             // Forge recipes win over crafting recipes for the same item; keeping both would double-count.
             craftingByInternal.keySet().removeAll(forgeByInternal.keySet());
+            // Shop purchases only fill gaps (items with no crafting/forge recipe, e.g. the Golden Dragon), and only
+            // when they cost items: a coins-only price would turn ordinary materials into "buy it for coins".
+            shopByInternal.keySet().removeAll(craftingByInternal.keySet());
+            shopByInternal.keySet().removeAll(forgeByInternal.keySet());
+            shopByInternal.values().removeIf(cost -> cost.keySet().stream().allMatch(COIN_ID::equals));
+            // Kat upgrades (the pet one rarity lower + items + coins) cover most pets above Common. They fill
+            // the remaining gaps and travel with the crafting recipes.
+            katByInternal.keySet().removeAll(forgeByInternal.keySet());
+            katByInternal.keySet().removeAll(shopByInternal.keySet());
+            int katCount = 0;
+            for (Map.Entry<String, Map<String, Integer>> e : katByInternal.entrySet()) {
+                if (craftingByInternal.putIfAbsent(e.getKey(), e.getValue()) == null) katCount++;
+            }
             Map<String, String> recipeNameById = new LinkedHashMap<>(internalToDisplay);
             Map<String, Map<String, Integer>> craftingWire = resolveToDisplayNames(craftingByInternal, internalToDisplay, recipeNameById);
             Map<String, Map<String, Integer>> forgeWire    = resolveToDisplayNames(forgeByInternal,    internalToDisplay, recipeNameById);
+            Map<String, Map<String, Integer>> shopWire     = resolveToDisplayNames(shopByInternal,     internalToDisplay, recipeNameById);
 
             if (!craftingWire.isEmpty()) writeRemoteSnapshot(craftingWire);
             if (!forgeWire.isEmpty())    writeForgeSnapshot(forgeWire);
+            writeSnapshot(shopWire, FilePathManager.REMOTE_SHOP_JSON, "recipes_remote_shop.json.tmp");
             writeSnapshot(recipeNameById, FilePathManager.ITEM_NAMES_JSON, "item_names.json.tmp");
             inventoryreader.ir.ItemIds.reload();
 
-            LOGGER.info("NEU repo parsed (library): {} crafting, {} forge recipes", craftingWire.size(), forgeWire.size());
+            LOGGER.info("NEU repo parsed (library): {} crafting (incl. {} pet upgrades), {} forge, {} shop recipes", craftingWire.size(), katCount, forgeWire.size(), shopWire.size());
             inventoryreader.ir.RecipeManager.getInstance().reload();
 
             if (metaValToWrite != null && !metaValToWrite.isEmpty()) {
@@ -266,7 +296,8 @@ public final class RemoteRecipeFetcher {
         double outputCount = Math.max(1, output.getAmount());
         Map<String, Double> totals = new LinkedHashMap<>();
         for (NEUIngredient in : inputs) {
-            if (in == null || NEUIngredient.NEU_SENTINEL_EMPTY.equals(in.getItemId())) continue;
+            // Skips free parts too, e.g. the zero-coin cost of some pet upgrades.
+            if (in == null || NEUIngredient.NEU_SENTINEL_EMPTY.equals(in.getItemId()) || in.getAmount() <= 0) continue;
             totals.merge(in.getItemId(), in.getAmount(), Double::sum);
         }
         if (totals.isEmpty()) return;
@@ -333,9 +364,8 @@ public final class RemoteRecipeFetcher {
     /** Recursively deletes {@code dir} and all its contents, silently ignoring errors. */
     private static void deleteDirectoryRecursively(Path dir) {
         if (!Files.exists(dir)) return;
-        try {
-            Files.walk(dir)
-                .sorted(java.util.Comparator.reverseOrder())
+        try (java.util.stream.Stream<Path> paths = Files.walk(dir)) {
+            paths.sorted(java.util.Comparator.reverseOrder())
                 .forEach(p -> { try { Files.delete(p); } catch (Exception ignore) {} });
         } catch (Exception ignore) {}
     }
@@ -403,6 +433,23 @@ public final class RemoteRecipeFetcher {
         } catch (Exception ignored) {}
     }
 
+    /**
+     * Pets are listed per rarity ("BEE;4") with a level placeholder in the name ("[Lvl {LVL}] Bee"). Use
+     * "Bee (Legendary)" so the rarities stay apart and the name reads well.
+     */
+    private static String petName(String id, String display) {
+        int semi = id.lastIndexOf(';');
+        if (semi < 0 || !display.startsWith("[Lvl")) return display;
+        String name = display.replaceFirst("^\\[Lvl [^\\]]*\\]\\s*", "");
+        try {
+            int rarity = Integer.parseInt(id.substring(semi + 1));
+            if (rarity >= 0 && rarity < PET_RARITIES.length) return name + " (" + PET_RARITIES[rarity] + ")";
+        } catch (NumberFormatException ignored) {
+            // Not a pet rarity suffix; keep the plain name.
+        }
+        return name;
+    }
+
     private static boolean cacheIsCurrent(Map<String, String> meta) {
         return PARSER_VERSION.equals(meta.get(PARSER_VERSION_KEY));
     }
@@ -416,7 +463,6 @@ public final class RemoteRecipeFetcher {
     }
 
     private static String stripMC(String s) {
-        if (s == null) return "";
-        return s.replaceAll("§.", "").trim();
+        return inventoryreader.ir.ItemNames.clean(s);
     }
 }

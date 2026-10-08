@@ -28,6 +28,8 @@ public class SackReader {
     private static volatile boolean needsReminder = false;
 
     private Map<String, Integer> snapshot;
+    /** Epoch ms of the last sack menu read, 0 if never; null until loaded. */
+    private Long lastRead;
 
     private SackReader() {}
 
@@ -54,6 +56,20 @@ public class SackReader {
     /** Forgets the in-memory snapshot (after a reset deleted sacks.json). */
     public synchronized void clear() {
         snapshot = null;
+        lastRead = null;
+    }
+
+    /** When a sack menu was last read (epoch ms), or 0 if never. Chat updates don't count. */
+    public synchronized long getLastRead() {
+        if (lastRead == null) {
+            SackMeta meta = JsonFiles.read(FilePathManager.SACKS_META_JSON, SackMeta.class);
+            lastRead = meta != null ? meta.lastRead : 0L;
+        }
+        return lastRead;
+    }
+
+    private static class SackMeta {
+        long lastRead;
     }
 
     /** Reads every sack item's stored amount from an open sack menu. */
@@ -76,6 +92,10 @@ public class SackReader {
             }
         }
         if (current.isEmpty()) return;
+
+        SackMeta meta = new SackMeta();
+        meta.lastRead = lastRead = System.currentTimeMillis();
+        JsonFiles.write(FilePathManager.SACKS_META_JSON, meta);
 
         Map<String, Integer> snap = snapshot();
         Map<String, Integer> deltas = new LinkedHashMap<>();
