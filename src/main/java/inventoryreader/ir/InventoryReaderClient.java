@@ -6,6 +6,7 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 import org.lwjgl.glfw.GLFW;
@@ -18,6 +19,9 @@ public class InventoryReaderClient implements ClientModInitializer {
     private static final String INVENTORY_KEY = "Player Inventory";
     private static final Type DATA_TYPE = new TypeToken<Map<String, Map<String, Integer>>>() {}.getType();
 
+    /** Own section in Options > Controls > Key Binds; label from key.category.skyblock-shopping-list.main. */
+    private static final KeyMapping.Category KEY_CATEGORY =
+        KeyMapping.Category.register(Identifier.fromNamespaceAndPath(InventoryReader.MOD_ID, "main"));
     private static KeyMapping openSandboxViewerKey;
     private static KeyMapping openWidgetCustomizationKey;
     private static KeyMapping toggleWidgetKey;
@@ -34,13 +38,13 @@ public class InventoryReaderClient implements ClientModInitializer {
         FilePathManager.initialize();
 
         openSandboxViewerKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
-            "key.skyblock-shopping-list.open_sandbox_viewer", GLFW.GLFW_KEY_V, KeyMapping.Category.MISC));
+            "key.skyblock-shopping-list.open_sandbox_viewer", GLFW.GLFW_KEY_V, KEY_CATEGORY));
         openWidgetCustomizationKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
-            "key.skyblock-shopping-list.open_widget_customization", GLFW.GLFW_KEY_B, KeyMapping.Category.MISC));
+            "key.skyblock-shopping-list.open_widget_customization", GLFW.GLFW_KEY_B, KEY_CATEGORY));
         toggleWidgetKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
-            "key.skyblock-shopping-list.toggle_widget", GLFW.GLFW_KEY_H, KeyMapping.Category.MISC));
+            "key.skyblock-shopping-list.toggle_widget", GLFW.GLFW_KEY_H, KEY_CATEGORY));
         openPositioningHudKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
-            "key.skyblock-shopping-list.open_positioning_hud", GLFW.GLFW_KEY_J, KeyMapping.Category.MISC));
+            "key.skyblock-shopping-list.open_positioning_hud", GLFW.GLFW_KEY_J, KEY_CATEGORY));
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             // Keys only act on SkyBlock (presses are still consumed so they don't queue up);

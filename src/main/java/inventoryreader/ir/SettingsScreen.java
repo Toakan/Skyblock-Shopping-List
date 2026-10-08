@@ -5,6 +5,7 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.options.controls.KeyBindsScreen;
 import net.minecraft.network.chat.Component;
 
 /** Mod settings. Every change is applied and saved immediately. */
@@ -70,6 +71,13 @@ public class SettingsScreen extends Screen {
         this.addRenderableWidget(Button.builder(Component.literal("Choose recipe / move HUD..."),
             button -> this.minecraft.gui.setScreen(new WidgetCustomizationMenu())
         ).bounds(x, y, ROW_WIDTH, ROW_HEIGHT).build());
+        y += ROW_STEP;
+
+        this.addRenderableWidget(Button.builder(Component.literal("Key binds..."),
+            button -> this.minecraft.gui.setScreen(new KeyBindsScreen(this, this.minecraft.options))
+        ).bounds(x, y, ROW_WIDTH, ROW_HEIGHT)
+          .tooltip(Tooltip.create(Component.literal("Rebind keys. This mod's keys are under \"Skyblock Shopping List\".")))
+          .build());
 
         this.addRenderableWidget(Button.builder(Component.literal("Done"), button -> onClose())
             .bounds(this.width / 2 - 50, this.height - 30, 100, ROW_HEIGHT).build());
