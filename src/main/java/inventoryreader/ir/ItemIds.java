@@ -9,9 +9,11 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.CustomData;
 
 import java.lang.reflect.Type;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Names items by their SkyBlock ID instead of their shown name. Hypixel stores the ID as "id" in the
@@ -24,6 +26,10 @@ public final class ItemIds {
     /** Pet rarities in the order of the NEU pet ID suffix ("BEE;4" = Legendary Bee). */
     private static final List<String> PET_TIERS = List.of("COMMON", "UNCOMMON", "RARE", "EPIC", "LEGENDARY", "MYTHIC");
     private static volatile Map<String, String> namesById;
+    /** Every name in the ID table, to tell a real item name from a decorated one. */
+    private static volatile Set<String> knownNames;
+    /** Sack mismatches already logged (menus are re-read every half second). */
+    private static final Set<String> LOGGED_MISMATCHES = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     private ItemIds() {}
 
@@ -31,6 +37,26 @@ public final class ItemIds {
     public static void reload() {
         Map<String, String> loaded = JsonFiles.read(FilePathManager.ITEM_NAMES_JSON, MAP_TYPE);
         namesById = loaded != null ? Map.copyOf(loaded) : Map.of();
+        knownNames = Set.copyOf(new HashSet<>(namesById.values()));
+    }
+
+    /**
+     * Name for an item shown in a sack menu. Sack icons can carry another item's ID (an Enchanted Melon Slice icon
+     * in the Enchanted Agronomy Sack was filed as Melon Slice), and they never have reforges, so the shown name
+     * wins when it is a known item name. Otherwise the ID name, as everywhere else.
+     */
+    public static String sackNameOf(ItemStack stack) {
+        String byId = ItemNames.clean(nameOf(stack));
+        String shown = ItemNames.clean(stack.getHoverName().getString());
+        if (shown.equals(byId)) return byId;
+        if (knownNames == null) reload();
+        if (knownNames.contains(shown)) {
+            if (LOGGED_MISMATCHES.add(shown)) {
+                InventoryReader.LOGGER.info("Sack item shown as {} but its ID names {}; filing it as {}", shown, byId, shown);
+            }
+            return shown;
+        }
+        return byId;
     }
 
     /** The recipe name for this item if its SkyBlock ID is known, otherwise its shown name. */

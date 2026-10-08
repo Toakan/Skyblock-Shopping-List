@@ -88,7 +88,7 @@ public class SackReader {
                 String itemName = ItemNames.clean(stack.getHoverName().getString());
                 readGemstoneLore(itemName, lore.lines(), current);
             } else {
-                readStoredLore(ItemNames.clean(ItemIds.nameOf(stack)), lore.lines(), current);
+                readStoredLore(ItemIds.sackNameOf(stack), lore.lines(), current);
             }
         }
         if (current.isEmpty()) return;
