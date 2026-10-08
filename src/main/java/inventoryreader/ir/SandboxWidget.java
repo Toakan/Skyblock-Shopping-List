@@ -470,7 +470,7 @@ public class SandboxWidget {
         Minecraft client = Minecraft.getInstance();
         int unitIndent = Math.max(4, Math.round(RECIPE_LEVEL_INDENT * currentTreeScale));
         int indent = level * unitIndent;
-        boolean hasEnough = (node.amount <= 0);
+        boolean hasEnough = (node.amount <= 0 && node.toCraft <= 0);
         String nodeKey = makePathKey(pathKey, node.name);
         boolean isExpanded = expandedNodes.getOrDefault(nodeKey, false);
         boolean hasChildren = node.ingredients != null && !node.ingredients.isEmpty();
@@ -727,16 +727,20 @@ public class SandboxWidget {
 
     private static final int DONE_GREEN = 0xFF6EFF6E;
     private static final int PARTIAL_ORANGE = 0xFFFFA040;
+    private static final int CRAFT_YELLOW = 0xFFFFE45C;
     private static final int MISSING_RED = 0xFFFF6B6B;
 
     /** The number shown next to a node: what is still missing, or the full amount the recipe needs. */
     public static int displayedAmount(RecipeManager.RecipeNode node, boolean showRemaining) {
-        return showRemaining ? node.amount : node.required;
+        return showRemaining ? node.amount + node.toCraft : node.required;
     }
 
-    /** Green when complete; with remaining mode on, orange when partly gathered and red when none yet. */
+    /**
+     * Green when held; yellow when the rest can be crafted from materials you have; with remaining mode on,
+     * orange when partly gathered and red when none yet.
+     */
     public static int progressColor(RecipeManager.RecipeNode node, boolean showRemaining) {
-        if (node.amount <= 0) return DONE_GREEN;
+        if (node.amount <= 0) return node.toCraft > 0 ? CRAFT_YELLOW : DONE_GREEN;
         if (showRemaining && node.amount < node.required) return PARTIAL_ORANGE;
         return MISSING_RED;
     }

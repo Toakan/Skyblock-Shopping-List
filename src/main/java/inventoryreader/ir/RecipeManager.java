@@ -224,6 +224,11 @@ public class RecipeManager {
         public int amount;
         /** How many this step needs in total, before counting what the player already has. */
         public int required;
+        /**
+         * Shopping-list trees only: of the amount not missing, how many you don't hold yet but can craft from
+         * materials you have.
+         */
+        public int toCraft;
         public List<RecipeNode> ingredients;
 
         public RecipeNode(String name, int amount, List<RecipeNode> ingredients) {

@@ -207,7 +207,9 @@ public class ResourcesManager {
         }
 
         // Phase 2: expand what is still missing. A root does not draw on existing stock of itself: the
-        // player asked for this many more.
+        // player asked for this many more. Phase 1 counted items craftable from materials as stock; owned
+        // tells them apart from items actually held.
+        Map<String, Integer> owned = getAllResources();
         List<RecipeManager.RecipeNode> trees = new ArrayList<>();
         for (int i = 0; i < entries.size(); i++) {
             ShoppingListEntry entry = entries.get(i);
@@ -215,7 +217,7 @@ public class ResourcesManager {
             Map<String, Integer> recipe = forging.get(entry.recipe);
             if (recipe != null) {
                 for (Map.Entry<String, Integer> ingredient : recipe.entrySet()) {
-                    ingredients.add(expandRequiredRecipe(ingredient.getKey(), ingredient.getValue() * toCraft[i], forging, highestPossibleResources, 1));
+                    ingredients.add(expandRequiredRecipe(ingredient.getKey(), ingredient.getValue() * toCraft[i], forging, highestPossibleResources, owned, 1));
                 }
             }
             trees.add(new RecipeManager.RecipeNode(entry.recipe, toCraft[i], entry.amount, ingredients));
@@ -359,24 +361,33 @@ public class ResourcesManager {
 
     /**
      * Builds the shopping-list node for {@code needed} of an item: stock the player has is used first,
-     * {@code amount} is what is still missing, and only that shortfall is expanded into ingredients.
+     * {@code amount} is what is still missing, and only that shortfall is expanded into ingredients. Stock
+     * beyond what is in {@code owned} is craftable from held materials and goes into {@code toCraft}.
      */
     private RecipeManager.RecipeNode expandRequiredRecipe(String currentName, int needed, Map<String, Map<String, Integer>> forging,
-                                                          Map<String, Integer> highestPossibleResources, int depth) {
+                                                          Map<String, Integer> highestPossibleResources, Map<String, Integer> owned,
+                                                          int depth) {
         int have = highestPossibleResources.getOrDefault(currentName, 0);
         int fromStock = Math.max(0, Math.min(have, needed));
         highestPossibleResources.put(currentName, have - fromStock);
         int missing = needed - fromStock;
+        int held = owned.getOrDefault(currentName, 0);
+        int fromHeld = Math.max(0, Math.min(held, fromStock));
+        owned.put(currentName, held - fromHeld);
 
         Map<String, Integer> recipe = forging.get(currentName);
+        RecipeManager.RecipeNode node;
         if (recipe == null || depth > MAX_DEPTH) {
-            return new RecipeManager.RecipeNode(currentName, missing, needed, Collections.emptyList());
+            node = new RecipeManager.RecipeNode(currentName, missing, needed, Collections.emptyList());
+        } else {
+            List<RecipeManager.RecipeNode> ingredients = new ArrayList<>();
+            for (Map.Entry<String, Integer> entry : recipe.entrySet()) {
+                ingredients.add(expandRequiredRecipe(entry.getKey(), entry.getValue() * missing, forging, highestPossibleResources, owned, depth + 1));
+            }
+            node = new RecipeManager.RecipeNode(currentName, missing, needed, ingredients);
         }
-        List<RecipeManager.RecipeNode> ingredients = new ArrayList<>();
-        for (Map.Entry<String, Integer> entry : recipe.entrySet()) {
-            ingredients.add(expandRequiredRecipe(entry.getKey(), entry.getValue() * missing, forging, highestPossibleResources, depth + 1));
-        }
-        return new RecipeManager.RecipeNode(currentName, missing, needed, ingredients);
+        node.toCraft = fromStock - fromHeld;
+        return node;
     }
 
     private void initializeResourceMaps(String targetItem, Map<String, Map<String, Integer>> forging,

@@ -39,7 +39,7 @@ public class SettingsScreen extends Screen {
             "Show the shopping list on screen. Also toggled with H.");
         y += ROW_STEP;
         toggle(left, y, "Show remaining", widget::isShowRemaining, widget::setShowRemaining,
-            "ON: show how many of each item are still left to gather. Red = none yet, orange = some, green = done.\n"
+            "ON: show how many of each item are still left to gather. Red = none yet, orange = some, yellow = can craft from what you have, green = done.\n"
             + "OFF: show the full amounts the recipes need, red until complete.");
         y += ROW_STEP;
         toggle(left, y, "Total section", widget::isShowTotal, widget::setShowTotal,

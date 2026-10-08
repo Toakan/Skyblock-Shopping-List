@@ -188,7 +188,7 @@ public class HudPositionScreen extends Screen {
         if (node == null) return y;
         int indent = level * indentUnit;
         boolean hasChildren = node.ingredients != null && !node.ingredients.isEmpty();
-        boolean hasEnough = (node.amount <= 0);
+        boolean hasEnough = (node.amount <= 0 && node.toCraft <= 0);
         boolean showRemaining = widget.isShowRemaining();
         int nodeWidth = Math.max(40, availableWidth - indent);
 
