@@ -11,7 +11,7 @@ public class ReminderManager {
 
     public static void initialize() {
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            if (client.player == null) return;
+            if (client.player == null || !SkyblockDetector.isOnSkyblock()) return;
 
             if (SackReader.getNeedsReminder()) {
                 tickCounter++;

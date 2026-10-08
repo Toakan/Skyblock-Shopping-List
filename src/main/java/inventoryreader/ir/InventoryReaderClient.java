@@ -43,27 +43,32 @@ public class InventoryReaderClient implements ClientModInitializer {
             "key.skyblock-shopping-list.open_positioning_hud", GLFW.GLFW_KEY_J, KeyMapping.Category.MISC));
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            if (openSandboxViewerKey.consumeClick() || shouldOpenSandboxViewer) {
+            // Keys only act on SkyBlock (presses are still consumed so they don't queue up);
+            // the /ssl commands work anywhere.
+            boolean onSkyblock = SkyblockDetector.isOnSkyblock();
+            if ((openSandboxViewerKey.consumeClick() && onSkyblock) || shouldOpenSandboxViewer) {
                 shouldOpenSandboxViewer = false;
                 client.gui.setScreen(new SandboxViewer());
             }
-            if (openWidgetCustomizationKey.consumeClick() || shouldOpenWidgetCustomization) {
+            if ((openWidgetCustomizationKey.consumeClick() && onSkyblock) || shouldOpenWidgetCustomization) {
                 shouldOpenWidgetCustomization = false;
                 client.gui.setScreen(new WidgetCustomizationMenu());
             }
-            if (toggleWidgetKey.consumeClick()) {
+            if (toggleWidgetKey.consumeClick() && onSkyblock) {
                 SandboxWidget widget = SandboxWidget.getInstance();
                 widget.setEnabled(!widget.isEnabled());
             }
-            if (openPositioningHudKey.consumeClick()) {
+            if (openPositioningHudKey.consumeClick() && onSkyblock) {
                 client.gui.setScreen(new WidgetCustomizationMenu(true));
             }
-            if (client.player != null && client.level != null && ++tickCounter >= 2) {
+            // Other servers' inventories must never change the SkyBlock counts.
+            if (onSkyblock && client.player != null && client.level != null && ++tickCounter >= 2) {
                 tickCounter = 0;
                 checkInventory(client);
             }
         });
 
+        SkyblockDetector.register();
         StorageViewerMod.register();
         IrCommandManager.register();
         SackChatListener.register();

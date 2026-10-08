@@ -32,6 +32,9 @@ The mod only knows what you have shown it. Open each of your sacks, backpacks an
 
 `/ir` still works as an alias for `/ssl`. Keys can be rebound under Options > Controls.
 
+## SkyBlock only
+The mod only runs on Hypixel SkyBlock, detected from the sidebar scoreboard title ("SKYBLOCK"). In lobbies, other Hypixel games and other servers the HUD is hidden, the keys do nothing and nothing is tracked, so other inventories never change your counts. The `/ssl` commands still work everywhere.
+
 ## Hypixel rules
 Skyblock Shopping List is designed to stay within the [Hypixel Allowed Modifications](https://support.hypixel.net/hc/en-us/articles/6472550754962-Hypixel-Allowed-Modifications) guidelines:
 - It is read-only. It looks at screens you open and chat messages you receive, and never sends packets, chat messages or commands to the server.
@@ -65,7 +68,8 @@ Requires JDK 25.
 The jar is written to `build/libs/`. `./gradlew runClient` starts a development client.
 
 ## Known limitations
-- Items are matched by display name. Names are normalized (colour codes, stat symbols and star glyphs are ignored), but items that share a display name are still treated as one item in your counts. Recipes for such items are listed separately with their SkyBlock ID in brackets.
+- Items are matched by their SkyBlock ID where the item has one, so reforges and stars don't matter. Items without an ID (some sack and menu icons) fall back to their name, with colour codes and stat symbols ignored.
+- Sack contents only resync when you open a sack; between opens they follow the `[Sacks]` chat summaries, so keep those enabled in your SkyBlock settings.
 - Recipes cover what the NEU repository lists as crafting and forge recipes.
 
 ## License and attribution

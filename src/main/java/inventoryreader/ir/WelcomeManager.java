@@ -1,6 +1,6 @@
 package inventoryreader.ir;
 
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
@@ -19,13 +19,14 @@ public class WelcomeManager {
         if (!isFirstTimeUser) {
             return;
         }
-        ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
-            client.execute(() -> {
+        // Shown the first time the player reaches SkyBlock, not on joining any server.
+        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            if (isFirstTimeUser && client.player != null && SkyblockDetector.isOnSkyblock()) {
                 checkFirstTimeUser();
                 if (isFirstTimeUser) {
                     showWelcomeMessage(client);
                 }
-            });
+            }
         });
     }
 

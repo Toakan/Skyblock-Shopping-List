@@ -28,7 +28,7 @@ public final class SackChatListener {
 
     public static void register() {
         ClientReceiveMessageEvents.GAME.register((message, overlay) -> {
-            if (overlay) return;
+            if (overlay || !SkyblockDetector.isOnSkyblock()) return;
             try {
                 onGameMessage(message);
             } catch (RuntimeException e) {

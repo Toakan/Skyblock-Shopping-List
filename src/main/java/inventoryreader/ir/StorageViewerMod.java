@@ -20,7 +20,7 @@ public final class StorageViewerMod {
 
     private static void onEndClientTick(Minecraft client) {
         Screen screen = client.gui.screen();
-        if (!(screen instanceof AbstractContainerScreen<?>) || client.player == null) {
+        if (!(screen instanceof AbstractContainerScreen<?>) || client.player == null || !SkyblockDetector.isOnSkyblock()) {
             lastMenu = null;
             return;
         }

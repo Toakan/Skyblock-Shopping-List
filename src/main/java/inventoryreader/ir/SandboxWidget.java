@@ -48,7 +48,7 @@ public class SandboxWidget {
             return t;
         });
         HudElementRegistry.addLast(SANDBOX_WIDGET_LAYER, (context, tickCounter) -> {
-            if (enabled && selectedRecipe != null && recipeTree != null) {
+            if (enabled && selectedRecipe != null && recipeTree != null && SkyblockDetector.isOnSkyblock()) {
                 render(context);
             }
         });
