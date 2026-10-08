@@ -78,12 +78,12 @@ Everything lives in `config/skyblock-shopping-list/` inside your Minecraft folde
 - `recipes_remote.json`, `recipes_remote_forge.json`, `recipes_remote_shop.json`: crafting, forge and NPC shop recipes parsed from the NEU repository
 - `item_names.json`: SkyBlock item ID to name table
 - `remote_sources.json`, `remote_sources_meta.json`: recipe source list and download cache state
-- `neu-repo-extracted/`: the unpacked NEU repository
+- `neu-repo-extracted/`: the unpacked NEU repository, only while it is being parsed (deleted afterwards)
 
 ## Network access
 On startup the mod downloads the [NotEnoughUpdates-REPO](https://github.com/NotEnoughUpdates/NotEnoughUpdates-REPO) archive from GitHub (`codeload.github.com`) to get recipes. The request is a plain GET with an ETag, so unchanged data is not downloaded again. No player data is sent anywhere.
 
-The sources are listed in `remote_sources.json`. Only `https` URLs and local files are accepted. The archive is unpacked to `neu-repo-extracted/` with path-traversal, entry-count and size limits, then parsed as JSON. Nothing from it is executed.
+The sources are listed in `remote_sources.json`. Only `https` URLs and local files are accepted. The archive is unpacked to `neu-repo-extracted/` with path-traversal, entry-count and size limits, then parsed as JSON and deleted again. Nothing from it is executed.
 
 ## Building from source
 Requires JDK 25.

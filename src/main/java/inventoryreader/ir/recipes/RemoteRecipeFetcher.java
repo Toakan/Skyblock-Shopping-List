@@ -74,6 +74,8 @@ public final class RemoteRecipeFetcher {
             } catch (Throwable t) {
                 LOGGER.warn("Remote fetch failed: {}", t.toString());
             } finally {
+                // The unpacked repo is only needed while parsing; the results live in the recipe JSON files.
+                deleteDirectoryRecursively(FilePathManager.NEU_REPO_EXTRACTED.toPath());
                 RUNNING.set(false);
             }
         });
@@ -362,9 +364,8 @@ public final class RemoteRecipeFetcher {
     /** Recursively deletes {@code dir} and all its contents, silently ignoring errors. */
     private static void deleteDirectoryRecursively(Path dir) {
         if (!Files.exists(dir)) return;
-        try {
-            Files.walk(dir)
-                .sorted(java.util.Comparator.reverseOrder())
+        try (java.util.stream.Stream<Path> paths = Files.walk(dir)) {
+            paths.sorted(java.util.Comparator.reverseOrder())
                 .forEach(p -> { try { Files.delete(p); } catch (Exception ignore) {} });
         } catch (Exception ignore) {}
     }
