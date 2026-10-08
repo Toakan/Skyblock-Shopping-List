@@ -100,20 +100,11 @@ public class ShoppingListScreen extends Screen {
         List<ShoppingListEntry> list = widget.getShoppingList();
         treeViewWidth = Math.max(120, Math.min(400, width - treeViewX - 20));
         // Narrow screens: shrink the move buttons, then drop them, so the name keeps some room.
-        int moveWidth = treeViewWidth >= 184 ? 20 : treeViewWidth >= 148 ? 12 : 0;
-        int controlsLeft = moveWidth > 0 ? 76 + 2 * moveWidth : 70;
+        int moveWidth = treeViewWidth >= 200 ? 20 : treeViewWidth >= 164 ? 12 : 0;
+        // Row, right to left: × (-26), amount (-70), Have total / Add more (-88), ▼, ▲.
+        int modeX = -88;
+        int controlsLeft = moveWidth > 0 ? -modeX + 4 + 2 * moveWidth : -modeX;
         listNameWidth = treeViewWidth - controlsLeft - 8;
-        // On the header line: whether amounts are a total to have or how many more to make.
-        Component goal = Component.literal(widget.isHaveTotal() ? "Have total" : "Add more");
-        int goalWidth = font.width(goal) + 12;
-        addRenderableWidget(Button.builder(goal, button -> {
-            widget.setHaveTotal(!widget.isHaveTotal());
-            rebuildWidgets();
-        }).bounds(treeViewX + treeViewWidth - goalWidth - 6, PANEL_TOP - 16, goalWidth, 14)
-          .tooltip(Tooltip.create(Component.literal(
-              "Have total: the amount is how many you want in total; what you already hold counts.\n"
-                  + "Add more: the amount is how many more to make on top of what you hold.")))
-          .build());
         int rows = Math.min(list.size(), PANEL_MAX_ROWS);
         for (int i = 0; i < rows; i++) {
             ShoppingListEntry entry = list.get(i);
@@ -130,6 +121,15 @@ public class ShoppingListScreen extends Screen {
                 }
             });
             addRenderableWidget(amount);
+            boolean total = entry.isHaveTotal();
+            addRenderableWidget(Button.builder(Component.literal(total ? "=" : "+"), button -> {
+                widget.setEntryHaveTotal(entry.recipe, !total);
+                rebuildWidgets();
+            }).bounds(treeViewX + treeViewWidth + modeX, y, 16, 18)
+              .tooltip(Tooltip.create(Component.literal(total
+                  ? "Have total (=): the amount is how many you want in total; what you hold counts.\nClick for Add more."
+                  : "Add more (+): the amount is how many more to make on top of what you hold.\nClick for Have total.")))
+              .build());
             if (moveWidth > 0) {
                 Button up = Button.builder(Component.literal("▲"), button -> {
                     widget.moveEntry(entry.recipe, -1);
@@ -142,7 +142,7 @@ public class ShoppingListScreen extends Screen {
                 Button down = Button.builder(Component.literal("▼"), button -> {
                     widget.moveEntry(entry.recipe, 1);
                     rebuildWidgets();
-                }).bounds(treeViewX + treeViewWidth - 74 - moveWidth, y, moveWidth, 18)
+                }).bounds(treeViewX + treeViewWidth + modeX - 2 - moveWidth, y, moveWidth, 18)
                   .tooltip(Tooltip.create(Component.literal("Move down: lower rows get what is left.")))
                   .build();
                 down.active = i < list.size() - 1;

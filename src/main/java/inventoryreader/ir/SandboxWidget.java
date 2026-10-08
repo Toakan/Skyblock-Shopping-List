@@ -54,8 +54,6 @@ public class SandboxWidget {
     private volatile boolean showTotal = true;
     private volatile boolean notifications = true;
     private volatile boolean autoRemove = true;
-    /** List amounts are a total to have (counting what is held) rather than how many more to make. */
-    private volatile boolean haveTotal = true;
     private volatile boolean staleSackWarning = true;
     private volatile int maxRecipes = 3;
     /** Update thread only: entries already announced as ready / achieved, so each toast fires once. */
@@ -108,7 +106,7 @@ public class SandboxWidget {
         for (int i = 0; i < shoppingList.size(); i++) {
             ShoppingListEntry e = shoppingList.get(i);
             if (e.recipe.equals(recipe)) {
-                shoppingList.set(i, new ShoppingListEntry(recipe, e.amount + amount, e.startCount));
+                shoppingList.set(i, new ShoppingListEntry(recipe, e.amount + amount, e.startCount, e.isHaveTotal()));
                 listChanged();
                 return AddResult.INCREASED;
             }
@@ -123,7 +121,20 @@ public class SandboxWidget {
         for (int i = 0; i < shoppingList.size(); i++) {
             ShoppingListEntry e = shoppingList.get(i);
             if (e.recipe.equals(recipe) && e.amount != Math.max(1, amount)) {
-                shoppingList.set(i, new ShoppingListEntry(recipe, Math.max(1, amount), e.startCount));
+                shoppingList.set(i, new ShoppingListEntry(recipe, Math.max(1, amount), e.startCount, e.isHaveTotal()));
+                listChanged();
+                return;
+            }
+        }
+    }
+    /** Switches one entry between Have total (held copies count) and Add more (make this many more). */
+    public synchronized void setEntryHaveTotal(String recipe, boolean haveTotal) {
+        for (int i = 0; i < shoppingList.size(); i++) {
+            ShoppingListEntry e = shoppingList.get(i);
+            if (e.recipe.equals(recipe) && e.isHaveTotal() != haveTotal) {
+                // Add more counts from now: what is held when switching is the new starting point.
+                int start = haveTotal ? e.startCount : resourcesManager.getResourceByName(recipe);
+                shoppingList.set(i, new ShoppingListEntry(recipe, e.amount, start, haveTotal));
                 listChanged();
                 return;
             }
@@ -223,7 +234,6 @@ public class SandboxWidget {
         config.showTotal = showTotal;
         config.notifications = notifications;
         config.autoRemove = autoRemove;
-        config.haveTotal = haveTotal;
         config.staleSackWarning = staleSackWarning;
         config.maxRecipes = maxRecipes;
         JsonFiles.write(FilePathManager.WIDGET_CONFIG_JSON, config);
@@ -245,7 +255,6 @@ public class SandboxWidget {
         if (config.showTotal != null) this.showTotal = config.showTotal;
         if (config.notifications != null) this.notifications = config.notifications;
         if (config.autoRemove != null) this.autoRemove = config.autoRemove;
-        if (config.haveTotal != null) this.haveTotal = config.haveTotal;
         if (config.staleSackWarning != null) this.staleSackWarning = config.staleSackWarning;
         if (config.maxRecipes != null) this.maxRecipes = clampMaxRecipes(config.maxRecipes);
         if (config.widgetWidth > 0) this.widgetWidth = config.widgetWidth;
@@ -257,7 +266,9 @@ public class SandboxWidget {
         if (config.shoppingList != null) {
             for (ShoppingListEntry e : config.shoppingList) {
                 if (e != null && e.recipe != null && !e.recipe.isBlank()) {
-                    shoppingList.add(new ShoppingListEntry(e.recipe, Math.max(1, e.amount), e.startCount));
+                    // 4.20.6 had one list-wide switch; entries saved then take its value.
+                    boolean haveTotal = e.haveTotal != null ? e.haveTotal : !Boolean.FALSE.equals(config.haveTotal);
+                    shoppingList.add(new ShoppingListEntry(e.recipe, Math.max(1, e.amount), e.startCount, haveTotal));
                 }
             }
         } else if (config.selectedRecipe != null) {
@@ -282,7 +293,6 @@ public class SandboxWidget {
         showTotal = true;
         notifications = true;
         autoRemove = true;
-        haveTotal = true;
         staleSackWarning = true;
         maxRecipes = 3;
         messages.clear();
@@ -310,6 +320,7 @@ public class SandboxWidget {
         Boolean showTotal;
         Boolean notifications;
         Boolean autoRemove;
+        /** Read only: the list-wide Have total / Add more switch from 4.20.6, now set per entry. */
         Boolean haveTotal;
         Boolean staleSackWarning;
         Integer maxRecipes;
@@ -360,8 +371,7 @@ public class SandboxWidget {
             return;
         }
 
-        boolean total = haveTotal;
-        ResourcesManager.ShoppingResponse response = resourcesManager.getShoppingList(entries, total);
+        ResourcesManager.ShoppingResponse response = resourcesManager.getShoppingList(entries);
         boolean announce = baselineSet;
         baselineSet = true;
 
@@ -376,7 +386,8 @@ public class SandboxWidget {
             RecipeManager.RecipeNode tree = response.trees.get(i);
             names.add(entry.recipe);
             // Have total: done once you hold the amount. Add more: once you hold that many more than when added.
-            boolean achieved = resourcesManager.getResourceByName(entry.recipe) >= (total ? 0 : entry.startCount) + entry.amount;
+            boolean achieved = resourcesManager.getResourceByName(entry.recipe)
+                >= (entry.isHaveTotal() ? 0 : entry.startCount) + entry.amount;
             if (achieved) {
                 if (achievedEntries.add(entry.recipe) && announce) {
                     notifyPlayer(ACHIEVED_TOAST, "Item achieved", entry.amount + "× " + entry.recipe);
@@ -1017,12 +1028,6 @@ public class SandboxWidget {
     public boolean isNotifications() { return notifications; }
     public void setNotifications(boolean notifications) {
         this.notifications = notifications;
-        saveConfiguration();
-    }
-    public boolean isHaveTotal() { return haveTotal; }
-    public void setHaveTotal(boolean haveTotal) {
-        this.haveTotal = haveTotal;
-        requestRefresh();
         saveConfiguration();
     }
     public boolean isAutoRemove() { return autoRemove; }

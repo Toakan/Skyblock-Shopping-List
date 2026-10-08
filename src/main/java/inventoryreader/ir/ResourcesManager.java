@@ -177,7 +177,7 @@ public class ResourcesManager {
 
     /** Shopping list for a single recipe. */
     public RemainingResponse getRemainingIngredients(String name, int amt) {
-        ShoppingResponse response = getShoppingList(List.of(new ShoppingListEntry(name, amt, 0)));
+        ShoppingResponse response = getShoppingList(List.of(new ShoppingListEntry(name, amt, 0, false)));
         return new RemainingResponse(name, response.trees.get(0), response.craftable);
     }
 
@@ -186,14 +186,6 @@ public class ResourcesManager {
      * order and each one only gets what earlier entries left over, so nothing is counted twice.
      */
     public ShoppingResponse getShoppingList(List<ShoppingListEntry> entries) {
-        return getShoppingList(entries, false);
-    }
-
-    /**
-     * As above. With {@code countHeld} ("Have total") each entry first takes what is already held of the item
-     * itself, so the amount is a total to reach; without it ("Add more") the amount is how many more to make.
-     */
-    public ShoppingResponse getShoppingList(List<ShoppingListEntry> entries, boolean countHeld) {
         Map<String, Map<String, Integer>> forging = RecipeManager.getInstance().getAllRecipes();
         Map<String, Integer> highestPossibleResources = getAllResources();
         Map<String, Integer> currentAvailableResources = new LinkedHashMap<>(highestPossibleResources);
@@ -210,8 +202,9 @@ public class ResourcesManager {
         for (int i = 0; i < entries.size(); i++) {
             ShoppingListEntry entry = entries.get(i);
             int need = entry.amount;
-            if (countHeld) {
-                // Held copies of the item itself count towards the total and are kept from later entries.
+            if (entry.isHaveTotal()) {
+                // Have total: held copies of the item itself count towards the amount and are kept from later
+                // entries. Add more: the amount is how many more to make, so held copies don't count.
                 int held = Math.max(0, currentAvailableResources.getOrDefault(entry.recipe, 0));
                 fromStock[i] = Math.min(held, need);
                 need -= fromStock[i];
