@@ -1,79 +1,73 @@
 # Inventory Reader (Skyblock Resource Calculator)
 
-Inventory Reader is a Fabric client mod for Hypixel Skyblock that tracks player inventory, containers, and sack data and provides an interactive HUD and recipe/crafting planner.
+Inventory Reader is a Fabric client mod for Hypixel SkyBlock. It keeps a count of the items in your inventory, sacks, backpacks and ender chest, and shows a shopping list HUD for a recipe you pick: what you can already craft and what you still need.
 
-Key capabilities
-- Real-time inventory and container tracking
-- Recipe parsing and ingredient aggregation
-- Crafting planner that shows missing ingredients and craftable items
-- Configurable in-game HUD widget with live preview and positioning
-- Local persistence of all data (no servers)
+This is a maintained fork of [Scholiboi/InventoryReader](https://github.com/Scholiboi/InventoryReader), originally written by Scholiboi.
 
-Quick links
-- Releases: https://github.com/Scholiboi/InventoryReader-HypixelMining/releases
-- Issues: https://github.com/Scholiboi/InventoryReader-HypixelMining/issues
+## Requirements
+- Minecraft 26.2
+- Fabric Loader 0.19.5 or newer
+- Fabric API 0.161.0+26.2 or newer
+- Java 25
 
-Requirements
-- Minecraft 1.21.5+
-- Fabric Loader (compatible with the supported Minecraft version)
-- Java 21 runtime
-
-Installation
-1. Install Fabric Loader and run Minecraft once on the target profile.
-2. Place the mod jar into your `mods/` folder.
+## Installation
+1. Install Fabric Loader for Minecraft 26.2.
+2. Put Fabric API and the Inventory Reader jar in your `mods/` folder.
 3. Launch Minecraft with the Fabric profile.
 
-Running from source (developer)
-1. Clone the repository.
-2. Install Java 21 and ensure Gradle/Gradlew can run on your system.
-3. From the project root run:
+## First-time setup
+The mod only knows what you have shown it. Open each of your sacks, backpacks and ender chest pages once in SkyBlock. After that, counts stay up to date from your inventory, from the containers you open, and from the `[Sacks]` chat summaries.
+
+## Keys and commands
+| Key / command | Action |
+| --- | --- |
+| `V` or `/ir menu` | Open the Sandbox Viewer (resources, recipes, forge planner, manual edits) |
+| `B` or `/ir widget` | Open HUD widget customization |
+| `H` | Toggle the HUD widget |
+| `J` | Open HUD positioning |
+| `/ir` | List commands |
+| `/ir reset` | Delete all tracked item data and widget settings |
+| `/ir done` | Stop the "open a sack" reminder |
+| `/ir credits` | Show credits |
+
+Keys can be rebound under Options > Controls.
+
+## Hypixel rules
+Inventory Reader is designed to stay within the [Hypixel Allowed Modifications](https://support.hypixel.net/hc/en-us/articles/6472550754962-Hypixel-Allowed-Modifications) guidelines:
+- It is read-only. It looks at screens you open and chat messages you receive, and never sends packets, chat messages or commands to the server.
+- It does not automate anything: no clicking, crafting, moving items or opening menus for you.
+- The HUD only shows your own items and recipe arithmetic.
+
+As Hypixel states, every modification is used at your own risk.
+
+## Where data is stored
+Everything lives in `.ir-data/data/` inside your Minecraft folder:
+- `resources.json`: tracked item counts
+- `inventorydata.json`, `allcontainerData.json`, `sacks.json`: last-seen inventory, container and sack contents, used to work out changes
+- `widget_config.json`: HUD position, size, selected recipe and expanded nodes
+- `forging.json`, `gemstone_recipes.json`: built-in fallback recipes
+- `recipes_remote.json`, `recipes_remote_forge.json`: recipes parsed from the NEU repository
+- `remote_sources.json`, `remote_sources_meta.json`: recipe source list and download cache state
+- `neu-repo-extracted/`: the unpacked NEU repository
+
+## Network access
+On startup the mod downloads the [NotEnoughUpdates-REPO](https://github.com/NotEnoughUpdates/NotEnoughUpdates-REPO) archive from GitHub (`codeload.github.com`) to get recipes. The request is a plain GET with an ETag, so unchanged data is not downloaded again. No player data is sent anywhere.
+
+The sources are listed in `remote_sources.json`. Only `https` URLs and local files are accepted. The archive is unpacked to `neu-repo-extracted/` with path-traversal, entry-count and size limits, then parsed as JSON. Nothing from it is executed.
+
+## Building from source
+Requires JDK 25.
 
 ```bash
 ./gradlew build
 ```
 
-4. The built mod jar is in `build/libs/`.
+The jar is written to `build/libs/`. `./gradlew runClient` starts a development client.
 
-Where data is stored
-All runtime data is stored under a hidden directory in your Minecraft folder: `.ir-data/data/`.
-Important files and purpose:
-- `allcontainerData.json` — persisted container snapshots
-- `inventorydata.json` — player inventory snapshots
-- `resources.v<version>.json` — canonical list of tracked resources (versioned)
-- `widget_config.json` — HUD widget position/size/expansion and craft amount
-- `forging.v<version>.json`, `gemstone_recipes.v<version>.json` — local recipe files
-- `recipes_remote.json` — processed snapshot extracted from remote recipe sources (if configured)
-- `remote_sources_meta.json` — ETag/mtime metadata for remote fetch caching
+## Known limitations
+- Items are matched by display name. Names are normalized (colour codes, stat symbols and star glyphs are ignored), but items that share a display name are still treated as one item in your counts. Recipes for such items are listed separately with their SkyBlock ID in brackets.
+- Recipes cover what the NEU repository lists as crafting and forge recipes.
 
-Remote recipes: what happens and security
-- The mod can fetch remote recipe sources defined in `remote_sources.json`.
-- NEU-style ZIPs (NotEnoughUpdates archives) are streamed and parsed in-memory. The ZIP file itself is not saved to disk. Only the processed recipe snapshot (JSON) is persisted to `recipes_remote.json`.
-- Metadata such as ETag or mtime is stored in `remote_sources_meta.json` to avoid re-downloading unchanged sources.
-
-Security notes (brief)
-- No code from remote sources is executed. The fetcher parses JSON entries only and converts them into internal recipe mappings.
-- ZIP entries are not extracted to disk (ZipInputStream is processed in-memory), minimizing filesystem attack surface and avoiding ZIP-slip risks.
-- To harden further you can configure only HTTPS sources and/or local file paths in `remote_sources.json`.
-
-Commands & UI
-- `/ir menu` — Open the main resource/recipe GUI
-- `/ir widget` — Open widget customization and positioning
-- `/ir reset` — Reset local mod data (clears local snapshots)
-
-HUD behavior
-- The HUD shows the selected recipe tree and a craftable panel. The tree and craftable area auto-scale to fit the widget size. Expansion state is preserved across sessions.
-
-Development notes
-- Remote fetching is implemented in `src/main/java/inventoryreader/ir/recipes/RemoteRecipeFetcher.java`.
-- The app writes snapshots using `FilePathManager` into `.ir-data/data/`.
-
-Troubleshooting
-- If remote fetching fails, check `remote_sources.json` and `remote_sources_meta.json` for ETag/mtime state. Logs will include fetch errors.
-- If the HUD behaves oddly, try deleting `widget_config.json` (it will be recreated) and re-opening the widget customization screen.
-
-License & attribution
-- Core project: CC-BY-SA-4.0 (see `LICENSE`)
-- Remote recipe data and item maps may be sourced from NotEnoughUpdates-REPO; follow their attribution and license requirements when reusing their data.
-
-Contact
-- Report issues or feature requests on GitHub: https://github.com/Scholiboi/InventoryReader-HypixelMining/issues
+## License and attribution
+- Code: CC-BY-SA-4.0 (see `LICENSE`). Original work by Scholiboi.
+- Recipe and item data comes from NotEnoughUpdates-REPO; follow its license when reusing that data.
