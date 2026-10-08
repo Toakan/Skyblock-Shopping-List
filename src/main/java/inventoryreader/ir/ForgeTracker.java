@@ -77,9 +77,21 @@ public final class ForgeTracker {
             String name = ItemNames.clean(ItemIds.nameOf(stack));
             found.add(new Entry(name.isEmpty() ? making : name, stack.getCount(), now + (remaining == null ? 0 : remaining)));
         }
+        if (sameAs(getEntries(), found)) return;
         entries = List.copyOf(found);
         version++;
         JsonFiles.write(FilePathManager.FORGE_JSON, found);
+    }
+
+    /** Same items and counts, finishing within a few seconds of each other (times are read to the second). */
+    private static boolean sameAs(List<Entry> a, List<Entry> b) {
+        if (a.size() != b.size()) return false;
+        for (int i = 0; i < a.size(); i++) {
+            Entry x = a.get(i);
+            Entry y = b.get(i);
+            if (!x.name.equals(y.name) || x.count != y.count || Math.abs(x.endsAt - y.endsAt) > 5000) return false;
+        }
+        return true;
     }
 
     /** What was in the forge when it was last opened. */
