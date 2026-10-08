@@ -36,6 +36,7 @@ Press `V` (or `/ssl menu`) to open the menu. It has five tabs:
 - **Appearance** (in Settings): design the HUD yourself. Colours (with transparency) for the panel, borders, title, rows, tree lines, text and the done / partly gathered / missing / can craft states; row height, row gap, indent, padding, border thicknesses and rounded corners (panels and rows, 0-6 px); font (Minecraft's fonts plus any your enabled resource packs add), shadow and bold recipe names; separate text sizes for the title, rows, Craftable and Forging, and left / centre / right alignment for the title, Craftable and Forging; tick/cross marks, row boxes, tree lines, and the amount format (Remaining "3×", Have / need "83/5,120", or Required "6×"). **Reset look to defaults** restores the original look.
   - **HUD scale** (50-300%) sizes every panel. By default the HUD keeps its size whatever Minecraft's GUI Scale is; turn on **Follow GUI Scale** to have it change with GUI Scale.
   - **Craftable** and **Forging** can each be hidden, or moved to their **own panel** that you place and size separately in Move HUD.
+  - In **Move HUD**, drag a panel to move it, drag a **corner** to scale it (keeps its shape; each panel has its own scale on top of HUD scale), or drag an **edge** to make it wider, narrower, taller or shorter.
   - Panels grow to fit their content up to the height set in Move HUD; anything beyond is cut off and marked with "…" (make the panel taller or collapse rows).
 
 The HUD (`H` to toggle) shows:

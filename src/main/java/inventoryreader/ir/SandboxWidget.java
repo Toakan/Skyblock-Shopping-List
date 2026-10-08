@@ -35,6 +35,8 @@ public class SandboxWidget {
     private int widgetY = 40;
     private int widgetWidth = 250;
     private int widgetHeight = 300;
+    /** Main panel scale in percent, on top of the HUD scale from Settings. */
+    private int widgetScale = 100;
     /** Craftable / Forging panels, used when Appearance puts them in their own panel. */
     private PanelRect craftablePanel = new PanelRect(270, 40, 180, 150);
     private PanelRect forgingPanel = new PanelRect(270, 200, 180, 120);
@@ -211,6 +213,7 @@ public class SandboxWidget {
         config.widgetY = widgetY;
         config.widgetWidth = widgetWidth;
         config.widgetHeight = widgetHeight;
+        config.widgetScale = widgetScale;
         config.craftablePanel = craftablePanel;
         config.forgingPanel = forgingPanel;
         config.expandedNodes = new HashMap<>(expandedNodes);
@@ -243,6 +246,7 @@ public class SandboxWidget {
         if (config.maxRecipes != null) this.maxRecipes = clampMaxRecipes(config.maxRecipes);
         if (config.widgetWidth > 0) this.widgetWidth = config.widgetWidth;
         if (config.widgetHeight > 0) this.widgetHeight = config.widgetHeight;
+        if (config.widgetScale != null) this.widgetScale = clampPanelScale(config.widgetScale);
         if (config.craftablePanel != null) this.craftablePanel = config.craftablePanel;
         if (config.forgingPanel != null) this.forgingPanel = config.forgingPanel;
         shoppingList.clear();
@@ -267,6 +271,7 @@ public class SandboxWidget {
         widgetY = 40;
         widgetWidth = 250;
         widgetHeight = 300;
+        widgetScale = 100;
         craftablePanel = new PanelRect(270, 40, 180, 150);
         forgingPanel = new PanelRect(270, 200, 180, 120);
         expandedNodes = new ConcurrentHashMap<>();
@@ -285,6 +290,7 @@ public class SandboxWidget {
         int widgetY;
         int widgetWidth;
         int widgetHeight;
+        Integer widgetScale;
         PanelRect craftablePanel;
         PanelRect forgingPanel;
         Map<String, Boolean> expandedNodes;
@@ -509,19 +515,40 @@ public class SandboxWidget {
     /** The HUD panels: the shopping list, and Craftable / Forging when set to their own panel. */
     public enum Panel { MAIN, CRAFTABLE, FORGING }
 
-    /** Position (GUI pixels) and size (HUD units, before the HUD scale) of one panel. */
+    /**
+     * Position (GUI pixels), size (HUD units, before scaling) and scale (percent, on top of the HUD scale) of one
+     * panel.
+     */
     public static final class PanelRect {
         public int x;
         public int y;
         public int width;
         public int height;
+        /** 0 in configs saved before panels had their own scale; read through {@link #scalePercent()}. */
+        public int scale;
 
-        public PanelRect(int x, int y, int width, int height) {
+        public PanelRect(int x, int y, int width, int height, int scale) {
             this.x = x;
             this.y = y;
             this.width = width;
             this.height = height;
+            this.scale = scale;
         }
+
+        public PanelRect(int x, int y, int width, int height) {
+            this(x, y, width, height, 100);
+        }
+
+        public int scalePercent() {
+            return scale > 0 ? clampPanelScale(scale) : 100;
+        }
+    }
+
+    public static final int MIN_PANEL_SCALE = 25;
+    public static final int MAX_PANEL_SCALE = 400;
+
+    public static int clampPanelScale(int percent) {
+        return Math.max(MIN_PANEL_SCALE, Math.min(MAX_PANEL_SCALE, percent));
     }
 
     /** One block of centred/aligned lines under a header (Craftable, Forging). */
@@ -539,22 +566,29 @@ public class SandboxWidget {
         return scale * 2f / guiScale;
     }
 
+    /** HUD units -> GUI pixels for one panel: the HUD scale times that panel's own scale. */
+    public float scaleFactor(Panel panel) {
+        return scaleFactor() * getPanelRect(panel).scalePercent() / 100f;
+    }
+
     public PanelRect getPanelRect(Panel panel) {
         return switch (panel) {
-            case MAIN -> new PanelRect(widgetX, widgetY, widgetWidth, widgetHeight);
+            case MAIN -> new PanelRect(widgetX, widgetY, widgetWidth, widgetHeight, widgetScale);
             case CRAFTABLE -> copy(craftablePanel);
             case FORGING -> copy(forgingPanel);
         };
     }
 
-    public void setPanelRect(Panel panel, int x, int y, int width, int height) {
-        PanelRect rect = new PanelRect(x, y, Math.max(minWidth(panel), width), Math.max(minHeight(panel), height));
+    public void setPanelRect(Panel panel, int x, int y, int width, int height, int scale) {
+        PanelRect rect = new PanelRect(x, y, Math.max(minWidth(panel), width), Math.max(minHeight(panel), height),
+            clampPanelScale(scale));
         switch (panel) {
             case MAIN -> {
                 widgetX = rect.x;
                 widgetY = rect.y;
                 widgetWidth = rect.width;
                 widgetHeight = rect.height;
+                widgetScale = rect.scale;
             }
             case CRAFTABLE -> craftablePanel = rect;
             case FORGING -> forgingPanel = rect;
@@ -562,15 +596,15 @@ public class SandboxWidget {
         saveConfiguration();
     }
 
-    /** Puts every panel back to its starting place (sizes are kept): own panels go right of the main one. */
+    /** Puts every panel back to its starting place (sizes and scales are kept): own panels go right of the main one. */
     public void resetPanelPositions() {
-        float scale = scaleFactor();
         widgetX = 10;
         widgetY = 40;
-        int sideX = widgetX + Math.round(widgetWidth * scale) + 10;
-        craftablePanel = new PanelRect(sideX, widgetY, craftablePanel.width, craftablePanel.height);
-        forgingPanel = new PanelRect(sideX, widgetY + Math.round(craftablePanel.height * scale) + 10,
-            forgingPanel.width, forgingPanel.height);
+        int sideX = widgetX + Math.round(widgetWidth * scaleFactor(Panel.MAIN)) + 10;
+        craftablePanel = new PanelRect(sideX, widgetY, craftablePanel.width, craftablePanel.height,
+            craftablePanel.scalePercent());
+        forgingPanel = new PanelRect(sideX, widgetY + Math.round(craftablePanel.height * scaleFactor(Panel.CRAFTABLE)) + 10,
+            forgingPanel.width, forgingPanel.height, forgingPanel.scalePercent());
         saveConfiguration();
     }
 
@@ -583,7 +617,7 @@ public class SandboxWidget {
     }
 
     private static PanelRect copy(PanelRect r) {
-        return new PanelRect(r.x, r.y, r.width, r.height);
+        return new PanelRect(r.x, r.y, r.width, r.height, r.scalePercent());
     }
 
     /** Panels the current style draws: the main one, plus Craftable / Forging when they have their own. */
@@ -610,6 +644,12 @@ public class SandboxWidget {
      * was drawn). Render thread only.
      */
     public int renderPanel(GuiGraphicsExtractor context, Panel panel, int x, int y, int width, int maxHeight, boolean preview) {
+        return renderPanel(context, panel, x, y, width, maxHeight, scaleFactor(panel), preview);
+    }
+
+    /** As above, at the given HUD units -> GUI pixels factor (Move HUD previews a scale before it is saved). */
+    public int renderPanel(GuiGraphicsExtractor context, Panel panel, int x, int y, int width, int maxHeight, float scale,
+                           boolean preview) {
         HudStyle style = HudStyle.get();
         RecipeManager.RecipeNode root = this.recipeTree;
         List<Section> sections = sectionsFor(panel, style);
@@ -644,7 +684,6 @@ public class SandboxWidget {
         int naturalHeight = TITLE_BAR + rowsHeight + sectionsHeight + (empty ? 14 : 4) + cornerClip;
         int panelHeight = Math.min(maxHeight, naturalHeight);
 
-        float scale = scaleFactor();
         context.pose().pushMatrix();
         context.pose().translate(x, y);
         context.pose().scale(scale, scale);
