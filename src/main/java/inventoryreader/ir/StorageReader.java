@@ -53,7 +53,7 @@ public class StorageReader {
         for (int i = 0; i < slots.size() - 36; i++) {
             ItemStack stack = slots.get(i).getItem();
             if (!stack.isEmpty()) {
-                newData.merge(stack.getHoverName().getString(), stack.getCount(), Integer::sum);
+                newData.merge(ItemIds.nameOf(stack), stack.getCount(), Integer::sum);
             }
         }
 

@@ -47,7 +47,7 @@ public final class RemoteRecipeFetcher {
      * Bump when the way recipes are extracted from the repo changes, so cached snapshots are rebuilt
      * even if the remote reports "not modified".
      */
-    private static final String PARSER_VERSION = "2";
+    private static final String PARSER_VERSION = "3";
     private static final String PARSER_VERSION_KEY = "parser-version";
     private static final long MAX_ZIP_ENTRIES = 200_000;
     private static final long MAX_EXTRACTED_BYTES = 2L * 1024 * 1024 * 1024;
@@ -97,7 +97,7 @@ public final class RemoteRecipeFetcher {
                 default:
                     break;
             }
-            if (done) return; 
+            if (done) return;
         }
     }
 
@@ -226,11 +226,14 @@ public final class RemoteRecipeFetcher {
 
             // Forge recipes win over crafting recipes for the same item; keeping both would double-count.
             craftingByInternal.keySet().removeAll(forgeByInternal.keySet());
-            Map<String, Map<String, Integer>> craftingWire = resolveToDisplayNames(craftingByInternal, internalToDisplay);
-            Map<String, Map<String, Integer>> forgeWire    = resolveToDisplayNames(forgeByInternal,    internalToDisplay);
+            Map<String, String> recipeNameById = new LinkedHashMap<>(internalToDisplay);
+            Map<String, Map<String, Integer>> craftingWire = resolveToDisplayNames(craftingByInternal, internalToDisplay, recipeNameById);
+            Map<String, Map<String, Integer>> forgeWire    = resolveToDisplayNames(forgeByInternal,    internalToDisplay, recipeNameById);
 
             if (!craftingWire.isEmpty()) writeRemoteSnapshot(craftingWire);
             if (!forgeWire.isEmpty())    writeForgeSnapshot(forgeWire);
+            writeSnapshot(recipeNameById, FilePathManager.ITEM_NAMES_JSON, "item_names.json.tmp");
+            inventoryreader.ir.ItemIds.reload();
 
             LOGGER.info("NEU repo parsed (library): {} crafting, {} forge recipes", craftingWire.size(), forgeWire.size());
             inventoryreader.ir.RecipeManager.getInstance().reload();
@@ -272,15 +275,22 @@ public final class RemoteRecipeFetcher {
         target.put(output.getItemId(), ing);
     }
 
-    /** Returns a new map with all internal SkyBlock IDs replaced by their display names. */
+    /**
+     * Returns a new map with all internal SkyBlock IDs replaced by their display names. Outputs that had
+     * to be renamed to stay unique are recorded in {@code recipeNameById}.
+     */
     private static Map<String, Map<String, Integer>> resolveToDisplayNames(
             Map<String, Map<String, Integer>> byInternal,
-            Map<String, String> internalToDisplay) {
+            Map<String, String> internalToDisplay,
+            Map<String, String> recipeNameById) {
         Map<String, Map<String, Integer>> wire = new LinkedHashMap<>(byInternal.size());
         for (Map.Entry<String, Map<String, Integer>> e : byInternal.entrySet()) {
             String outDisplay = internalToDisplay.getOrDefault(e.getKey(), e.getKey());
             // Different items can share a display name (e.g. upgrade stones); keep them apart.
-            if (wire.containsKey(outDisplay)) outDisplay = outDisplay + " [" + e.getKey() + "]";
+            if (wire.containsKey(outDisplay)) {
+                outDisplay = outDisplay + " [" + e.getKey() + "]";
+                recipeNameById.put(e.getKey(), outDisplay);
+            }
             Map<String, Integer> ingDisplay = new LinkedHashMap<>();
             for (Map.Entry<String, Integer> in : e.getValue().entrySet()) {
                 ingDisplay.put(internalToDisplay.getOrDefault(in.getKey(), in.getKey()), in.getValue());

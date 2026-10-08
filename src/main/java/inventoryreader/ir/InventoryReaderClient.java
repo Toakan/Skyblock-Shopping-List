@@ -84,7 +84,7 @@ public class InventoryReaderClient implements ClientModInitializer {
         for (int i = 0; i < inventory.getContainerSize(); i++) {
             ItemStack stack = inventory.getItem(i);
             if (!stack.isEmpty()) {
-                current.merge(stack.getHoverName().getString(), stack.getCount(), Integer::sum);
+                current.merge(ItemIds.nameOf(stack), stack.getCount(), Integer::sum);
             }
         }
 
