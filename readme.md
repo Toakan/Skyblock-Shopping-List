@@ -1,8 +1,8 @@
-# Inventory Reader (Skyblock Resource Calculator)
+# Skyblock Shopping List
 
-Inventory Reader is a Fabric client mod for Hypixel SkyBlock. It keeps a count of the items in your inventory, sacks, backpacks and ender chest, and shows a shopping list HUD for a recipe you pick: what you can already craft and what you still need.
+Skyblock Shopping List is a Fabric client mod for Hypixel SkyBlock. It keeps a count of the items in your inventory, sacks, backpacks and ender chest, and shows a shopping list HUD for a recipe you pick: what you can already craft and what you still need.
 
-This is a maintained fork of [Scholiboi/InventoryReader](https://github.com/Scholiboi/InventoryReader), originally written by Scholiboi.
+This is a renamed, maintained fork of Inventory Reader ([Scholiboi/InventoryReader](https://github.com/Scholiboi/InventoryReader)), originally written by Scholiboi. Remove any old Inventory Reader jar from `mods/` before installing; its data folder (`.ir-data`) is moved over automatically on first launch.
 
 ## Requirements
 - Minecraft 26.2
@@ -12,7 +12,7 @@ This is a maintained fork of [Scholiboi/InventoryReader](https://github.com/Scho
 
 ## Installation
 1. Install Fabric Loader for Minecraft 26.2.
-2. Put Fabric API and the Inventory Reader jar in your `mods/` folder.
+2. Put Fabric API and the Skyblock Shopping List jar in your `mods/` folder.
 3. Launch Minecraft with the Fabric profile.
 
 ## First-time setup
@@ -21,19 +21,19 @@ The mod only knows what you have shown it. Open each of your sacks, backpacks an
 ## Keys and commands
 | Key / command | Action |
 | --- | --- |
-| `V` or `/ir menu` | Open the Sandbox Viewer (resources, recipes, forge planner, manual edits) |
-| `B` or `/ir widget` | Open HUD widget customization |
+| `V` or `/ssl menu` | Open the Sandbox Viewer (resources, recipes, forge planner, manual edits) |
+| `B` or `/ssl widget` | Open HUD widget customization |
 | `H` | Toggle the HUD widget |
 | `J` | Open HUD positioning |
-| `/ir` | List commands |
-| `/ir reset` | Delete all tracked item data and widget settings |
-| `/ir done` | Stop the "open a sack" reminder |
-| `/ir credits` | Show credits |
+| `/ssl` | List commands |
+| `/ssl reset` | Delete all tracked item data and widget settings |
+| `/ssl done` | Stop the "open a sack" reminder |
+| `/ssl credits` | Show credits |
 
-Keys can be rebound under Options > Controls.
+`/ir` still works as an alias for `/ssl`. Keys can be rebound under Options > Controls.
 
 ## Hypixel rules
-Inventory Reader is designed to stay within the [Hypixel Allowed Modifications](https://support.hypixel.net/hc/en-us/articles/6472550754962-Hypixel-Allowed-Modifications) guidelines:
+Skyblock Shopping List is designed to stay within the [Hypixel Allowed Modifications](https://support.hypixel.net/hc/en-us/articles/6472550754962-Hypixel-Allowed-Modifications) guidelines:
 - It is read-only. It looks at screens you open and chat messages you receive, and never sends packets, chat messages or commands to the server.
 - It does not automate anything: no clicking, crafting, moving items or opening menus for you.
 - The HUD only shows your own items and recipe arithmetic.
@@ -41,7 +41,7 @@ Inventory Reader is designed to stay within the [Hypixel Allowed Modifications](
 As Hypixel states, every modification is used at your own risk.
 
 ## Where data is stored
-Everything lives in `.ir-data/data/` inside your Minecraft folder:
+Everything lives in `.skyblock-shopping-list/data/` inside your Minecraft folder:
 - `resources.json`: tracked item counts
 - `inventorydata.json`, `allcontainerData.json`, `sacks.json`: last-seen inventory, container and sack contents, used to work out changes
 - `widget_config.json`: HUD position, size, selected recipe and expanded nodes
@@ -69,5 +69,5 @@ The jar is written to `build/libs/`. `./gradlew runClient` starts a development 
 - Recipes cover what the NEU repository lists as crafting and forge recipes.
 
 ## License and attribution
-- Code: CC-BY-SA-4.0 (see `LICENSE`). Original work by Scholiboi.
+- Code: CC-BY-SA-4.0 (see `LICENSE`). Based on Inventory Reader by Scholiboi.
 - Recipe and item data comes from NotEnoughUpdates-REPO; follow its license when reusing that data.

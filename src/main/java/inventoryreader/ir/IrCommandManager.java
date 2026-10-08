@@ -1,6 +1,6 @@
 package inventoryreader.ir;
 
-import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import static net.fabricmc.fabric.api.client.command.v2.ClientCommands.*;
@@ -16,25 +16,27 @@ public final class IrCommandManager {
 
     public static void register() {
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
-            registerIrCommands(dispatcher);
+            dispatcher.register(commandTree("ssl"));
+            // Name from when the mod was called Inventory Reader.
+            dispatcher.register(commandTree("ir"));
         });
     }
-    
-    public static void registerIrCommands(CommandDispatcher<FabricClientCommandSource> dispatcher) {
-        dispatcher.register(
-            literal("ir")
+
+    private static LiteralArgumentBuilder<FabricClientCommandSource> commandTree(String name) {
+        return
+            literal(name)
                 .executes(context -> {
-                    context.getSource().sendFeedback(Component.literal("Inventory Reader Commands:")
+                    context.getSource().sendFeedback(Component.literal(InventoryReader.NAME + " commands (/ssl, or /ir):")
                         .setStyle(Style.EMPTY.withColor(ChatFormatting.GOLD)));
-                    context.getSource().sendFeedback(Component.literal("- /ir reset: Reset all mod data")
+                    context.getSource().sendFeedback(Component.literal("- /ssl reset: Reset all mod data")
                         .setStyle(Style.EMPTY.withColor(ChatFormatting.WHITE)));
-                    context.getSource().sendFeedback(Component.literal("- /ir done: Acknowledge reminder")
+                    context.getSource().sendFeedback(Component.literal("- /ssl done: Acknowledge reminder")
                         .setStyle(Style.EMPTY.withColor(ChatFormatting.WHITE)));
-                    context.getSource().sendFeedback(Component.literal("- /ir menu: Open Inventory Reader menu")
+                    context.getSource().sendFeedback(Component.literal("- /ssl menu: Open the main menu")
                         .setStyle(Style.EMPTY.withColor(ChatFormatting.WHITE)));
-                    context.getSource().sendFeedback(Component.literal("- /ir widget: Open Widget Customization Menu")
+                    context.getSource().sendFeedback(Component.literal("- /ssl widget: Open Widget Customization")
                         .setStyle(Style.EMPTY.withColor(ChatFormatting.WHITE)));
-                    context.getSource().sendFeedback(Component.literal("- /ir credits: Show credits")
+                    context.getSource().sendFeedback(Component.literal("- /ssl credits: Show credits")
                         .setStyle(Style.EMPTY.withColor(ChatFormatting.WHITE)));
                     return 1;
                 })
@@ -48,9 +50,9 @@ public final class IrCommandManager {
                         SandboxWidget.getInstance().resetConfiguration();
                         SackReader.setNeedsReminder(true);
                         context.getSource().sendFeedback(
-                            Component.literal("Inventory Reader data reset! ")
+                            Component.literal(InventoryReader.NAME + " data reset! ")
                                 .setStyle(Style.EMPTY.withColor(ChatFormatting.GREEN))
-                                .append(Component.literal("Open a sack or type /ir done to stop reminders.")
+                                .append(Component.literal("Open a sack or type /ssl done to stop reminders.")
                                     .setStyle(Style.EMPTY.withColor(ChatFormatting.YELLOW)))
                         );
                         return 1;
@@ -80,7 +82,7 @@ public final class IrCommandManager {
                 .then(literal("credits")
                     .executes(context -> {
                         context.getSource().sendFeedback(
-                            Component.literal("Inventory Reader by Scholiboi, maintained by Tad")
+                            Component.literal(InventoryReader.NAME + " by Tad, based on Inventory Reader by Scholiboi")
                                 .setStyle(Style.EMPTY.withColor(ChatFormatting.GOLD))
                         );
                         context.getSource().sendFeedback(
@@ -92,7 +94,6 @@ public final class IrCommandManager {
                         );
                         return 1;
                     })
-                )
-        );
+                );
     }
 }

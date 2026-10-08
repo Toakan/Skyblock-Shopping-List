@@ -37,15 +37,15 @@ public class WelcomeManager {
         if (client.player == null) return;
 
         String divider = "§6§l" + "=".repeat(40);
-        
+
         client.player.sendSystemMessage(Component.literal(divider));
-        client.player.sendSystemMessage(Component.literal("§b§lSkyblock Resource Calculator").setStyle(
+        client.player.sendSystemMessage(Component.literal("§b§l" + InventoryReader.NAME).setStyle(
             Style.EMPTY.withBold(true).withColor(ChatFormatting.AQUA)
         ));
-        
+
         client.player.sendSystemMessage(Component.literal("§eTrack resources and recipes for Hypixel Skyblock mining."));
         client.player.sendSystemMessage(Component.literal(""));
-        
+
         MutableComponent commandsText = Component.literal("§6§lCommands:").append(Component.literal("\n§e- Press "));
         commandsText.append(Component.literal("§b[V]").setStyle(Style.EMPTY.withBold(true).withColor(ChatFormatting.AQUA)));
         commandsText.append(Component.literal("§e to open the Sandbox Viewer"));
@@ -53,16 +53,16 @@ public class WelcomeManager {
         commandsText.append(Component.literal("§b[B]").setStyle(Style.EMPTY.withBold(true).withColor(ChatFormatting.AQUA)));
         commandsText.append(Component.literal("§e to customize the HUD widget"));
         client.player.sendSystemMessage(commandsText);
-        
+
         MutableComponent chatCommandsText = Component.literal("§6§lChat Commands:").setStyle(
             Style.EMPTY.withBold(true).withColor(ChatFormatting.GOLD)
         );
         client.player.sendSystemMessage(chatCommandsText);
-        client.player.sendSystemMessage(Component.literal("§e- §b/ir menu§e: Open Sandbox Viewer"));
-        client.player.sendSystemMessage(Component.literal("§e- §b/ir widget§e: Open Widget Customization"));
-        client.player.sendSystemMessage(Component.literal("§e- §b/ir reset§e: Reset all mod data"));
-        client.player.sendSystemMessage(Component.literal("§e- §b/ir done§e: Acknowledge reminders"));
-        client.player.sendSystemMessage(Component.literal("§e- §b/ir§e: Show all available commands"));
+        client.player.sendSystemMessage(Component.literal("§e- §b/ssl menu§e: Open Sandbox Viewer"));
+        client.player.sendSystemMessage(Component.literal("§e- §b/ssl widget§e: Open Widget Customization"));
+        client.player.sendSystemMessage(Component.literal("§e- §b/ssl reset§e: Reset all mod data"));
+        client.player.sendSystemMessage(Component.literal("§e- §b/ssl done§e: Acknowledge reminders"));
+        client.player.sendSystemMessage(Component.literal("§e- §b/ssl§e: Show all available commands"));
 
         client.player.sendSystemMessage(Component.literal(""));
         MutableComponent firstTimeText = Component.literal("§d§lFirst-Time Setup:").setStyle(
@@ -77,13 +77,13 @@ public class WelcomeManager {
         client.player.sendSystemMessage(Component.literal("§e2. Use the 'Modify' tab to modify resource amounts, if needed"));
         client.player.sendSystemMessage(Component.literal("§e3. In the 'Forge' tab, select recipes to view progress"));
         client.player.sendSystemMessage(Component.literal("§e4. Enable the HUD widget to track resources while mining"));
-        
+
         try {
             WELCOME_FLAG_FILE.createNewFile();
         } catch (IOException e) {
             InventoryReader.LOGGER.error("Failed to create welcome flag file", e);
         }
-        
+
         isFirstTimeUser = false;
         client.player.sendSystemMessage(Component.literal(divider));
     }

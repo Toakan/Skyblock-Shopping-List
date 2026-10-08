@@ -528,7 +528,7 @@ public class SandboxViewer extends Screen {
 
             context.fill(0, 0, this.width, 30, TITLE_BG);
             context.outline(0, 0, this.width, 30, BORDER_COLOR);
-            String titleStr = "Skyblock Resource Calculator";
+            String titleStr = InventoryReader.NAME;
             context.text(font,
                 Component.literal(titleStr).setStyle(Style.EMPTY.withColor(ChatFormatting.GOLD).withBold(true)),
                 12, 11, GOLD, false); // left-aligned: the right side holds the Settings / HUD Widget buttons

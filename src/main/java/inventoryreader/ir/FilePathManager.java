@@ -14,7 +14,9 @@ import net.fabricmc.loader.api.FabricLoader;
 import inventoryreader.ir.recipes.RemoteRecipeFetcher;
 
 public class FilePathManager {
-    public static final File MOD_DIR = new File(FabricLoader.getInstance().getGameDir().toFile(), ".ir-data");
+    public static final File MOD_DIR = new File(FabricLoader.getInstance().getGameDir().toFile(), ".skyblock-shopping-list");
+    /** Data folder used while the mod was called Inventory Reader; moved to {@link #MOD_DIR} on first launch. */
+    private static final File LEGACY_MOD_DIR = new File(FabricLoader.getInstance().getGameDir().toFile(), ".ir-data");
     public static final File DATA_DIR = new File(MOD_DIR, "data");
     public static final File CONTAINER_JSON = new File(DATA_DIR, "allcontainerData.json");
     public static final File INVENTORY_JSON = new File(DATA_DIR, "inventorydata.json");
@@ -44,6 +46,7 @@ public class FilePathManager {
     public static synchronized void initialize() {
         if (initialized) return;
         initialized = true;
+        migrateLegacyDir();
         DATA_DIR.mkdirs();
         handleVersionUpgrade();
         migrateVersionedResources();
@@ -51,6 +54,16 @@ public class FilePathManager {
         if (!REMOTE_SOURCES_JSON.exists()) initializeRemoteSourcesConfig();
         seedResources();
         RemoteRecipeFetcher.fetchAsync();
+    }
+
+    private static void migrateLegacyDir() {
+        if (MOD_DIR.exists() || !LEGACY_MOD_DIR.isDirectory()) return;
+        try {
+            Files.move(LEGACY_MOD_DIR.toPath(), MOD_DIR.toPath());
+            InventoryReader.LOGGER.info("Moved {} to {}", LEGACY_MOD_DIR.getName(), MOD_DIR.getName());
+        } catch (IOException e) {
+            InventoryReader.LOGGER.warn("Could not move {} to {}; starting with empty data", LEGACY_MOD_DIR.getName(), MOD_DIR.getName(), e);
+        }
     }
 
     /** Deletes all tracked item data and widget settings. Recipes are kept. */

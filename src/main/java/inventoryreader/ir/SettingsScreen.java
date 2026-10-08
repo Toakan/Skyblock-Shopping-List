@@ -20,7 +20,7 @@ public class SettingsScreen extends Screen {
     private int craftAmountLabelY;
 
     public SettingsScreen(Screen parent) {
-        super(Component.literal("Inventory Reader Settings"));
+        super(Component.literal(InventoryReader.NAME + " Settings"));
         this.parent = parent;
     }
 

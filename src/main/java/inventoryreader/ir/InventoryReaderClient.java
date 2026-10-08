@@ -34,13 +34,13 @@ public class InventoryReaderClient implements ClientModInitializer {
         FilePathManager.initialize();
 
         openSandboxViewerKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
-            "key.ir.open_sandbox_viewer", GLFW.GLFW_KEY_V, KeyMapping.Category.MISC));
+            "key.skyblock-shopping-list.open_sandbox_viewer", GLFW.GLFW_KEY_V, KeyMapping.Category.MISC));
         openWidgetCustomizationKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
-            "key.ir.open_widget_customization", GLFW.GLFW_KEY_B, KeyMapping.Category.MISC));
+            "key.skyblock-shopping-list.open_widget_customization", GLFW.GLFW_KEY_B, KeyMapping.Category.MISC));
         toggleWidgetKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
-            "key.ir.toggle_widget", GLFW.GLFW_KEY_H, KeyMapping.Category.MISC));
+            "key.skyblock-shopping-list.toggle_widget", GLFW.GLFW_KEY_H, KeyMapping.Category.MISC));
         openPositioningHudKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
-            "key.ir.open_positioning_hud", GLFW.GLFW_KEY_J, KeyMapping.Category.MISC));
+            "key.skyblock-shopping-list.open_positioning_hud", GLFW.GLFW_KEY_J, KeyMapping.Category.MISC));
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (openSandboxViewerKey.consumeClick() || shouldOpenSandboxViewer) {
@@ -70,7 +70,7 @@ public class InventoryReaderClient implements ClientModInitializer {
         ReminderManager.initialize();
         WelcomeManager.initialize();
         SandboxWidget.getInstance();
-        InventoryReader.LOGGER.info("Initialized Inventory Reader client components");
+        InventoryReader.LOGGER.info("Initialized {} client components", InventoryReader.NAME);
     }
 
     /** Forgets the remembered inventory (after a reset deleted the file). */
