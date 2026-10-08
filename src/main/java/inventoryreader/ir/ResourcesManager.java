@@ -18,7 +18,7 @@ import java.util.concurrent.atomic.AtomicLong;
 /**
  * Owns resources.json: the player's item counts by display name. Counts live in memory and are written
  * to disk on a background thread, so callers on the render thread never touch the file system.
- * Only names already present (seeded from recipes) are tracked; deltas for other items are ignored.
+ * Every item seen is tracked; names seeded from recipes also appear with a zero count.
  */
 public class ResourcesManager {
     private static final ResourcesManager INSTANCE = new ResourcesManager();
@@ -125,7 +125,14 @@ public class ResourcesManager {
         for (Map.Entry<String, Integer> e : deltas.entrySet()) {
             if (e.getValue() == null || e.getValue() == 0) continue;
             String key = resolve(e.getKey());
-            if (key == null) continue;
+            if (key == null) {
+                // Not seen before: start tracking it. Dropping it would lose the count for good, because
+                // the inventory/container/sack snapshots already record it as counted.
+                if (ItemNames.isJunk(e.getKey())) continue;
+                key = ItemNames.clean(e.getKey());
+                resources.put(key, 0);
+                keyByNormalized.putIfAbsent(ItemNames.normalize(key), key);
+            }
             resources.merge(key, e.getValue(), Integer::sum);
             dirty = true;
         }
