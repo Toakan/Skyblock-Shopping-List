@@ -46,7 +46,7 @@ public final class MenuTabs {
             case RESOURCES -> new SandboxViewer(SandboxViewer.Mode.RESOURCES);
             case RECIPES -> new SandboxViewer(SandboxViewer.Mode.RECIPES);
             case FORGE -> new SandboxViewer(SandboxViewer.Mode.FORGE);
-            case SETTINGS -> new SettingsScreen();
+            case SETTINGS -> ConfigScreen.create(Minecraft.getInstance().gui.screen());
         };
         Minecraft.getInstance().gui.setScreen(screen);
     }

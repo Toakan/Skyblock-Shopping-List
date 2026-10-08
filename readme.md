@@ -14,12 +14,13 @@ The license and credits remain the same as the original Inventory Reader project
 - Minecraft 26.2
 - Fabric Loader 0.19.5 or newer
 - Fabric API 0.161.0+26.2 or newer
+- YetAnotherConfigLib 3.9.7+26.2 or newer (already installed if you use Skyblocker)
 - Java 25
 - Recommended: [Hypixel Mod API](https://modrinth.com/mod/hypixel-mod-api) (official), for reliable SkyBlock detection
 
 ## Installation
 1. Install Fabric Loader for Minecraft 26.2.
-2. Put Fabric API, the Hypixel Mod API (recommended) and the Skyblock Shopping List jar in your `mods/` folder.
+2. Put Fabric API, YetAnotherConfigLib, the Hypixel Mod API (recommended) and the Skyblock Shopping List jar in your `mods/` folder.
 3. Launch Minecraft with the Fabric profile.
 
 ## First-time setup
@@ -31,7 +32,7 @@ Press `V` (or `/ssl menu`) to open the menu. It has five tabs:
 - **Resources**: your item counts with search. Type in a box or use − / + to correct a count; changes save straight away. **Show all** also lists items you have none of.
 - **Recipes**: browse any recipe's full tree for a chosen amount, and **Add to list**.
 - **Forge**: what you still need for one recipe, with **Add to list**.
-- **Settings**: HUD on/off, Show remaining, Total section, Notifications, Auto-remove, Max recipes, **Move HUD...** and **Key binds...**.
+- **Settings**: opens the settings screen (YetAnotherConfigLib, same style as Skyblocker), with HUD, Notifications and Controls categories: HUD on/off, Show remaining, Total section, Max recipes, **Move HUD...**, Pop-ups, Auto-remove, Sack reminder and **Key binds...**. Changes apply when you press Save.
 
 The HUD (`H` to toggle) shows:
 - **Total**: every raw material still needed across all recipes, missing items first. Your stock is shared between recipes, never counted twice (earlier entries get it first).
