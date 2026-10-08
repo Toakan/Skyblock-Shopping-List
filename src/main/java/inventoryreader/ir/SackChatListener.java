@@ -4,22 +4,25 @@ import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.HoverEvent;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Reads the periodic "[Sacks] +12 items, -3 items. (Last 30s.)" chat summary. The per-item changes are in
- * the hover text of the "+N items" / "-N items" parts. Observes messages only; never cancels or edits them.
+ * Reads Hypixel's periodic "[Sacks] +12 items, -3 items. (Last 30s.)" chat summary. Items that go
+ * straight into sacks while mining only show up here. The per-item changes are in the hover text of the
+ * "+N items" / "-N items" parts, one per line ("+64 Coal (Mining Sack)"). Observes messages only; never
+ * cancels or edits them.
  */
 public final class SackChatListener {
-    private static final Pattern SACKS_ADDED_AND_REMOVED = Pattern.compile(
-        "\\[Sacks\\] [+-].+ items?, [+-].+ items?\\. \\(Last .+s\\.\\).*"
-    );
-    private static final Pattern SACKS_SINGLE = Pattern.compile(
-        "\\[Sacks\\] [+-].+ items?\\. \\(Last .+s\\.\\).*"
-    );
+    /** "+1,234 Enchanted Coal (Mining Sack)": optional sign, count, item name, optional sack name. */
+    private static final Pattern ITEM_LINE = Pattern.compile("^\\s*([+-]?)([\\d,]+)\\s+(.+?)(?:\\s+\\([^()]*\\))?\\s*$");
 
     private SackChatListener() {}
 
@@ -36,49 +39,50 @@ public final class SackChatListener {
 
     private static void onGameMessage(Component message) {
         String text = message.getString();
-        if (!text.startsWith("[Sacks]")) return;
-        List<Component> parts = message.getSiblings();
+        if (!text.contains("[Sacks]")) return;
+
+        List<String> hoverTexts = new ArrayList<>();
+        collectHoverTexts(message, hoverTexts, Collections.newSetFromMap(new IdentityHashMap<>()));
+
         Map<String, Integer> deltas = new LinkedHashMap<>();
-        if (SACKS_ADDED_AND_REMOVED.matcher(text).find()) {
-            // Siblings: "+N items" (hover), ", ", ... "-N items" (hover), ...
-            readHover(parts, 0, deltas);
-            readHover(parts, 3, deltas);
-        } else if (SACKS_SINGLE.matcher(text).find()) {
-            readHover(parts, 0, deltas);
-        } else {
+        for (String hover : hoverTexts) {
+            // Lines without their own sign take it from the nearest "Added"/"Removed" heading.
+            int sectionSign = 1;
+            for (String line : hover.split("\n")) {
+                if (line.contains("Removed")) sectionSign = -1;
+                else if (line.contains("Added")) sectionSign = 1;
+                Matcher m = ITEM_LINE.matcher(line);
+                if (!m.matches()) continue;
+                Integer count = parseCount(m.group(2));
+                if (count == null || count == 0) continue;
+                int sign = m.group(1).isEmpty() ? sectionSign : (m.group(1).equals("-") ? -1 : 1);
+                deltas.merge(ItemNames.clean(m.group(3)), sign * count, Integer::sum);
+            }
+        }
+
+        if (deltas.isEmpty()) {
+            // Logged so a changed message format can be diagnosed from latest.log.
+            InventoryReader.LOGGER.info("Unrecognised [Sacks] message: {} | hover: {}", text, hoverTexts);
             return;
         }
         InventoryReader.LOGGER.debug("Sack chat deltas: {}", deltas);
         SackReader.getInstance().applyChatDeltas(deltas);
     }
 
-    private static void readHover(List<Component> parts, int index, Map<String, Integer> out) {
-        if (index >= parts.size()) return;
-        HoverEvent hover = parts.get(index).getStyle().getHoverEvent();
-        if (!(hover instanceof HoverEvent.ShowText(Component value)) || value == null) return;
-        parseItemLines(value.getSiblings(), out);
-    }
-
-    /**
-     * The hover text repeats four siblings per item: count, item name, sack name, line break.
-     */
-    private static void parseItemLines(List<Component> contents, Map<String, Integer> out) {
-        Integer count = null;
-        for (int i = 0; i < contents.size(); i++) {
-            String s = contents.get(i).getString().trim();
-            if (s.isEmpty()) continue;
-            if (i % 4 == 0) {
-                count = parseCount(s);
-            } else if (i % 4 == 1 && count != null) {
-                out.merge(ItemNames.clean(s), count, Integer::sum);
-                count = null;
-            }
+    /** Collects the text of every distinct show-text hover in the component tree. */
+    private static void collectHoverTexts(Component component, List<String> out, Set<Component> seen) {
+        if (component.getStyle().getHoverEvent() instanceof HoverEvent.ShowText(Component value)
+                && value != null && seen.add(value)) {
+            out.add(value.getString());
+        }
+        for (Component sibling : component.getSiblings()) {
+            collectHoverTexts(sibling, out, seen);
         }
     }
 
     private static Integer parseCount(String s) {
         try {
-            return Integer.parseInt(s.replace(",", "").replace("+", ""));
+            return Integer.parseInt(s.replace(",", ""));
         } catch (NumberFormatException e) {
             return null;
         }
