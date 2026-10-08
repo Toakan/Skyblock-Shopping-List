@@ -16,6 +16,9 @@ import java.util.List;
  */
 public final class HudStyle {
     public enum AmountFormat { REMAINING, HAVE_NEED, REQUIRED }
+    public enum Align { LEFT, CENTRE, RIGHT }
+    /** Where the Craftable / Forging sections go. */
+    public enum Placement { MAIN_PANEL, OWN_PANEL }
 
     public static final String DEFAULT_FONT = "minecraft:default";
 
@@ -35,6 +38,12 @@ public final class HudStyle {
     public int craftable = 0xFFFFE45C;
     public int sectionHeader = 0xFFFFFF55;
     public int sectionText = 0xFFFF9D00;
+    public int forgingHeader = 0xFFFFFF55;
+    public int forgingText = 0xFFFF9D00;
+
+    // Size: percent of the original size. Ignores Minecraft's GUI Scale unless followGuiScale is on.
+    public int hudScale = 100;
+    public boolean followGuiScale = false;
 
     // Sizes (GUI pixels).
     public int rowHeight = 16;
@@ -46,7 +55,14 @@ public final class HudStyle {
 
     // Text.
     public String font = DEFAULT_FONT;
+    /** Row (recipe tree) text size. */
     public float textScale = 1.0f;
+    public float titleScale = 1.0f;
+    public float craftableScale = 1.0f;
+    public float forgingScale = 1.0f;
+    public Align titleAlign = Align.CENTRE;
+    public Align craftableAlign = Align.CENTRE;
+    public Align forgingAlign = Align.CENTRE;
     public boolean textShadow = false;
     public boolean boldRootNames = true;
 
@@ -55,6 +71,10 @@ public final class HudStyle {
     public boolean showRowBoxes = true;
     public boolean showMarks = false;
     public AmountFormat amountFormat = AmountFormat.REMAINING;
+    public boolean showCraftable = true;
+    public boolean showForging = true;
+    public Placement craftablePlacement = Placement.MAIN_PANEL;
+    public Placement forgingPlacement = Placement.MAIN_PANEL;
 
     private static volatile HudStyle current;
     /** Font id -> description, cached so text drawing doesn't parse the id every frame. */
@@ -103,12 +123,25 @@ public final class HudStyle {
         rowGap = clamp(rowGap, 0, 6);
         panelBorderWidth = clamp(panelBorderWidth, 0, 4);
         rowBorderWidth = clamp(rowBorderWidth, 0, 2);
-        textScale = Math.max(0.5f, Math.min(1.5f, textScale));
+        textScale = clamp(textScale, 0.5f, 2.0f);
+        titleScale = clamp(titleScale, 0.5f, 2.0f);
+        craftableScale = clamp(craftableScale, 0.5f, 2.0f);
+        forgingScale = clamp(forgingScale, 0.5f, 2.0f);
+        hudScale = clamp(hudScale, 50, 300);
+        if (titleAlign == null) titleAlign = Align.CENTRE;
+        if (craftableAlign == null) craftableAlign = Align.CENTRE;
+        if (forgingAlign == null) forgingAlign = Align.CENTRE;
+        if (craftablePlacement == null) craftablePlacement = Placement.MAIN_PANEL;
+        if (forgingPlacement == null) forgingPlacement = Placement.MAIN_PANEL;
         if (font == null || Identifier.tryParse(font) == null) font = DEFAULT_FONT;
         if (amountFormat == null) amountFormat = AmountFormat.REMAINING;
     }
 
     private static int clamp(int value, int min, int max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    private static float clamp(float value, float min, float max) {
         return Math.max(min, Math.min(max, value));
     }
 

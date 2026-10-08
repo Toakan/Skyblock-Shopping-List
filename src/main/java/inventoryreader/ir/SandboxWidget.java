@@ -35,6 +35,9 @@ public class SandboxWidget {
     private int widgetY = 40;
     private int widgetWidth = 250;
     private int widgetHeight = 300;
+    /** Craftable / Forging panels, used when Appearance puts them in their own panel. */
+    private PanelRect craftablePanel = new PanelRect(270, 40, 180, 150);
+    private PanelRect forgingPanel = new PanelRect(270, 200, 180, 120);
     private Map<String, Boolean> expandedNodes = new ConcurrentHashMap<>();
     private final List<String> messages = new CopyOnWriteArrayList<>();
     /** "Forging -" lines: forge slots making something the shopping list needs. */
@@ -190,6 +193,8 @@ public class SandboxWidget {
         config.widgetY = widgetY;
         config.widgetWidth = widgetWidth;
         config.widgetHeight = widgetHeight;
+        config.craftablePanel = craftablePanel;
+        config.forgingPanel = forgingPanel;
         config.expandedNodes = new HashMap<>(expandedNodes);
         config.shoppingList = getShoppingList();
         config.showTotal = showTotal;
@@ -220,6 +225,8 @@ public class SandboxWidget {
         if (config.maxRecipes != null) this.maxRecipes = clampMaxRecipes(config.maxRecipes);
         if (config.widgetWidth > 0) this.widgetWidth = config.widgetWidth;
         if (config.widgetHeight > 0) this.widgetHeight = config.widgetHeight;
+        if (config.craftablePanel != null) this.craftablePanel = config.craftablePanel;
+        if (config.forgingPanel != null) this.forgingPanel = config.forgingPanel;
         shoppingList.clear();
         if (config.shoppingList != null) {
             for (ShoppingListEntry e : config.shoppingList) {
@@ -242,6 +249,8 @@ public class SandboxWidget {
         widgetY = 40;
         widgetWidth = 250;
         widgetHeight = 300;
+        craftablePanel = new PanelRect(270, 40, 180, 150);
+        forgingPanel = new PanelRect(270, 200, 180, 120);
         expandedNodes = new ConcurrentHashMap<>();
         showTotal = true;
         notifications = true;
@@ -258,6 +267,8 @@ public class SandboxWidget {
         int widgetY;
         int widgetWidth;
         int widgetHeight;
+        PanelRect craftablePanel;
+        PanelRect forgingPanel;
         Map<String, Boolean> expandedNodes;
         List<ShoppingListEntry> shoppingList;
         /** Read only, for configs written before the shopping list existed. */
@@ -416,71 +427,274 @@ public class SandboxWidget {
             Component.literal(title).withStyle(ChatFormatting.GOLD), Component.literal(message)));
     }
 
+    /** The HUD panels: the shopping list, and Craftable / Forging when set to their own panel. */
+    public enum Panel { MAIN, CRAFTABLE, FORGING }
+
+    /** Position (GUI pixels) and size (HUD units, before the HUD scale) of one panel. */
+    public static final class PanelRect {
+        public int x;
+        public int y;
+        public int width;
+        public int height;
+
+        public PanelRect(int x, int y, int width, int height) {
+            this.x = x;
+            this.y = y;
+            this.width = width;
+            this.height = height;
+        }
+    }
+
+    /** One block of centred/aligned lines under a header (Craftable, Forging). */
+    private record Section(String header, List<String> lines, float scale, HudStyle.Align align,
+                           int headerColor, int textColor) {}
+
+    private static final int TITLE_BAR = 20;
+
+    /** HUD units -> GUI pixels. Ignores Minecraft's GUI Scale unless the style says to follow it. */
+    public static float scaleFactor() {
+        HudStyle style = HudStyle.get();
+        float scale = style.hudScale / 100f;
+        if (style.followGuiScale) return scale;
+        int guiScale = Math.max(1, Minecraft.getInstance().getWindow().getGuiScale());
+        return scale * 2f / guiScale;
+    }
+
+    public PanelRect getPanelRect(Panel panel) {
+        return switch (panel) {
+            case MAIN -> new PanelRect(widgetX, widgetY, widgetWidth, widgetHeight);
+            case CRAFTABLE -> copy(craftablePanel);
+            case FORGING -> copy(forgingPanel);
+        };
+    }
+
+    public void setPanelRect(Panel panel, int x, int y, int width, int height) {
+        PanelRect rect = new PanelRect(x, y, Math.max(minWidth(panel), width), Math.max(minHeight(panel), height));
+        switch (panel) {
+            case MAIN -> {
+                widgetX = rect.x;
+                widgetY = rect.y;
+                widgetWidth = rect.width;
+                widgetHeight = rect.height;
+            }
+            case CRAFTABLE -> craftablePanel = rect;
+            case FORGING -> forgingPanel = rect;
+        }
+        saveConfiguration();
+    }
+
+    /** Puts every panel back to its starting place (sizes are kept): own panels go right of the main one. */
+    public void resetPanelPositions() {
+        float scale = scaleFactor();
+        widgetX = 10;
+        widgetY = 40;
+        int sideX = widgetX + Math.round(widgetWidth * scale) + 10;
+        craftablePanel = new PanelRect(sideX, widgetY, craftablePanel.width, craftablePanel.height);
+        forgingPanel = new PanelRect(sideX, widgetY + Math.round(craftablePanel.height * scale) + 10,
+            forgingPanel.width, forgingPanel.height);
+        saveConfiguration();
+    }
+
+    public static int minWidth(Panel panel) {
+        return panel == Panel.MAIN ? 180 : 80;
+    }
+
+    public static int minHeight(Panel panel) {
+        return panel == Panel.MAIN ? 120 : 40;
+    }
+
+    private static PanelRect copy(PanelRect r) {
+        return new PanelRect(r.x, r.y, r.width, r.height);
+    }
+
+    /** Panels the current style draws: the main one, plus Craftable / Forging when they have their own. */
+    public static List<Panel> activePanels() {
+        HudStyle style = HudStyle.get();
+        List<Panel> panels = new ArrayList<>();
+        panels.add(Panel.MAIN);
+        if (style.showCraftable && style.craftablePlacement == HudStyle.Placement.OWN_PANEL) panels.add(Panel.CRAFTABLE);
+        if (style.showForging && style.forgingPlacement == HudStyle.Placement.OWN_PANEL) panels.add(Panel.FORGING);
+        return panels;
+    }
+
     private void render(GuiGraphicsExtractor context) {
-        int screenHeight = Minecraft.getInstance().getWindow().getGuiScaledHeight();
-        renderAt(context, widgetX, widgetY, widgetWidth, Math.min(screenHeight - 40, widgetHeight));
+        for (Panel panel : activePanels()) {
+            PanelRect rect = getPanelRect(panel);
+            renderPanel(context, panel, rect.x, rect.y, rect.width, rect.height, false);
+        }
     }
 
     /**
-     * Draws the HUD panel at the given place, as tall as its content needs up to {@code panelMaxHeight}. The
-     * Move HUD preview uses this too, so it always matches the real HUD. Render thread only.
+     * Draws one panel with its top-left at (x, y) in GUI pixels; width and max height are HUD units. The panel is
+     * as tall as its content up to the max height; anything below is cut off and marked with "…". The Move HUD
+     * preview draws through here too, so it always matches. Returns the drawn height in HUD units (0 if nothing
+     * was drawn). Render thread only.
      */
-    public void renderAt(GuiGraphicsExtractor context, int panelX, int panelY, int panelWidth, int panelMaxHeight) {
-        RecipeManager.RecipeNode root = this.recipeTree;
-        if (root == null) return;
+    public int renderPanel(GuiGraphicsExtractor context, Panel panel, int x, int y, int width, int maxHeight, boolean preview) {
         HudStyle style = HudStyle.get();
+        RecipeManager.RecipeNode root = this.recipeTree;
+        List<Section> sections = sectionsFor(panel, style);
+        String title;
+        int rowsHeight = 0;
+        switch (panel) {
+            case MAIN -> {
+                if (root == null) return 0;
+                title = getTitle();
+                int visibleLines = 0;
+                for (RecipeManager.RecipeNode top : root.ingredients) visibleLines += countVisibleRecipeTreeLines(top, LIST_KEY);
+                rowsHeight = 2 + visibleLines * (style.rowHeight + style.rowGap);
+            }
+            case CRAFTABLE -> title = "Craftable";
+            default -> title = "Forging";
+        }
+        boolean empty = panel != Panel.MAIN && sections.stream().allMatch(s -> s.lines().isEmpty());
+        if (empty && !preview) return 0;
+
         Minecraft client = Minecraft.getInstance();
-        int screenHeight = client.getWindow().getGuiScaledHeight();
-        currentPanelWidth = panelWidth;
-
-        int rowStep = style.rowHeight + style.rowGap;
-        int visibleLines = 0;
-        for (RecipeManager.RecipeNode top : root.ingredients) visibleLines += countVisibleRecipeTreeLines(top, LIST_KEY);
-        int lineUnit = Math.round(10 * style.textScale);
-        int messageLinesRaw = countMessageLines(client, panelWidth);
-        int availableForMessagesMax = Math.max(0, Math.min((int)(screenHeight * 0.4), panelMaxHeight - 20 - visibleLines * rowStep - 15));
-        int messageSectionHeightEst = messageLinesRaw > 0 ? Math.min(messageLinesRaw * lineUnit + 20, availableForMessagesMax) : 0;
-
-        // Rows shrink (down to 6px) when the panel can't fit them at the chosen height.
-        int availableTreeHeight = Math.max(0, panelMaxHeight - 22 - (messageSectionHeightEst > 0 ? (messageSectionHeightEst + 15) : 0));
-        int safeLines = Math.max(1, visibleLines);
-        int step = Math.min(rowStep, Math.max(6, availableTreeHeight / safeLines));
-        float fit = (float) step / rowStep;
-        currentNodeLineHeight = Math.max(6, Math.round(style.rowHeight * fit));
-        currentRowGap = Math.round(style.rowGap * fit);
-        currentTreeScale = currentNodeLineHeight / 16.0f;
-        int treeHeightActual = safeLines * (currentNodeLineHeight + currentRowGap);
-
-        int availableForMessages = Math.max(0, Math.min((int)(screenHeight * 0.4), panelMaxHeight - 20 - treeHeightActual - 15));
-        int messageSectionHeight = messageLinesRaw > 0 ? Math.min(messageLinesRaw * lineUnit + 20, availableForMessages) : 0;
-        int panelHeight = Math.min(panelMaxHeight, 20 + treeHeightActual + messageSectionHeight + 15);
-
-        context.fill(panelX, panelY, panelX + panelWidth, panelY + panelHeight, style.panelBackground);
-        context.fill(panelX, panelY, panelX + panelWidth, panelY + 20, style.headerBackground);
-        for (int i = 0; i < style.panelBorderWidth; i++) {
-            context.outline(panelX - i, panelY - i, panelWidth + i * 2, panelHeight + i * 2, style.panelBorder);
+        boolean ownPanel = panel != Panel.MAIN;
+        int contentWidth = width - 2 * style.padding;
+        List<List<String>> wrapped = new ArrayList<>();
+        int sectionsHeight = 0;
+        for (Section section : sections) {
+            List<String> lines = wrap(client, style, section, contentWidth);
+            wrapped.add(lines);
+            sectionsHeight += sectionHeight(section, lines.size(), ownPanel);
         }
+        int naturalHeight = TITLE_BAR + rowsHeight + sectionsHeight + (empty ? 14 : 4);
+        int panelHeight = Math.min(maxHeight, naturalHeight);
 
-        Component title = style.text(getTitle(), style.titleText, true);
-        int titleWidth = client.font.width(title);
-        int maxTitleWidth = Math.max(20, panelWidth - 10);
-        float titleScale = Math.min(style.textScale, (float) maxTitleWidth / Math.max(1, titleWidth));
+        float scale = scaleFactor();
         context.pose().pushMatrix();
-        context.pose().translate(panelX + (panelWidth - titleWidth * titleScale) / 2f, panelY + (20 - 8 * titleScale) / 2f);
-        context.pose().scale(titleScale, titleScale);
-        context.text(client.font, title, 0, 0, 0xFFFFFFFF, style.textShadow);
+        context.pose().translate(x, y);
+        context.pose().scale(scale, scale);
+
+        context.fill(0, 0, width, panelHeight, style.panelBackground);
+        context.fill(0, 0, width, TITLE_BAR, style.headerBackground);
+        for (int i = 0; i < style.panelBorderWidth; i++) {
+            context.outline(-i, -i, width + i * 2, panelHeight + i * 2, style.panelBorder);
+        }
+        Component titleText = style.text(title, style.titleText, true);
+        int titleWidth = client.font.width(titleText);
+        float titleScale = Math.min(style.titleScale, (float) (width - 10) / Math.max(1, titleWidth));
+        drawScaled(context, titleText, alignedX(style.titleAlign, width, 5, titleWidth * titleScale),
+            (TITLE_BAR - 8 * titleScale) / 2f, titleScale, style.textShadow);
+        context.fill(0, TITLE_BAR - 1, width, TITLE_BAR, style.divider);
+
+        context.enableScissor(0, TITLE_BAR, width, panelHeight);
+        int cursorY = TITLE_BAR + 2;
+        if (panel == Panel.MAIN) {
+            currentPanelWidth = width;
+            currentNodeLineHeight = style.rowHeight;
+            currentRowGap = style.rowGap;
+            currentTreeScale = style.rowHeight / 16.0f;
+            for (RecipeManager.RecipeNode top : root.ingredients) {
+                cursorY = renderRecipeTree(context, top, style.padding, cursorY, 0, LIST_KEY);
+            }
+        }
+        if (empty) {
+            Component hint = style.text("(nothing yet)", style.itemText, false);
+            drawScaled(context, hint, (width - client.font.width(hint)) / 2f, cursorY + 2, 1f, style.textShadow);
+        }
+        for (int i = 0; i < sections.size(); i++) {
+            cursorY = drawSection(context, sections.get(i), wrapped.get(i), width, cursorY, ownPanel);
+        }
+        context.disableScissor();
+
+        if (naturalHeight > panelHeight) {
+            // Cut off: tell the player there is more (raise the max height in Move HUD, or collapse rows).
+            Component more = style.text("…", style.itemText, true);
+            context.fill(0, panelHeight - 9, width, panelHeight, style.panelBackground);
+            drawScaled(context, more, (width - client.font.width(more)) / 2f, panelHeight - 9, 1f, style.textShadow);
+        }
         context.pose().popMatrix();
-        context.fill(panelX, panelY + 19, panelX + panelWidth, panelY + 20, style.divider);
+        return panelHeight;
+    }
 
-        int treeEndY = panelY + 22;
-        for (RecipeManager.RecipeNode top : root.ingredients) {
-            treeEndY = renderRecipeTree(context, top, panelX + style.padding, treeEndY, 0, LIST_KEY);
+    /** The Craftable / Forging blocks this panel shows. */
+    private List<Section> sectionsFor(Panel panel, HudStyle style) {
+        List<Section> sections = new ArrayList<>();
+        boolean craftableHere = style.showCraftable
+            && (style.craftablePlacement == HudStyle.Placement.OWN_PANEL ? panel == Panel.CRAFTABLE : panel == Panel.MAIN);
+        boolean forgingHere = style.showForging
+            && (style.forgingPlacement == HudStyle.Placement.OWN_PANEL ? panel == Panel.FORGING : panel == Panel.MAIN);
+        if (craftableHere) {
+            List<String> craftable = new ArrayList<>();
+            for (String message : messages) {
+                if (!message.equals("Craftable -")) craftable.add(message.trim());
+            }
+            craftable.sort((a, b) -> Integer.compare(extractAmount(b), extractAmount(a)));
+            if (panel != Panel.MAIN || !craftable.isEmpty()) {
+                sections.add(new Section("Craftable", craftable, style.craftableScale, style.craftableAlign,
+                    style.sectionHeader, style.sectionText));
+            }
         }
+        if (forgingHere) {
+            List<String> forging = new ArrayList<>();
+            for (String line : forgingLines) forging.add(line.trim());
+            if (panel != Panel.MAIN || !forging.isEmpty()) {
+                sections.add(new Section("Forging", forging, style.forgingScale, style.forgingAlign,
+                    style.forgingHeader, style.forgingText));
+            }
+        }
+        return sections;
+    }
 
-        if (messageSectionHeight > 0) {
-            context.fill(panelX, treeEndY, panelX + panelWidth, treeEndY + 1, style.divider);
-            drawMessages(context, panelX, treeEndY + 6, panelWidth, panelY + panelHeight - 5);
+    /** Height of a section: divider and header inside the main panel (own panels have a title bar), then lines. */
+    private static int sectionHeight(Section section, int lineCount, boolean ownPanel) {
+        int header = ownPanel ? 0 : 6 + Math.round(13 * section.scale());
+        return header + lineCount * Math.round(10 * section.scale()) + 2;
+    }
+
+    /** Splits each line into pieces that fit the content width at the section's scale. */
+    private static List<String> wrap(Minecraft client, HudStyle style, Section section, int contentWidth) {
+        int maxWidth = Math.max(10, (int) Math.floor(contentWidth / Math.max(0.01f, section.scale())));
+        List<String> out = new ArrayList<>();
+        for (String message : section.lines()) {
+            StringBuilder line = new StringBuilder();
+            for (String word : message.split(" ")) {
+                String candidate = line.isEmpty() ? word : line + " " + word;
+                if (!line.isEmpty() && client.font.width(style.text(candidate, 0, false)) > maxWidth) {
+                    out.add(line.toString());
+                    line = new StringBuilder("  ").append(word);
+                } else {
+                    line = new StringBuilder(candidate);
+                }
+            }
+            if (!line.isEmpty()) out.add(line.toString());
         }
+        return out;
+    }
+
+    private int drawSection(GuiGraphicsExtractor context, Section section, List<String> lines, int width, int y, boolean ownPanel) {
+        Minecraft client = Minecraft.getInstance();
+        HudStyle style = HudStyle.get();
+        float scale = section.scale();
+        if (!ownPanel) {
+            context.fill(0, y, width, y + 1, style.divider);
+            y += 5;
+            Component header = style.text(section.header() + " -", section.headerColor(), true);
+            drawScaled(context, header, alignedX(section.align(), width, style.padding, client.font.width(header) * scale),
+                y, scale, style.textShadow);
+            y += Math.round(13 * scale);
+        }
+        int lineHeight = Math.round(10 * scale);
+        for (String line : lines) {
+            int color = line.endsWith(" - Ready") ? style.done : section.textColor();
+            Component text = style.text(line, color, false);
+            drawScaled(context, text, alignedX(section.align(), width, style.padding, client.font.width(text) * scale),
+                y, scale, style.textShadow);
+            y += lineHeight;
+        }
+        return y + 2;
+    }
+
+    /** Left edge for text of the given drawn width. */
+    private static float alignedX(HudStyle.Align align, int width, int padding, float textWidth) {
+        return switch (align) {
+            case LEFT -> padding;
+            case RIGHT -> width - padding - textWidth;
+            case CENTRE -> (width - textWidth) / 2f;
+        };
     }
 
     private int countVisibleRecipeTreeLines(RecipeManager.RecipeNode node, String pathKey) {
@@ -573,71 +787,6 @@ public class SandboxWidget {
         context.pose().popMatrix();
     }
 
-    private void drawMessages(GuiGraphicsExtractor context, int x, int y, int width, int maxY) {
-        Minecraft client = Minecraft.getInstance();
-        HudStyle style = HudStyle.get();
-        int baseHeader = 13;
-        int baseLine = 10;
-        int availableHeight = Math.max(0, maxY - y);
-        int lines = countMessageLines(client, width);
-        int desiredHeight = Math.round((baseHeader + Math.max(0, (lines - 1) * baseLine)) * style.textScale);
-        float fit = desiredHeight > 0 ? Math.min(1.0f, Math.max(0.4f, (float) availableHeight / (float) desiredHeight)) : 1.0f;
-        float scale = fit * style.textScale;
-
-        List<String> craftable = new ArrayList<>(messages);
-        craftable.remove("Craftable -");
-        craftable.sort((a, b) -> Integer.compare(extractAmount(b), extractAmount(a)));
-        y = drawSection(context, "Craftable -", craftable, x, y, width, maxY, scale);
-        List<String> forging = new ArrayList<>(forgingLines);
-        if (y >= 0 && !forging.isEmpty()) {
-            drawSection(context, "Forging -", forging, x, y + Math.round(3 * scale), width, maxY, scale);
-        }
-    }
-
-    /** Draws a centred header and its wrapped, centred lines. Returns the next y, or -1 when out of room. */
-    private int drawSection(GuiGraphicsExtractor context, String header, List<String> lines, int x, int y, int width,
-                            int maxY, float scale) {
-        Minecraft client = Minecraft.getInstance();
-        HudStyle style = HudStyle.get();
-        int baseHeader = 13;
-        int baseLine = 10;
-        if (y + Math.round(baseLine * scale) > maxY) return -1;
-        drawCentred(context, style.text(header, style.sectionHeader, true), x, y, width, scale);
-        y += Math.round(baseHeader * scale);
-
-        int unscaledWrapWidth = Math.max(10, (int) Math.floor((width - 15) / Math.max(0.01f, scale)));
-        for (String message : lines) {
-            int textColor = message.endsWith(" - Ready") ? style.done : style.sectionText;
-            String[] words = message.split(" ");
-            StringBuilder line = new StringBuilder();
-            for (String word : words) {
-                if (client.font.width(style.text(line + word, textColor, false)) > unscaledWrapWidth) {
-                    if (y + Math.round(baseLine * scale) > maxY) return -1;
-                    drawCentred(context, style.text(line.toString().trim(), textColor, false), x, y, width, scale);
-                    y += Math.round(baseLine * scale);
-                    line = new StringBuilder(message.startsWith("   ") ? "      " : "   ").append(word).append(" ");
-                } else {
-                    line.append(word).append(" ");
-                }
-            }
-            if (line.length() > 0) {
-                if (y + Math.round((baseLine - 1) * scale) > maxY) return -1;
-                drawCentred(context, style.text(line.toString().trim(), textColor, false), x, y, width, scale);
-                y += Math.round((baseLine - 1) * scale);
-            }
-        }
-        return y;
-    }
-
-    private static void drawCentred(GuiGraphicsExtractor context, Component text, int x, int y, int width, float scale) {
-        Minecraft client = Minecraft.getInstance();
-        context.pose().pushMatrix();
-        context.pose().translate(x + (width - client.font.width(text) * scale) / 2f, y);
-        context.pose().scale(scale, scale);
-        context.text(client.font, text, 0, 0, 0xFFFFFFFF, HudStyle.get().textShadow);
-        context.pose().popMatrix();
-    }
-
     private int extractAmount(String message) {
         try {
             int xIndex = message.indexOf('×');
@@ -649,40 +798,6 @@ public class SandboxWidget {
         }
         return 0;
     }
-    public void addMessage(String message) {
-        this.messages.add(message);
-    }
-    public List<String> getMessagesSnapshot() {
-        return new ArrayList<>(this.messages);
-    }
-    private int countMessageLines(Minecraft client, int width) {
-        // Header + one line per forging slot group.
-        int forging = forgingLines.isEmpty() ? 0 : forgingLines.size() + 1;
-        return countCraftableLines(client, width) + forging;
-    }
-
-    private int countCraftableLines(Minecraft client, int width) {
-        int lineCount = 1;
-        if (messages.isEmpty()) return lineCount;
-        if (messages.size() == 1 && messages.get(0).equals("Craftable -")) return lineCount;
-        for (String message : new ArrayList<>(messages)) {
-            if (message.equals("Craftable -")) continue;
-            String[] words = message.split(" ");
-            StringBuilder line = new StringBuilder();
-            int linesInMessage = 1;
-            for (String word : words) {
-                if (client.font.width(line.toString() + word) > width - 15) {
-                    linesInMessage++;
-                    line = new StringBuilder(message.startsWith("   ") ? "      " : "   ").append(word).append(" ");
-                } else {
-                    line.append(word).append(" ");
-                }
-            }
-            lineCount += linesInMessage;
-        }
-        return lineCount;
-    }
-
     /** False when the amount format shows the full required amounts (colours then skip "partly gathered"). */
     public boolean isShowRemaining() {
         return HudStyle.get().amountFormat != HudStyle.AmountFormat.REQUIRED;

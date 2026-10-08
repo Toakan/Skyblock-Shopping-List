@@ -57,7 +57,7 @@ public final class ConfigScreen {
                 .option(ButtonOption.createBuilder()
                     .name(Component.literal("Reset HUD position"))
                     .description(OptionDescription.of(Component.literal("Put the HUD back in the top-left corner.")))
-                    .action((screen, button) -> widget.setWidgetPosition(10, 40))
+                    .action((screen, button) -> widget.resetPanelPositions())
                     .build())
                 .build())
             .category(appearance(parent))
@@ -113,6 +113,15 @@ public final class ConfigScreen {
                 })
                 .build())
             .group(OptionGroup.createBuilder()
+                .name(Component.literal("Size"))
+                .option(slider("HUD scale", "Size of every HUD panel, in percent. 100% is the original size.", 50, 300,
+                    d.hudScale, () -> style.hudScale, v -> style.hudScale = v))
+                .option(toggle("Follow GUI Scale",
+                    "OFF: the HUD keeps its size whatever Minecraft's GUI Scale is set to.\n"
+                        + "ON: the HUD grows and shrinks with GUI Scale like the rest of the interface.",
+                    d.followGuiScale, () -> style.followGuiScale, v -> style.followGuiScale = v))
+                .build())
+            .group(OptionGroup.createBuilder()
                 .name(Component.literal("Text"))
                 .option(Option.<String>createBuilder()
                     .name(Component.literal("Font"))
@@ -122,12 +131,17 @@ public final class ConfigScreen {
                     .binding(d.font, () -> style.font, v -> style.font = v)
                     .controller(opt -> DropdownStringControllerBuilder.create(opt).values(fonts))
                     .build())
-                .option(Option.<Float>createBuilder()
-                    .name(Component.literal("Text size"))
-                    .description(OptionDescription.of(Component.literal("Scales all HUD text.")))
-                    .binding(d.textScale, () -> style.textScale, v -> style.textScale = v)
-                    .controller(opt -> FloatSliderControllerBuilder.create(opt).range(0.5f, 1.5f).step(0.05f))
-                    .build())
+                .option(size("Title size", "Size of the panel titles.", d.titleScale,
+                    () -> style.titleScale, v -> style.titleScale = v))
+                .option(align("Title alignment", d.titleAlign, () -> style.titleAlign, v -> style.titleAlign = v))
+                .option(size("Row text size", "Size of the recipe rows. Rows stay left-aligned so the tree lines up.",
+                    d.textScale, () -> style.textScale, v -> style.textScale = v))
+                .option(size("Craftable text size", "Size of the Craftable section.", d.craftableScale,
+                    () -> style.craftableScale, v -> style.craftableScale = v))
+                .option(align("Craftable alignment", d.craftableAlign, () -> style.craftableAlign, v -> style.craftableAlign = v))
+                .option(size("Forging text size", "Size of the Forging section.", d.forgingScale,
+                    () -> style.forgingScale, v -> style.forgingScale = v))
+                .option(align("Forging alignment", d.forgingAlign, () -> style.forgingAlign, v -> style.forgingAlign = v))
                 .option(toggle("Text shadow", "Draw a shadow under HUD text.", d.textShadow,
                     () -> style.textShadow, v -> style.textShadow = v))
                 .option(toggle("Bold recipe names", "Show the recipes on your list (top rows) in bold.", d.boldRootNames,
@@ -149,6 +163,14 @@ public final class ConfigScreen {
                             case REQUIRED -> "Required";
                         })))
                     .build())
+                .option(toggle("Craftable section", "Show what you can craft right now.", d.showCraftable,
+                    () -> style.showCraftable, v -> style.showCraftable = v))
+                .option(placement("Craftable panel", d.craftablePlacement,
+                    () -> style.craftablePlacement, v -> style.craftablePlacement = v))
+                .option(toggle("Forging section", "Show what is cooking in your Forge that the list needs.", d.showForging,
+                    () -> style.showForging, v -> style.showForging = v))
+                .option(placement("Forging panel", d.forgingPlacement,
+                    () -> style.forgingPlacement, v -> style.forgingPlacement = v))
                 .option(toggle("Tick and cross marks", "Show ✔ or ✖ in front of each row.", d.showMarks,
                     () -> style.showMarks, v -> style.showMarks = v))
                 .option(toggle("Row boxes", "Draw a background and coloured border behind each row.", d.showRowBoxes,
@@ -185,9 +207,50 @@ public final class ConfigScreen {
                 .option(colour("Partly gathered", d.partial, () -> style.partial, v -> style.partial = v))
                 .option(colour("Missing", d.missing, () -> style.missing, v -> style.missing = v))
                 .option(colour("Can craft", d.craftable, () -> style.craftable, v -> style.craftable = v))
-                .option(colour("Section headers", d.sectionHeader, () -> style.sectionHeader, v -> style.sectionHeader = v))
-                .option(colour("Section text", d.sectionText, () -> style.sectionText, v -> style.sectionText = v))
+                .option(colour("Craftable header", d.sectionHeader, () -> style.sectionHeader, v -> style.sectionHeader = v))
+                .option(colour("Craftable text", d.sectionText, () -> style.sectionText, v -> style.sectionText = v))
+                .option(colour("Forging header", d.forgingHeader, () -> style.forgingHeader, v -> style.forgingHeader = v))
+                .option(colour("Forging text", d.forgingText, () -> style.forgingText, v -> style.forgingText = v))
                 .build())
+            .build();
+    }
+
+    private static Option<Float> size(String name, String description, float def, Supplier<Float> getter,
+                                      Consumer<Float> setter) {
+        return Option.<Float>createBuilder()
+            .name(Component.literal(name))
+            .description(OptionDescription.of(Component.literal(description)))
+            .binding(def, getter, setter)
+            .controller(opt -> FloatSliderControllerBuilder.create(opt).range(0.5f, 2.0f).step(0.05f))
+            .build();
+    }
+
+    private static Option<HudStyle.Align> align(String name, HudStyle.Align def, Supplier<HudStyle.Align> getter,
+                                                Consumer<HudStyle.Align> setter) {
+        return Option.<HudStyle.Align>createBuilder()
+            .name(Component.literal(name))
+            .description(OptionDescription.of(Component.literal("Left, centre or right.")))
+            .binding(def, getter, setter)
+            .controller(opt -> EnumControllerBuilder.create(opt).enumClass(HudStyle.Align.class)
+                .formatValue(v -> Component.literal(switch (v) {
+                    case LEFT -> "Left";
+                    case CENTRE -> "Centre";
+                    case RIGHT -> "Right";
+                })))
+            .build();
+    }
+
+    private static Option<HudStyle.Placement> placement(String name, HudStyle.Placement def,
+                                                        Supplier<HudStyle.Placement> getter,
+                                                        Consumer<HudStyle.Placement> setter) {
+        return Option.<HudStyle.Placement>createBuilder()
+            .name(Component.literal(name))
+            .description(OptionDescription.of(Component.literal(
+                "Inside main panel: under the shopping list.\nOwn panel: a separate panel you can move and resize "
+                    + "on its own in Move HUD.")))
+            .binding(def, getter, setter)
+            .controller(opt -> EnumControllerBuilder.create(opt).enumClass(HudStyle.Placement.class)
+                .formatValue(v -> Component.literal(v == HudStyle.Placement.OWN_PANEL ? "Own panel" : "Inside main panel")))
             .build();
     }
 

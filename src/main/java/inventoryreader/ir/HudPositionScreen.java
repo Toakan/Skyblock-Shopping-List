@@ -1,65 +1,57 @@
 package inventoryreader.ir;
 
+import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
-/** "Move HUD": drag the HUD preview to move it, drag a corner to resize. Opened by B and from Settings. */
+/**
+ * "Move HUD": drag a panel to move it, drag a corner to resize. Shows every active panel (the shopping list,
+ * plus Craftable / Forging when they have their own). Opened by B and from Settings.
+ */
 public class HudPositionScreen extends Screen {
+    private static final int GOLD = 0xFFFFB728;
+    private static final int HANDLE = 10;
+    private enum Corner { NONE, TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT }
+
     private final Screen parent;
     private final SandboxWidget widget;
-    private static final int GOLD = 0xFFFFB728;
-    private int widgetPositionX, widgetPositionY;
-    private boolean isDraggingWidget = false;
-    private int dragOffsetX = 0;
-    private int dragOffsetY = 0;
-    private boolean resizing = false;
-    private int resizeStartX, resizeStartY;
-    private int initialWidth, initialHeight;
-    private int initialWidgetX, initialWidgetY;
-    private int previewWidthOverride = -1;
-    private int previewHeightOverride = -1;
-    private enum ResizeCorner { NONE, TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT }
-    private ResizeCorner activeCorner = ResizeCorner.NONE;
-    private static final int RESIZE_HANDLE_SIZE = 10;
+    /** Working copies: position in GUI pixels, size in HUD units. */
+    private final Map<SandboxWidget.Panel, SandboxWidget.PanelRect> rects = new EnumMap<>(SandboxWidget.Panel.class);
+    private SandboxWidget.Panel active;
+    private boolean dragging = false;
+    private Corner resizing = Corner.NONE;
+    private int dragOffsetX, dragOffsetY;
+    private int startMouseX, startMouseY;
+    private SandboxWidget.PanelRect startRect;
 
     /** @param parent screen to return to on Done, or null to close. */
     public HudPositionScreen(Screen parent) {
         super(Component.literal("Move HUD"));
         this.parent = parent;
         this.widget = SandboxWidget.getInstance();
-        this.widgetPositionX = widget.getWidgetX();
-        this.widgetPositionY = widget.getWidgetY();
+        loadRects();
+    }
+
+    private void loadRects() {
+        rects.clear();
+        for (SandboxWidget.Panel panel : SandboxWidget.activePanels()) rects.put(panel, widget.getPanelRect(panel));
     }
 
     @Override
     protected void init() {
-        initPositioningTab();
-    }
-
-    private void initPositioningTab() {
         int buttonWidth = 90;
-        int buttonHeight = 20;
-        int y = 1;
-        int spacing = 4;
-
         addRenderableWidget(Button.builder(Component.literal("Reset position"), button -> {
-            widgetPositionX = 10;
-            widgetPositionY = 40;
-            widget.setWidgetPosition(widgetPositionX, widgetPositionY);
-        }).bounds(width - 2 * buttonWidth - spacing - 4, y, buttonWidth, buttonHeight).build());
-
+            widget.resetPanelPositions();
+            loadRects();
+        }).bounds(width - 2 * buttonWidth - 8, 1, buttonWidth, 20).build());
         addRenderableWidget(Button.builder(Component.literal("Done"), button -> onClose())
-            .bounds(width - buttonWidth - 4, y, buttonWidth, buttonHeight).build());
-    }
-
-    /** Top-level nodes the HUD shows: Total, then one tree per recipe. */
-    private List<RecipeManager.RecipeNode> tops() {
-        RecipeManager.RecipeNode root = widget.getDisplayRoot();
-        return root == null || root.ingredients == null ? List.of() : root.ingredients;
+            .bounds(width - buttonWidth - 4, 1, buttonWidth, 20).build());
     }
 
     @Override
@@ -68,230 +60,128 @@ public class HudPositionScreen extends Screen {
 
     @Override
     public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
-        renderPositioningTab(context, mouseX, mouseY);
+        context.fill(0, 0, width, height, 0xFF0E0E0E);
+        for (int x = 0; x < width; x += 50) context.fill(x, 0, x + 1, height, 0x22FFFFFF);
+        for (int y = 0; y < height; y += 50) context.fill(0, y, width, y + 1, 0x22FFFFFF);
+        context.fill(0, 0, width, 22, 0xFF17293A);
+        context.outline(0, 0, width, 22, 0xFF223344);
+        context.text(font, "Move HUD", 8, 7, GOLD, false);
+        // Hint and position in the title bar, shortened to whatever fits left of the buttons.
+        SandboxWidget.PanelRect mainRect = rects.get(SandboxWidget.Panel.MAIN);
+        String hint = "Drag to move, drag a corner to resize";
+        if (mainRect != null) {
+            hint += "   X=" + mainRect.x + " Y=" + mainRect.y + " W=" + mainRect.width + " H=" + mainRect.height
+                + " Scale=" + HudStyle.get().hudScale + "%";
+        }
+        int hintX = 8 + font.width("Move HUD") + 12;
+        context.text(font, font.plainSubstrByWidth(hint, Math.max(0, width - 2 * 90 - 16 - hintX)), hintX, 7, 0xFFBBBBBB, false);
+
+        float scale = SandboxWidget.scaleFactor();
+        for (Map.Entry<SandboxWidget.Panel, SandboxWidget.PanelRect> e : rects.entrySet()) {
+            SandboxWidget.Panel panel = e.getKey();
+            SandboxWidget.PanelRect r = e.getValue();
+            int w = Math.round(r.width * scale);
+            int h = Math.round(r.height * scale);
+            // Opaque backing so the grid doesn't show through a see-through panel colour.
+            context.fill(r.x, r.y, r.x + w, r.y + h, 0xFF0E0E0E);
+            if (widget.renderPanel(context, panel, r.x, r.y, r.width, r.height, true) == 0) {
+                context.fill(r.x, r.y, r.x + w, r.y + h, 0xCC271910);
+                context.text(font, "Shopping list is empty", r.x + 8, r.y + 8, 0xFFFFFFFF, false);
+            }
+            boolean busy = panel == active && (dragging || resizing != Corner.NONE);
+            context.outline(r.x, r.y, w, h, busy ? 0xFFFFDD00 : 0x88FFFFFF);
+            for (int[] c : corners(r.x, r.y, w, h)) {
+                context.fill(c[0] - HANDLE / 2, c[1] - HANDLE / 2, c[0] + HANDLE / 2, c[1] + HANDLE / 2, GOLD);
+            }
+        }
         super.extractRenderState(context, mouseX, mouseY, delta);
     }
 
-    private void renderPositioningTab(GuiGraphicsExtractor context, int mouseX, int mouseY) {
-        context.fill(0, 0, width, height, 0xFF0E0E0E);
-        context.outline(0, 0, width, height, 0x88608C35);
-
-        context.fill(0, 0, width, 22, 0xFF17293A);
-        context.outline(0, 0, width, 22, 0xFF223344);
-        String modTitle = "Move HUD";
-        context.text(font, modTitle, width / 2 - font.width(modTitle) / 2, 7, GOLD, false);
-
-        context.fill(0, 22, width, 44, 0xFF131313);
-
-        String posTitle = "Widget Positioning";
-        context.text(font, posTitle, width / 2 - font.width(posTitle) / 2, 52, 0xFFE0E0E0, false);
-
-        String hint = "Drag the widget preview to reposition   |   Drag corner handles to resize";
-        context.text(font, hint, width / 2 - font.width(hint) / 2, 65, 0xFFBBBBBB, false);
-
-        String posInfo = "X=" + widgetPositionX + "  Y=" + widgetPositionY
-            + "  W=" + getPreviewWidth() + "  H=" + getPreviewHeight();
-        context.text(font, posInfo, width / 2 - font.width(posInfo) / 2, 78, GOLD, false);
-    int previewWidth = getPreviewWidth();
-    int previewHeight = getPreviewHeight();
-        for (int x = 0; x < width; x += 50) {
-            context.fill(x, 0, x + 1, height, 0x22FFFFFF);
-        }
-        for (int y = 0; y < height; y += 50) {
-            context.fill(0, y, width, y + 1, 0x22FFFFFF);
-        }
-        if (tops().isEmpty()) {
-            context.fill(widgetPositionX, widgetPositionY, widgetPositionX + previewWidth, widgetPositionY + previewHeight, 0xCC271910);
-            drawFittedTextWithShadow(context,
-                Component.literal("Shopping list is empty"),
-                widgetPositionX + 10,
-                widgetPositionY + 60,
-                0xFFFFFFFF,
-                Math.max(10, previewWidth - 20)
-            );
-        } else {
-            // Opaque backing so the hint text behind doesn't show through a see-through panel colour.
-            context.fill(widgetPositionX, widgetPositionY, widgetPositionX + previewWidth, widgetPositionY + previewHeight, 0xFF0E0E0E);
-            // The real HUD renderer, so the preview shows the current Appearance settings exactly.
-            widget.renderAt(context, widgetPositionX, widgetPositionY, previewWidth, previewHeight);
-        }
-        // The area the HUD may grow into.
-        context.outline(widgetPositionX, widgetPositionY, previewWidth, previewHeight,
-            isDraggingWidget || resizing ? 0xFFFFDD00 : 0x88FFFFFF);
-        if (isDraggingWidget || resizing) {
-            String hint2 = resizing ? "Release to resize" : "Release to place widget";
-            context.text(font, hint2, widgetPositionX + previewWidth / 2 - font.width(hint2) / 2, widgetPositionY + previewHeight - 15, 0xFFAAAAFF, false);
-        } else {
-            String hint2 = "Drag to reposition";
-            context.text(font, hint2, widgetPositionX + previewWidth / 2 - font.width(hint2) / 2, widgetPositionY + previewHeight - 15, 0xFF888888, false);
-        }
-
-    drawHandle(context, widgetPositionX - RESIZE_HANDLE_SIZE/2, widgetPositionY - RESIZE_HANDLE_SIZE/2);
-    drawHandle(context, widgetPositionX + previewWidth - RESIZE_HANDLE_SIZE/2, widgetPositionY - RESIZE_HANDLE_SIZE/2);
-    drawHandle(context, widgetPositionX - RESIZE_HANDLE_SIZE/2, widgetPositionY + previewHeight - RESIZE_HANDLE_SIZE/2);
-    drawHandle(context, widgetPositionX + previewWidth - RESIZE_HANDLE_SIZE/2, widgetPositionY + previewHeight - RESIZE_HANDLE_SIZE/2);
-    }
-
-    private void drawHandle(GuiGraphicsExtractor context, int x, int y) {
-        context.fill(x, y, x + RESIZE_HANDLE_SIZE, y + RESIZE_HANDLE_SIZE, 0xFFFFB728);
-    }
-
-    private void drawFittedTextWithShadow(GuiGraphicsExtractor context, Component text, int x, int y, int color, int maxWidth) {
-        int width = font.width(text);
-        float scale = width > maxWidth ? (float)maxWidth / (float)width : 1.0f;
-        scale = Math.min(scale, getMaxTextScale());
-        context.pose().pushMatrix();
-        context.pose().translate(x, y);
-        context.pose().scale(scale, scale);
-        context.text(font, text, 0, 0, color);
-        context.pose().popMatrix();
-    }
-
-    private float getMaxTextScale() {
-        return 1.0f;
+    private static int[][] corners(int x, int y, int w, int h) {
+        return new int[][] {{x, y}, {x + w, y}, {x, y + h}, {x + w, y + h}};
     }
 
     @Override
     public boolean mouseClicked(MouseButtonEvent ctx, boolean doubleClick) {
-        double mouseX = ctx.x();
-        double mouseY = ctx.y();
-        int previewWidth = getPreviewWidth();
-        int previewHeight = getPreviewHeight();
-        ResizeCorner corner = getCornerHandle(mouseX, mouseY, previewWidth, previewHeight);
-        if (corner != ResizeCorner.NONE) {
-            resizing = true;
-            activeCorner = corner;
-            resizeStartX = (int) mouseX;
-            resizeStartY = (int) mouseY;
-            initialWidth = previewWidth;
-            initialHeight = previewHeight;
-            initialWidgetX = widgetPositionX;
-            initialWidgetY = widgetPositionY;
-            return true;
+        if (super.mouseClicked(ctx, doubleClick)) return true;
+        int mouseX = (int) ctx.x();
+        int mouseY = (int) ctx.y();
+        float scale = SandboxWidget.scaleFactor();
+        // Last drawn is on top, so check in reverse.
+        List<SandboxWidget.Panel> order = new ArrayList<>(rects.keySet());
+        for (int i = order.size() - 1; i >= 0; i--) {
+            SandboxWidget.Panel panel = order.get(i);
+            SandboxWidget.PanelRect r = rects.get(panel);
+            int w = Math.round(r.width * scale);
+            int h = Math.round(r.height * scale);
+            Corner corner = cornerAt(mouseX, mouseY, r.x, r.y, w, h);
+            if (corner != Corner.NONE || (mouseX >= r.x && mouseX <= r.x + w && mouseY >= r.y && mouseY <= r.y + h)) {
+                active = panel;
+                resizing = corner;
+                dragging = corner == Corner.NONE;
+                dragOffsetX = mouseX - r.x;
+                dragOffsetY = mouseY - r.y;
+                startMouseX = mouseX;
+                startMouseY = mouseY;
+                startRect = new SandboxWidget.PanelRect(r.x, r.y, r.width, r.height);
+                return true;
+            }
         }
-        if (mouseX >= widgetPositionX && mouseX <= widgetPositionX + previewWidth &&
-            mouseY >= widgetPositionY && mouseY <= widgetPositionY + previewHeight) {
-            isDraggingWidget = true;
-            dragOffsetX = (int) mouseX - widgetPositionX;
-            dragOffsetY = (int) mouseY - widgetPositionY;
-            return true;
-        }
-        return super.mouseClicked(ctx, doubleClick);
+        return false;
     }
 
     @Override
     public boolean mouseDragged(MouseButtonEvent ctx, double deltaX, double deltaY) {
-        double mouseX = ctx.x();
-        double mouseY = ctx.y();
-        if (isDraggingWidget) {
-            widgetPositionX = (int) mouseX - dragOffsetX;
-            widgetPositionY = (int) mouseY - dragOffsetY;
-            widgetPositionX = Math.max(0, Math.min(width - 50, widgetPositionX));
-            widgetPositionY = Math.max(0, Math.min(height - 50, widgetPositionY));
-            return true;
-        } else if (resizing) {
-            int dx = (int) mouseX - resizeStartX;
-            int dy = (int) mouseY - resizeStartY;
-            int newWidth = initialWidth;
-            int newHeight = initialHeight;
-            int newX = initialWidgetX;
-            int newY = initialWidgetY;
-            int minW = 180;
-            int minH = 120;
-            switch (activeCorner) {
-                case TOP_LEFT -> {
-                    newWidth = initialWidth - dx;
-                    newHeight = initialHeight - dy;
-                    newX = initialWidgetX + dx;
-                    newY = initialWidgetY + dy;
-                    if (newWidth < minW) {
-                        newX = initialWidgetX + (initialWidth - minW);
-                        newWidth = minW;
-                    }
-                    if (newHeight < minH) {
-                        newY = initialWidgetY + (initialHeight - minH);
-                        newHeight = minH;
-                    }
-                }
-                case TOP_RIGHT -> {
-                    newWidth = initialWidth + dx;
-                    newHeight = initialHeight - dy;
-                    newY = initialWidgetY + dy;
-                    if (newWidth < minW) {
-                        newWidth = minW;
-                    }
-                    if (newHeight < minH) {
-                        newY = initialWidgetY + (initialHeight - minH);
-                        newHeight = minH;
-                    }
-                }
-                case BOTTOM_LEFT -> {
-                    newWidth = initialWidth - dx;
-                    newHeight = initialHeight + dy;
-                    newX = initialWidgetX + dx;
-                    if (newWidth < minW) {
-                        newX = initialWidgetX + (initialWidth - minW);
-                        newWidth = minW;
-                    }
-                    if (newHeight < minH) {
-                        newHeight = minH;
-                    }
-                }
-                case BOTTOM_RIGHT -> {
-                    newWidth = initialWidth + dx;
-                    newHeight = initialHeight + dy;
-                    if (newWidth < minW) newWidth = minW;
-                    if (newHeight < minH) newHeight = minH;
-                }
-                case NONE -> {
-
-                }
-            }
-            widgetPositionX = Math.max(0, newX);
-            widgetPositionY = Math.max(0, newY);
-            previewWidthOverride = newWidth;
-            previewHeightOverride = newHeight;
+        if (active == null || (!dragging && resizing == Corner.NONE)) return super.mouseDragged(ctx, deltaX, deltaY);
+        int mouseX = (int) ctx.x();
+        int mouseY = (int) ctx.y();
+        SandboxWidget.PanelRect r = rects.get(active);
+        if (dragging) {
+            r.x = Math.max(0, Math.min(width - 20, mouseX - dragOffsetX));
+            r.y = Math.max(0, Math.min(height - 20, mouseY - dragOffsetY));
             return true;
         }
-        return super.mouseDragged(ctx, deltaX, deltaY);
+        float scale = SandboxWidget.scaleFactor();
+        // Mouse movement in HUD units.
+        int dx = Math.round((mouseX - startMouseX) / scale);
+        int dy = Math.round((mouseY - startMouseY) / scale);
+        int minW = SandboxWidget.minWidth(active);
+        int minH = SandboxWidget.minHeight(active);
+        boolean left = resizing == Corner.TOP_LEFT || resizing == Corner.BOTTOM_LEFT;
+        boolean top = resizing == Corner.TOP_LEFT || resizing == Corner.TOP_RIGHT;
+        int newW = Math.max(minW, startRect.width + (left ? -dx : dx));
+        int newH = Math.max(minH, startRect.height + (top ? -dy : dy));
+        r.width = newW;
+        r.height = newH;
+        // Dragging a left/top corner moves that edge, keeping the opposite one in place.
+        r.x = left ? Math.max(0, startRect.x + Math.round((startRect.width - newW) * scale)) : startRect.x;
+        r.y = top ? Math.max(0, startRect.y + Math.round((startRect.height - newH) * scale)) : startRect.y;
+        return true;
     }
 
     @Override
     public boolean mouseReleased(MouseButtonEvent ctx) {
-        if (isDraggingWidget || resizing) {
-            isDraggingWidget = false;
-            resizing = false;
-            activeCorner = ResizeCorner.NONE;
-            int commitW = getPreviewWidth();
-            int commitH = getPreviewHeight();
-            widget.setWidgetSize(commitW, commitH);
-            widget.setWidgetPosition(widgetPositionX, widgetPositionY);
-            widget.saveConfiguration();
-            previewWidthOverride = -1;
-            previewHeightOverride = -1;
+        if (active != null && (dragging || resizing != Corner.NONE)) {
+            SandboxWidget.PanelRect r = rects.get(active);
+            widget.setPanelRect(active, r.x, r.y, r.width, r.height);
+            rects.put(active, widget.getPanelRect(active));
+            dragging = false;
+            resizing = Corner.NONE;
             return true;
         }
         return super.mouseReleased(ctx);
     }
 
-    private int getPreviewWidth() {
-        return previewWidthOverride > 0 ? previewWidthOverride : widget.getWidgetWidth();
-    }
-    private int getPreviewHeight() {
-        return previewHeightOverride > 0 ? previewHeightOverride : widget.getWidgetHeight();
+    private static Corner cornerAt(int mouseX, int mouseY, int x, int y, int w, int h) {
+        if (near(mouseX, mouseY, x, y)) return Corner.TOP_LEFT;
+        if (near(mouseX, mouseY, x + w, y)) return Corner.TOP_RIGHT;
+        if (near(mouseX, mouseY, x, y + h)) return Corner.BOTTOM_LEFT;
+        if (near(mouseX, mouseY, x + w, y + h)) return Corner.BOTTOM_RIGHT;
+        return Corner.NONE;
     }
 
-    private ResizeCorner getCornerHandle(double mouseX, double mouseY, int previewWidth, int previewHeight) {
-        if (isInHandle(mouseX, mouseY, widgetPositionX, widgetPositionY)) return ResizeCorner.TOP_LEFT;
-        if (isInHandle(mouseX, mouseY, widgetPositionX + previewWidth, widgetPositionY)) return ResizeCorner.TOP_RIGHT;
-        if (isInHandle(mouseX, mouseY, widgetPositionX, widgetPositionY + previewHeight)) return ResizeCorner.BOTTOM_LEFT;
-        if (isInHandle(mouseX, mouseY, widgetPositionX + previewWidth, widgetPositionY + previewHeight)) return ResizeCorner.BOTTOM_RIGHT;
-        return ResizeCorner.NONE;
-    }
-    private boolean isInHandle(double mouseX, double mouseY, int cx, int cy) {
-        int x = cx - RESIZE_HANDLE_SIZE/2;
-        int y = cy - RESIZE_HANDLE_SIZE/2;
-        return mouseX >= x && mouseX <= x + RESIZE_HANDLE_SIZE && mouseY >= y && mouseY <= y + RESIZE_HANDLE_SIZE;
+    private static boolean near(int mouseX, int mouseY, int cx, int cy) {
+        return Math.abs(mouseX - cx) <= HANDLE / 2 && Math.abs(mouseY - cy) <= HANDLE / 2;
     }
 
     @Override
@@ -301,7 +191,6 @@ public class HudPositionScreen extends Screen {
 
     @Override
     public void onClose() {
-        widget.setWidgetPosition(widgetPositionX, widgetPositionY);
         this.minecraft.gui.setScreen(parent);
     }
 }
