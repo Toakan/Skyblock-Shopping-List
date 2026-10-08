@@ -9,6 +9,7 @@ import net.minecraft.resources.Identifier;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Supplier;
 
 /**
  * How the shopping-list HUD looks: colours, sizes, text and which parts are drawn. Edited in Settings >
@@ -80,11 +81,17 @@ public final class HudStyle {
     public Placement forgingPlacement = Placement.MAIN_PANEL;
 
     private static volatile HudStyle current;
+    /** Style drawn instead of the active one on this thread (the Appearance preview), or null. */
+    private static final ThreadLocal<HudStyle> OVERRIDE = new ThreadLocal<>();
     /** Font id -> description, cached so text drawing doesn't parse the id every frame. */
     private transient FontDescription fontDescription;
+    /** The font id {@link #fontDescription} was made from (the preview changes {@link #font} on the fly). */
+    private transient String fontDescriptionId;
 
     /** The active style, loaded from disk on first use. */
     public static HudStyle get() {
+        HudStyle override = OVERRIDE.get();
+        if (override != null) return override;
         HudStyle style = current;
         if (style == null) {
             style = JsonFiles.read(FilePathManager.HUD_STYLE_JSON, HudStyle.class);
@@ -93,6 +100,23 @@ public final class HudStyle {
             current = style;
         }
         return style;
+    }
+
+    /** Runs {@code action} with {@link #get()} returning {@code style} on this thread (for previews). */
+    public static <T> T withOverride(HudStyle style, Supplier<T> action) {
+        OVERRIDE.set(style);
+        try {
+            return action.get();
+        } finally {
+            OVERRIDE.remove();
+        }
+    }
+
+    /** An independent copy of the active style. */
+    public static HudStyle copy() {
+        HudStyle copy = JsonFiles.GSON.fromJson(JsonFiles.GSON.toJson(get()), HudStyle.class);
+        copy.clamp();
+        return copy;
     }
 
     /** True once hud_style.json exists (used to migrate the old Show remaining setting only once). */
@@ -166,10 +190,11 @@ public final class HudStyle {
 
     private FontDescription fontDescription() {
         FontDescription description = fontDescription;
-        if (description == null) {
+        if (description == null || !font.equals(fontDescriptionId)) {
             Identifier id = Identifier.tryParse(font);
             description = id == null ? FontDescription.DEFAULT : new FontDescription.Resource(id);
             fontDescription = description;
+            fontDescriptionId = font;
         }
         return description;
     }

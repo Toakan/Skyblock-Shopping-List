@@ -557,6 +557,67 @@ public class SandboxWidget {
 
     private static final int TITLE_BAR = 20;
 
+    /** True while {@link #renderPreview} draws: panels show the sample list below, fully expanded. */
+    private boolean previewing = false;
+    private static final RecipeManager.RecipeNode SAMPLE_TREE = sampleTree();
+    private static final List<String> SAMPLE_CRAFTABLE = List.of("   1× Refined Diamond");
+    private static final List<String> SAMPLE_FORGING = List.of("   3× Mithril Plate - 2h 10m");
+
+    /** A small made-up list showing every row state: done, partly gathered, missing and can craft. */
+    private static RecipeManager.RecipeNode sampleTree() {
+        RecipeManager.RecipeNode total = new RecipeManager.RecipeNode("Total", 512, 1282, new ArrayList<>(List.of(
+            new RecipeManager.RecipeNode("Enchanted Diamond", 0, 2, null),
+            new RecipeManager.RecipeNode("Mithril", 448, 960, null),
+            new RecipeManager.RecipeNode("Gold Ingot", 64, 64, null))));
+        RecipeManager.RecipeNode enchanted = new RecipeManager.RecipeNode("Enchanted Mithril", 0, 320, null);
+        enchanted.toCraft = 160;
+        RecipeManager.RecipeNode recipe = new RecipeManager.RecipeNode("Refined Mithril", 1, 2,
+            new ArrayList<>(List.of(enchanted)));
+        return new RecipeManager.RecipeNode("Shopping list", 0, 0, new ArrayList<>(List.of(total, recipe)));
+    }
+
+    /**
+     * Draws the panels {@code style} would show, with sample rows, stacked from (x, y) and scaled to fit
+     * {@code width} GUI pixels. Returns the height used. Settings > Appearance uses it to preview unsaved changes.
+     * Render thread only.
+     */
+    public int renderPreview(GuiGraphicsExtractor context, int x, int y, int width, HudStyle style) {
+        return HudStyle.withOverride(style, () -> {
+            previewing = true;
+            try {
+                // Keep the outward panel border inside the column.
+                int inset = style.panelBorderWidth + 1;
+                List<Panel> panels = activePanels();
+                // One scale for every panel: as wide as the column allows, but short enough to leave room for the
+                // description text under it.
+                int widest = 1;
+                int totalHeight = 0;
+                for (Panel panel : panels) {
+                    PanelRect rect = getPanelRect(panel);
+                    widest = Math.max(widest, rect.width);
+                    totalHeight += measurePanel(panel, rect.width);
+                }
+                int maxHeight = Math.round(Minecraft.getInstance().getWindow().getGuiScaledHeight() * 0.4f);
+                int gaps = panels.size() * (2 * inset + 2);
+                float scale = Math.min(1.5f, Math.min((width - 2f * inset) / widest,
+                    (maxHeight - gaps) / (float) Math.max(1, totalHeight)));
+                int cursor = y + inset;
+                for (Panel panel : panels) {
+                    PanelRect rect = getPanelRect(panel);
+                    int height = renderPanel(context, panel, x + inset, cursor, rect.width, 4000, scale, true);
+                    cursor += Math.round(height * scale) + 2 * inset + 2;
+                }
+                return cursor - y;
+            } finally {
+                previewing = false;
+            }
+        });
+    }
+
+    private boolean isExpandedForDraw(String nodeKey) {
+        return previewing || expandedNodes.getOrDefault(nodeKey, false);
+    }
+
     /** HUD units -> GUI pixels. Ignores Minecraft's GUI Scale unless the style says to follow it. */
     public static float scaleFactor() {
         HudStyle style = HudStyle.get();
@@ -650,8 +711,18 @@ public class SandboxWidget {
     /** As above, at the given HUD units -> GUI pixels factor (Move HUD previews a scale before it is saved). */
     public int renderPanel(GuiGraphicsExtractor context, Panel panel, int x, int y, int width, int maxHeight, float scale,
                            boolean preview) {
+        return renderPanel(context, panel, x, y, width, maxHeight, scale, preview, false);
+    }
+
+    /** Full height of a panel in HUD units if nothing were cut off (preview only, so empty panels count). */
+    private int measurePanel(Panel panel, int width) {
+        return renderPanel(null, panel, 0, 0, width, Integer.MAX_VALUE, 1f, true, true);
+    }
+
+    private int renderPanel(GuiGraphicsExtractor context, Panel panel, int x, int y, int width, int maxHeight, float scale,
+                            boolean preview, boolean measureOnly) {
         HudStyle style = HudStyle.get();
-        RecipeManager.RecipeNode root = this.recipeTree;
+        RecipeManager.RecipeNode root = previewing ? SAMPLE_TREE : this.recipeTree;
         List<Section> sections = sectionsFor(panel, style);
         String title;
         int rowsHeight = 0;
@@ -683,6 +754,7 @@ public class SandboxWidget {
         int cornerClip = Math.max(0, style.panelRadius - style.padding) > 0 ? style.panelRadius : 0;
         int naturalHeight = TITLE_BAR + rowsHeight + sectionsHeight + (empty ? 14 : 4) + cornerClip;
         int panelHeight = Math.min(maxHeight, naturalHeight);
+        if (measureOnly) return panelHeight;
 
         context.pose().pushMatrix();
         context.pose().translate(x, y);
@@ -744,7 +816,7 @@ public class SandboxWidget {
             && (style.forgingPlacement == HudStyle.Placement.OWN_PANEL ? panel == Panel.FORGING : panel == Panel.MAIN);
         if (craftableHere) {
             List<String> craftable = new ArrayList<>();
-            for (String message : messages) {
+            for (String message : previewing ? SAMPLE_CRAFTABLE : messages) {
                 if (!message.equals("Craftable -")) craftable.add(message.trim());
             }
             craftable.sort((a, b) -> Integer.compare(extractAmount(b), extractAmount(a)));
@@ -755,7 +827,7 @@ public class SandboxWidget {
         }
         if (forgingHere) {
             List<String> forging = new ArrayList<>();
-            for (String line : forgingLines) forging.add(line.trim());
+            for (String line : previewing ? SAMPLE_FORGING : forgingLines) forging.add(line.trim());
             if (panel != Panel.MAIN || !forging.isEmpty()) {
                 sections.add(new Section("Forging", forging, style.forgingScale, style.forgingAlign,
                     style.forgingHeader, style.forgingText));
@@ -827,7 +899,7 @@ public class SandboxWidget {
         int count = 1;
         // Path-based key keeps expansion stable regardless of amounts.
         String nodeKey = makePathKey(pathKey, node.name);
-        if (node.ingredients != null && !node.ingredients.isEmpty() && expandedNodes.getOrDefault(nodeKey, false)) {
+        if (node.ingredients != null && !node.ingredients.isEmpty() && isExpandedForDraw(nodeKey)) {
             for (RecipeManager.RecipeNode child : node.ingredients) {
                 count += countVisibleRecipeTreeLines(child, nodeKey);
             }
@@ -843,7 +915,7 @@ public class SandboxWidget {
         int indent = level * unitIndent;
         boolean hasEnough = node.amount <= 0 && node.toCraft <= 0;
         String nodeKey = makePathKey(pathKey, node.name);
-        boolean isExpanded = expandedNodes.getOrDefault(nodeKey, false);
+        boolean isExpanded = isExpandedForDraw(nodeKey);
         boolean hasChildren = node.ingredients != null && !node.ingredients.isEmpty();
         boolean showRemaining = isShowRemaining();
         int nodeHeight = currentNodeLineHeight;

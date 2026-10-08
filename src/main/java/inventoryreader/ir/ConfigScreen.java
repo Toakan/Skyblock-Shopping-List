@@ -4,6 +4,7 @@ import dev.isxander.yacl3.api.ButtonOption;
 import dev.isxander.yacl3.api.ConfigCategory;
 import dev.isxander.yacl3.api.Option;
 import dev.isxander.yacl3.api.OptionDescription;
+import dev.isxander.yacl3.api.OptionEventListener;
 import dev.isxander.yacl3.api.OptionGroup;
 import dev.isxander.yacl3.api.YetAnotherConfigLib;
 import dev.isxander.yacl3.api.controller.BooleanControllerBuilder;
@@ -13,7 +14,9 @@ import dev.isxander.yacl3.api.controller.EnumControllerBuilder;
 import dev.isxander.yacl3.api.controller.FloatSliderControllerBuilder;
 import dev.isxander.yacl3.api.controller.IntegerSliderControllerBuilder;
 import dev.isxander.yacl3.api.controller.StringControllerBuilder;
+import dev.isxander.yacl3.gui.image.ImageRenderer;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.options.controls.KeyBindsScreen;
 import net.minecraft.network.chat.Component;
@@ -21,10 +24,12 @@ import net.minecraft.network.chat.Component;
 import java.awt.Color;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
-import java.util.function.IntConsumer;
-import java.util.function.IntSupplier;
+import java.util.function.Function;
+import java.util.function.ObjIntConsumer;
 import java.util.function.Supplier;
+import java.util.function.ToIntFunction;
 
 /** The Settings screen, built with YetAnotherConfigLib. Values are stored by {@link SandboxWidget} on Save. */
 public final class ConfigScreen {
@@ -99,21 +104,43 @@ public final class ConfigScreen {
         HudStyle d = new HudStyle();
         List<String> fonts = HudStyle.availableFonts();
         if (!fonts.contains(style.font)) fonts.add(style.font);
+        // The preview draws a copy that follows every unsaved change; the real look only changes on Save.
+        HudStyle draft = HudStyle.copy();
+        previewDraft = draft;
+        previewImage = new ImageRenderer() {
+            @Override
+            public int render(GuiGraphicsExtractor context, int x, int y, int width, float delta) {
+                return SandboxWidget.getInstance().renderPreview(context, x, y, width, draft);
+            }
+
+            @Override
+            public void close() {
+            }
+        };
+        try {
+            return buildAppearance(parent, style, d, fonts);
+        } finally {
+            previewDraft = null;
+            previewImage = null;
+        }
+    }
+
+    private static ConfigCategory buildAppearance(Screen parent, HudStyle style, HudStyle d, List<String> fonts) {
         return ConfigCategory.createBuilder()
             .name(Component.literal("Appearance"))
             .option(ButtonOption.createBuilder()
                 .name(Component.literal("Preview (Move HUD...)"))
                 .text(Component.literal("Open"))
-                .description(OptionDescription.of(Component.literal(
-                    "Shows the HUD with the saved look. Press Save first to see changes.")))
+                .description(describe("Shows the HUD with the saved look in Move HUD. Press Save first to see "
+                    + "changes there; the preview above already shows them."))
                 .action((screen, button) -> Minecraft.getInstance().gui.setScreen(new HudPositionScreen(screen)))
                 .build())
             .option(ButtonOption.createBuilder()
                 .name(Component.literal("Reset look to defaults"))
                 .text(Component.literal("Reset"))
-                .description(OptionDescription.of(Component.literal(
+                .description(describe(
                     "Puts every Appearance setting back to the original look, right away. Your current look is "
-                        + "kept as the preset \"" + HudPresets.BACKUP_NAME + "\".")))
+                        + "kept as the preset \"" + HudPresets.BACKUP_NAME + "\"."))
                 .action((screen, button) -> {
                     HudPresets.backup();
                     HudStyle.reset();
@@ -124,106 +151,104 @@ public final class ConfigScreen {
             .group(OptionGroup.createBuilder()
                 .name(Component.literal("Size"))
                 .option(slider("HUD scale", "Size of every HUD panel, in percent. 100% is the original size.", 50, 300,
-                    d.hudScale, () -> style.hudScale, v -> style.hudScale = v))
+                    d.hudScale, s -> s.hudScale, (s, v) -> s.hudScale = v))
                 .option(toggle("Follow GUI Scale",
                     "OFF: the HUD keeps its size whatever Minecraft's GUI Scale is set to.\n"
                         + "ON: the HUD grows and shrinks with GUI Scale like the rest of the interface.",
-                    d.followGuiScale, () -> style.followGuiScale, v -> style.followGuiScale = v))
+                    d.followGuiScale, s -> s.followGuiScale, (s, v) -> s.followGuiScale = v))
                 .build())
             .group(OptionGroup.createBuilder()
                 .name(Component.literal("Text"))
-                .option(Option.<String>createBuilder()
+                .option(styled(Option.<String>createBuilder()
                     .name(Component.literal("Font"))
-                    .description(OptionDescription.of(Component.literal(
+                    .description(describe(
                         "Fonts from Minecraft and your enabled resource packs. If a pack's font is removed, the "
-                            + "HUD falls back to the default font.")))
-                    .binding(d.font, () -> style.font, v -> style.font = v)
-                    .controller(opt -> DropdownStringControllerBuilder.create(opt).values(fonts))
-                    .build())
+                            + "HUD falls back to the default font."))
+                    .controller(opt -> DropdownStringControllerBuilder.create(opt).values(fonts)),
+                    d.font, s -> s.font, (s, v) -> s.font = v))
                 .option(size("Title size", "Size of the panel titles.", d.titleScale,
-                    () -> style.titleScale, v -> style.titleScale = v))
-                .option(align("Title alignment", d.titleAlign, () -> style.titleAlign, v -> style.titleAlign = v))
+                    s -> s.titleScale, (s, v) -> s.titleScale = v))
+                .option(align("Title alignment", d.titleAlign, s -> s.titleAlign, (s, v) -> s.titleAlign = v))
                 .option(size("Row text size", "Size of the recipe rows. Rows stay left-aligned so the tree lines up.",
-                    d.textScale, () -> style.textScale, v -> style.textScale = v))
+                    d.textScale, s -> s.textScale, (s, v) -> s.textScale = v))
                 .option(size("Craftable text size", "Size of the Craftable section.", d.craftableScale,
-                    () -> style.craftableScale, v -> style.craftableScale = v))
-                .option(align("Craftable alignment", d.craftableAlign, () -> style.craftableAlign, v -> style.craftableAlign = v))
+                    s -> s.craftableScale, (s, v) -> s.craftableScale = v))
+                .option(align("Craftable alignment", d.craftableAlign, s -> s.craftableAlign, (s, v) -> s.craftableAlign = v))
                 .option(size("Forging text size", "Size of the Forging section.", d.forgingScale,
-                    () -> style.forgingScale, v -> style.forgingScale = v))
-                .option(align("Forging alignment", d.forgingAlign, () -> style.forgingAlign, v -> style.forgingAlign = v))
+                    s -> s.forgingScale, (s, v) -> s.forgingScale = v))
+                .option(align("Forging alignment", d.forgingAlign, s -> s.forgingAlign, (s, v) -> s.forgingAlign = v))
                 .option(toggle("Text shadow", "Draw a shadow under HUD text.", d.textShadow,
-                    () -> style.textShadow, v -> style.textShadow = v))
+                    s -> s.textShadow, (s, v) -> s.textShadow = v))
                 .option(toggle("Bold recipe names", "Show the recipes on your list (top rows) in bold.", d.boldRootNames,
-                    () -> style.boldRootNames, v -> style.boldRootNames = v))
+                    s -> s.boldRootNames, (s, v) -> s.boldRootNames = v))
                 .build())
             .group(OptionGroup.createBuilder()
                 .name(Component.literal("Parts"))
-                .option(Option.<HudStyle.AmountFormat>createBuilder()
+                .option(styled(Option.<HudStyle.AmountFormat>createBuilder()
                     .name(Component.literal("Amount format"))
-                    .description(OptionDescription.of(Component.literal(
+                    .description(describe(
                         "Remaining: what is still left to get (3×).\nHave / need: what you hold of what is needed "
                             + "(83/5,120).\nRequired: the full amount the recipes need (6×).\n\nColours: red = none "
-                            + "yet, orange = some, yellow = can craft from what you have, green = done.")))
-                    .binding(d.amountFormat, () -> style.amountFormat, v -> style.amountFormat = v)
+                            + "yet, orange = some, yellow = can craft from what you have, green = done."))
                     .controller(opt -> EnumControllerBuilder.create(opt).enumClass(HudStyle.AmountFormat.class)
                         .formatValue(v -> Component.literal(switch (v) {
                             case REMAINING -> "Remaining";
                             case HAVE_NEED -> "Have / need";
                             case REQUIRED -> "Required";
-                        })))
-                    .build())
+                        }))),
+                    d.amountFormat, s -> s.amountFormat, (s, v) -> s.amountFormat = v))
                 .option(toggle("Craftable section", "Show what you can craft right now.", d.showCraftable,
-                    () -> style.showCraftable, v -> style.showCraftable = v))
+                    s -> s.showCraftable, (s, v) -> s.showCraftable = v))
                 .option(placement("Craftable panel", d.craftablePlacement,
-                    () -> style.craftablePlacement, v -> style.craftablePlacement = v))
+                    s -> s.craftablePlacement, (s, v) -> s.craftablePlacement = v))
                 .option(toggle("Forging section", "Show what is cooking in your Forge that the list needs.", d.showForging,
-                    () -> style.showForging, v -> style.showForging = v))
+                    s -> s.showForging, (s, v) -> s.showForging = v))
                 .option(placement("Forging panel", d.forgingPlacement,
-                    () -> style.forgingPlacement, v -> style.forgingPlacement = v))
+                    s -> s.forgingPlacement, (s, v) -> s.forgingPlacement = v))
                 .option(toggle("Tick and cross marks", "Show ✔ or ✖ in front of each row.", d.showMarks,
-                    () -> style.showMarks, v -> style.showMarks = v))
+                    s -> s.showMarks, (s, v) -> s.showMarks = v))
                 .option(toggle("Row boxes", "Draw a background and coloured border behind each row.", d.showRowBoxes,
-                    () -> style.showRowBoxes, v -> style.showRowBoxes = v))
+                    s -> s.showRowBoxes, (s, v) -> s.showRowBoxes = v))
                 .option(toggle("Tree lines", "Draw lines joining ingredients to their recipe.", d.showTreeLines,
-                    () -> style.showTreeLines, v -> style.showTreeLines = v))
+                    s -> s.showTreeLines, (s, v) -> s.showTreeLines = v))
                 .build())
             .group(OptionGroup.createBuilder()
                 .name(Component.literal("Spacing & sizes"))
                 .option(slider("Row height", "Height of each row. Rows shrink if the HUD runs out of room.", 10, 24,
-                    d.rowHeight, () -> style.rowHeight, v -> style.rowHeight = v))
-                .option(slider("Row gap", "Space between rows.", 0, 6, d.rowGap, () -> style.rowGap, v -> style.rowGap = v))
+                    d.rowHeight, s -> s.rowHeight, (s, v) -> s.rowHeight = v))
+                .option(slider("Row gap", "Space between rows.", 0, 6, d.rowGap, s -> s.rowGap, (s, v) -> s.rowGap = v))
                 .option(slider("Indent", "How far each ingredient level is pushed right.", 4, 20, d.indent,
-                    () -> style.indent, v -> style.indent = v))
+                    s -> s.indent, (s, v) -> s.indent = v))
                 .option(slider("Padding", "Space between the panel edge and the rows.", 0, 16, d.padding,
-                    () -> style.padding, v -> style.padding = v))
+                    s -> s.padding, (s, v) -> s.padding = v))
                 .option(slider("Panel border", "Thickness of the panel border (0 = none).", 0, 4, d.panelBorderWidth,
-                    () -> style.panelBorderWidth, v -> style.panelBorderWidth = v))
+                    s -> s.panelBorderWidth, (s, v) -> s.panelBorderWidth = v))
                 .option(slider("Row border", "Thickness of each row's coloured border (0 = none).", 0, 2, d.rowBorderWidth,
-                    () -> style.rowBorderWidth, v -> style.rowBorderWidth = v))
+                    s -> s.rowBorderWidth, (s, v) -> s.rowBorderWidth = v))
                 .option(slider("Panel corners", "Rounds the panel corners by this many pixels (0 = square).", 0, 6,
-                    d.panelRadius, () -> style.panelRadius, v -> style.panelRadius = v))
+                    d.panelRadius, s -> s.panelRadius, (s, v) -> s.panelRadius = v))
                 .option(slider("Row corners", "Rounds the corners of each row box by this many pixels (0 = square).", 0, 6,
-                    d.rowRadius, () -> style.rowRadius, v -> style.rowRadius = v))
+                    d.rowRadius, s -> s.rowRadius, (s, v) -> s.rowRadius = v))
                 .build())
             .group(OptionGroup.createBuilder()
                 .name(Component.literal("Colours"))
-                .option(colour("Panel background", d.panelBackground, () -> style.panelBackground, v -> style.panelBackground = v))
-                .option(colour("Panel border", d.panelBorder, () -> style.panelBorder, v -> style.panelBorder = v))
-                .option(colour("Title bar", d.headerBackground, () -> style.headerBackground, v -> style.headerBackground = v))
-                .option(colour("Title text", d.titleText, () -> style.titleText, v -> style.titleText = v))
-                .option(colour("Dividers", d.divider, () -> style.divider, v -> style.divider = v))
-                .option(colour("Row background", d.rowBackground, () -> style.rowBackground, v -> style.rowBackground = v))
-                .option(colour("Tree lines", d.treeLines, () -> style.treeLines, v -> style.treeLines = v))
-                .option(colour("Recipe names", d.rootText, () -> style.rootText, v -> style.rootText = v))
-                .option(colour("Item names (done)", d.itemText, () -> style.itemText, v -> style.itemText = v))
-                .option(colour("Done", d.done, () -> style.done, v -> style.done = v))
-                .option(colour("Partly gathered", d.partial, () -> style.partial, v -> style.partial = v))
-                .option(colour("Missing", d.missing, () -> style.missing, v -> style.missing = v))
-                .option(colour("Can craft", d.craftable, () -> style.craftable, v -> style.craftable = v))
-                .option(colour("Craftable header", d.sectionHeader, () -> style.sectionHeader, v -> style.sectionHeader = v))
-                .option(colour("Craftable text", d.sectionText, () -> style.sectionText, v -> style.sectionText = v))
-                .option(colour("Forging header", d.forgingHeader, () -> style.forgingHeader, v -> style.forgingHeader = v))
-                .option(colour("Forging text", d.forgingText, () -> style.forgingText, v -> style.forgingText = v))
+                .option(colour("Panel background", d.panelBackground, s -> s.panelBackground, (s, v) -> s.panelBackground = v))
+                .option(colour("Panel border", d.panelBorder, s -> s.panelBorder, (s, v) -> s.panelBorder = v))
+                .option(colour("Title bar", d.headerBackground, s -> s.headerBackground, (s, v) -> s.headerBackground = v))
+                .option(colour("Title text", d.titleText, s -> s.titleText, (s, v) -> s.titleText = v))
+                .option(colour("Dividers", d.divider, s -> s.divider, (s, v) -> s.divider = v))
+                .option(colour("Row background", d.rowBackground, s -> s.rowBackground, (s, v) -> s.rowBackground = v))
+                .option(colour("Tree lines", d.treeLines, s -> s.treeLines, (s, v) -> s.treeLines = v))
+                .option(colour("Recipe names", d.rootText, s -> s.rootText, (s, v) -> s.rootText = v))
+                .option(colour("Item names (done)", d.itemText, s -> s.itemText, (s, v) -> s.itemText = v))
+                .option(colour("Done", d.done, s -> s.done, (s, v) -> s.done = v))
+                .option(colour("Partly gathered", d.partial, s -> s.partial, (s, v) -> s.partial = v))
+                .option(colour("Missing", d.missing, s -> s.missing, (s, v) -> s.missing = v))
+                .option(colour("Can craft", d.craftable, s -> s.craftable, (s, v) -> s.craftable = v))
+                .option(colour("Craftable header", d.sectionHeader, s -> s.sectionHeader, (s, v) -> s.sectionHeader = v))
+                .option(colour("Craftable text", d.sectionText, s -> s.sectionText, (s, v) -> s.sectionText = v))
+                .option(colour("Forging header", d.forgingHeader, s -> s.forgingHeader, (s, v) -> s.forgingHeader = v))
+                .option(colour("Forging text", d.forgingText, s -> s.forgingText, (s, v) -> s.forgingText = v))
                 .build())
             .build();
     }
@@ -241,15 +266,16 @@ public final class ConfigScreen {
         if (chosenPreset == null || !names.contains(chosenPreset)) chosenPreset = names.get(0);
         Option<String> chosen = Option.<String>createBuilder()
             .name(Component.literal("Preset"))
-            .description(OptionDescription.of(Component.literal(
+            .description(describe(
                 "Your saved presets, then the built-in looks. \"" + HudPresets.BACKUP_NAME + "\" is your look "
-                    + "from before the last Load, Paste or Reset.")))
+                    + "from before the last Load, Paste or Reset."))
             .binding(names.get(0), () -> chosenPreset, v -> chosenPreset = v)
             .controller(opt -> DropdownStringControllerBuilder.create(opt).values(names))
             .build();
         Option<String> name = Option.<String>createBuilder()
             .name(Component.literal("New preset name"))
-            .description(OptionDescription.of(Component.literal("Name used by Save current as preset.")))
+            .description(describe(
+"Name used by Save current as preset."))
             .binding("My preset", () -> presetName, v -> presetName = v)
             .controller(StringControllerBuilder::create)
             .build();
@@ -257,15 +283,15 @@ public final class ConfigScreen {
         String saveFirst = " Press Save first if you have unsaved Appearance changes.";
         return OptionGroup.createBuilder()
             .name(Component.literal("Presets"))
-            .description(OptionDescription.of(Component.literal(
-                "Presets hold the look plus each panel's size and scale. Panel positions are never changed.")))
+            .description(describe(
+                "Presets hold the look plus each panel's size and scale. Panel positions are never changed."))
             .option(chosen)
             .option(ButtonOption.createBuilder()
                 .name(Component.literal("Load preset"))
                 .text(Component.literal("Load"))
-                .description(OptionDescription.of(Component.literal(
+                .description(describe(
                     "Switches to the chosen preset. Your current look is kept as \"" + HudPresets.BACKUP_NAME
-                        + "\" first, so you can switch back.")))
+                        + "\" first, so you can switch back."))
                 .action((screen, button) -> {
                     chosenPreset = chosen.pendingValue();
                     if (HudPresets.load(chosenPreset)) HudPresets.toast("Preset loaded", chosenPreset);
@@ -276,8 +302,8 @@ public final class ConfigScreen {
             .option(ButtonOption.createBuilder()
                 .name(Component.literal("Delete preset"))
                 .text(Component.literal("Delete"))
-                .description(OptionDescription.of(Component.literal(
-                    "Deletes the chosen preset. Built-in presets can't be deleted.")))
+                .description(describe(
+                    "Deletes the chosen preset. Built-in presets can't be deleted."))
                 .action((screen, button) -> {
                     String target = chosen.pendingValue();
                     if (HudPresets.delete(target)) {
@@ -293,9 +319,9 @@ public final class ConfigScreen {
             .option(ButtonOption.createBuilder()
                 .name(Component.literal("Save current as preset"))
                 .text(Component.literal("Save"))
-                .description(OptionDescription.of(Component.literal(
+                .description(describe(
                     "Saves the current look and panel sizes under the name above (a number is added if the name "
-                        + "is taken)." + saveFirst)))
+                        + "is taken)." + saveFirst))
                 .action((screen, button) -> {
                     presetName = name.pendingValue();
                     chosenPreset = HudPresets.save(presetName);
@@ -306,8 +332,8 @@ public final class ConfigScreen {
             .option(ButtonOption.createBuilder()
                 .name(Component.literal("Copy share code"))
                 .text(Component.literal("Copy"))
-                .description(OptionDescription.of(Component.literal(
-                    "Copies the current look and panel sizes as text, to paste in chat or Discord." + saveFirst)))
+                .description(describe(
+                    "Copies the current look and panel sizes as text, to paste in chat or Discord." + saveFirst))
                 .action((screen, button) -> {
                     HudPresets.copyCode();
                     HudPresets.toast("Share code copied", "Paste it anywhere to share your look.");
@@ -316,9 +342,9 @@ public final class ConfigScreen {
             .option(ButtonOption.createBuilder()
                 .name(Component.literal("Paste share code"))
                 .text(Component.literal("Paste"))
-                .description(OptionDescription.of(Component.literal(
+                .description(describe(
                     "Reads a share code from the clipboard, saves it as a preset and switches to it. Your current "
-                        + "look is kept as \"" + HudPresets.BACKUP_NAME + "\" first.")))
+                        + "look is kept as \"" + HudPresets.BACKUP_NAME + "\" first."))
                 .action((screen, button) -> {
                     String imported = HudPresets.pasteCode();
                     if (imported == null) {
@@ -333,74 +359,101 @@ public final class ConfigScreen {
             .build();
     }
 
-    private static Option<Float> size(String name, String description, float def, Supplier<Float> getter,
-                                      Consumer<Float> setter) {
-        return Option.<Float>createBuilder()
-            .name(Component.literal(name))
-            .description(OptionDescription.of(Component.literal(description)))
-            .binding(def, getter, setter)
-            .controller(opt -> FloatSliderControllerBuilder.create(opt).range(0.5f, 2.0f).step(0.05f))
-            .build();
+    /** While Appearance is being built: the copy the preview draws, and the preview itself. */
+    private static HudStyle previewDraft;
+    private static ImageRenderer previewImage;
+
+    /** Description text, with the live preview above it while building Appearance. */
+    private static OptionDescription describe(String text) {
+        OptionDescription.Builder builder = OptionDescription.createBuilder().text(Component.literal(text));
+        if (previewImage != null) builder.customImage(previewImage);
+        return builder.build();
     }
 
-    private static Option<HudStyle.Align> align(String name, HudStyle.Align def, Supplier<HudStyle.Align> getter,
-                                                Consumer<HudStyle.Align> setter) {
-        return Option.<HudStyle.Align>createBuilder()
+    /**
+     * Finishes an Appearance option: the binding reads and writes the saved look (applied on Save), and every
+     * unsaved change is copied to the preview's draft straight away.
+     */
+    private static <T> Option<T> styled(Option.Builder<T> builder, T def, Function<HudStyle, T> get,
+                                        BiConsumer<HudStyle, T> set) {
+        HudStyle style = HudStyle.get();
+        HudStyle draft = previewDraft;
+        builder.binding(def, () -> get.apply(style), v -> set.accept(style, v));
+        if (draft != null) {
+            builder.addListener((option, event) -> {
+                if (event == OptionEventListener.Event.STATE_CHANGE) set.accept(draft, option.pendingValue());
+            });
+        }
+        return builder.build();
+    }
+
+    private static Option<Float> size(String name, String description, float def, Function<HudStyle, Float> get,
+                                      BiConsumer<HudStyle, Float> set) {
+        return styled(Option.<Float>createBuilder()
             .name(Component.literal(name))
-            .description(OptionDescription.of(Component.literal("Left, centre or right.")))
-            .binding(def, getter, setter)
+            .description(describe(description))
+            .controller(opt -> FloatSliderControllerBuilder.create(opt).range(0.5f, 2.0f).step(0.05f)),
+            def, get, set);
+    }
+
+    private static Option<HudStyle.Align> align(String name, HudStyle.Align def, Function<HudStyle, HudStyle.Align> get,
+                                                BiConsumer<HudStyle, HudStyle.Align> set) {
+        return styled(Option.<HudStyle.Align>createBuilder()
+            .name(Component.literal(name))
+            .description(describe("Left, centre or right."))
             .controller(opt -> EnumControllerBuilder.create(opt).enumClass(HudStyle.Align.class)
                 .formatValue(v -> Component.literal(switch (v) {
                     case LEFT -> "Left";
                     case CENTRE -> "Centre";
                     case RIGHT -> "Right";
-                })))
-            .build();
+                }))),
+            def, get, set);
     }
 
     private static Option<HudStyle.Placement> placement(String name, HudStyle.Placement def,
-                                                        Supplier<HudStyle.Placement> getter,
-                                                        Consumer<HudStyle.Placement> setter) {
-        return Option.<HudStyle.Placement>createBuilder()
+                                                        Function<HudStyle, HudStyle.Placement> get,
+                                                        BiConsumer<HudStyle, HudStyle.Placement> set) {
+        return styled(Option.<HudStyle.Placement>createBuilder()
             .name(Component.literal(name))
-            .description(OptionDescription.of(Component.literal(
+            .description(describe(
                 "Inside main panel: under the shopping list.\nOwn panel: a separate panel you can move and resize "
-                    + "on its own in Move HUD.")))
-            .binding(def, getter, setter)
+                    + "on its own in Move HUD."))
             .controller(opt -> EnumControllerBuilder.create(opt).enumClass(HudStyle.Placement.class)
-                .formatValue(v -> Component.literal(v == HudStyle.Placement.OWN_PANEL ? "Own panel" : "Inside main panel")))
-            .build();
+                .formatValue(v -> Component.literal(v == HudStyle.Placement.OWN_PANEL ? "Own panel" : "Inside main panel"))),
+            def, get, set);
     }
 
-    private static Option<Color> colour(String name, int def, IntSupplier getter, IntConsumer setter) {
-        return Option.<Color>createBuilder()
+    private static Option<Color> colour(String name, int def, ToIntFunction<HudStyle> get, ObjIntConsumer<HudStyle> set) {
+        return styled(Option.<Color>createBuilder()
             .name(Component.literal(name))
-            .description(OptionDescription.of(Component.literal("Colour and transparency of: " + name.toLowerCase(Locale.ROOT) + ".")))
-            .binding(new Color(def, true), () -> new Color(getter.getAsInt(), true), c -> setter.accept(c.getRGB()))
-            .controller(opt -> ColorControllerBuilder.create(opt).allowAlpha(true))
-            .build();
+            .description(describe("Colour and transparency of: " + name.toLowerCase(Locale.ROOT) + "."))
+            .controller(opt -> ColorControllerBuilder.create(opt).allowAlpha(true)),
+            new Color(def, true), s -> new Color(get.applyAsInt(s), true), (s, c) -> set.accept(s, c.getRGB()));
     }
 
     private static Option<Integer> slider(String name, String description, int min, int max, int def,
-                                          Supplier<Integer> getter, Consumer<Integer> setter) {
-        return Option.<Integer>createBuilder()
+                                          Function<HudStyle, Integer> get, BiConsumer<HudStyle, Integer> set) {
+        return styled(Option.<Integer>createBuilder()
             .name(Component.literal(name))
-            .description(OptionDescription.of(Component.literal(description)))
-            .binding(def, getter, setter)
-            .controller(opt -> IntegerSliderControllerBuilder.create(opt).range(min, max).step(1))
-            .build();
+            .description(describe(description))
+            .controller(opt -> IntegerSliderControllerBuilder.create(opt).range(min, max).step(1)),
+            def, get, set);
+    }
+
+    private static Option<Boolean> toggle(String name, String description, boolean def, Function<HudStyle, Boolean> get,
+                                          BiConsumer<HudStyle, Boolean> set) {
+        return styled(Option.<Boolean>createBuilder()
+            .name(Component.literal(name))
+            .description(describe(description))
+            .controller(opt -> BooleanControllerBuilder.create(opt).onOffFormatter().coloured(true)),
+            def, get, set);
     }
 
     private static Option<Boolean> toggle(String name, String description, Supplier<Boolean> getter, Consumer<Boolean> setter) {
-        return toggle(name, description, true, getter, setter);
-    }
-
-    private static Option<Boolean> toggle(String name, String description, boolean def, Supplier<Boolean> getter,
-                                          Consumer<Boolean> setter) {
         return Option.<Boolean>createBuilder()
             .name(Component.literal(name))
             .description(OptionDescription.of(Component.literal(description)))
-            .binding(def, getter, setter)
+            .binding(true, getter, setter)
             .controller(opt -> BooleanControllerBuilder.create(opt).onOffFormatter().coloured(true))
             .build();
     }
