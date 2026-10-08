@@ -41,6 +41,8 @@ public class ShoppingListScreen extends Screen {
     private int treeViewX = 300;
     private int treeViewY = 80;
     private int treeViewWidth = 400;
+    /** Room left for each shopping list row's name once its buttons are placed. */
+    private int listNameWidth = 276;
     private int treeViewHeight = 300;
     private int treeScrollOffset = 0;
     private static final int RECIPE_LEVEL_INDENT = 10;
@@ -97,6 +99,10 @@ public class ShoppingListScreen extends Screen {
         // button per row. Order is priority: rows higher up get shared stock first.
         List<ShoppingListEntry> list = widget.getShoppingList();
         treeViewWidth = Math.max(120, Math.min(400, width - treeViewX - 20));
+        // Narrow screens: shrink the move buttons, then drop them, so the name keeps some room.
+        int moveWidth = treeViewWidth >= 184 ? 20 : treeViewWidth >= 148 ? 12 : 0;
+        int controlsLeft = moveWidth > 0 ? 76 + 2 * moveWidth : 70;
+        listNameWidth = treeViewWidth - controlsLeft - 8;
         int rows = Math.min(list.size(), PANEL_MAX_ROWS);
         for (int i = 0; i < rows; i++) {
             ShoppingListEntry entry = list.get(i);
@@ -113,22 +119,24 @@ public class ShoppingListScreen extends Screen {
                 }
             });
             addRenderableWidget(amount);
-            Button up = Button.builder(Component.literal("▲"), button -> {
-                widget.moveEntry(entry.recipe, -1);
-                rebuildWidgets();
-            }).bounds(treeViewX + treeViewWidth - 116, y, 20, 18)
-              .tooltip(Tooltip.create(Component.literal("Move up: higher rows get shared materials first.")))
-              .build();
-            up.active = i > 0;
-            addRenderableWidget(up);
-            Button down = Button.builder(Component.literal("▼"), button -> {
-                widget.moveEntry(entry.recipe, 1);
-                rebuildWidgets();
-            }).bounds(treeViewX + treeViewWidth - 94, y, 20, 18)
-              .tooltip(Tooltip.create(Component.literal("Move down: lower rows get what is left.")))
-              .build();
-            down.active = i < list.size() - 1;
-            addRenderableWidget(down);
+            if (moveWidth > 0) {
+                Button up = Button.builder(Component.literal("▲"), button -> {
+                    widget.moveEntry(entry.recipe, -1);
+                    rebuildWidgets();
+                }).bounds(treeViewX + treeViewWidth - controlsLeft, y, moveWidth, 18)
+                  .tooltip(Tooltip.create(Component.literal("Move up: higher rows get shared materials first.")))
+                  .build();
+                up.active = i > 0;
+                addRenderableWidget(up);
+                Button down = Button.builder(Component.literal("▼"), button -> {
+                    widget.moveEntry(entry.recipe, 1);
+                    rebuildWidgets();
+                }).bounds(treeViewX + treeViewWidth - 74 - moveWidth, y, moveWidth, 18)
+                  .tooltip(Tooltip.create(Component.literal("Move down: lower rows get what is left.")))
+                  .build();
+                down.active = i < list.size() - 1;
+                addRenderableWidget(down);
+            }
             addRenderableWidget(Button.builder(Component.literal("×"), button -> {
                 widget.removeFromList(entry.recipe);
                 rebuildWidgets();
@@ -306,7 +314,7 @@ public class ShoppingListScreen extends Screen {
         for (int i = 0; i < rows; i++) {
             int y = PANEL_TOP + i * PANEL_ROW;
             context.fill(treeViewX, y - 2, treeViewX + treeViewWidth, y + 20, i % 2 == 0 ? 0xFC271910 : 0xFC2E1F14);
-            String name = font.plainSubstrByWidth(list.get(i).recipe, treeViewWidth - 124);
+            String name = font.plainSubstrByWidth(list.get(i).recipe, listNameWidth);
             context.text(font, name, treeViewX + 4, y + 5, 0xFFE0E0E0, false);
         }
         if (list.size() > rows) {

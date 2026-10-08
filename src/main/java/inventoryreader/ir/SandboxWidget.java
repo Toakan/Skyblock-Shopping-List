@@ -686,7 +686,10 @@ public class SandboxWidget {
         if (naturalHeight > panelHeight) {
             // Cut off: tell the player there is more (raise the max height in Move HUD, or collapse rows).
             Component more = style.text("…", style.itemText, true);
-            RoundedBox.fill(context, 0, panelHeight - 9, width, 9, style.panelRadius, false, true, style.panelBackground);
+            // At least twice the radius tall, or RoundedBox clamps the curve and the bottom corners change shape.
+            int coverHeight = Math.max(9, style.panelRadius * 2);
+            RoundedBox.fill(context, 0, panelHeight - coverHeight, width, coverHeight, style.panelRadius, false, true,
+                style.panelBackground);
             drawScaled(context, more, (width - client.font.width(more)) / 2f, panelHeight - 9, 1f, style.textShadow);
         }
         context.pose().popMatrix();
