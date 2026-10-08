@@ -46,6 +46,7 @@ public final class IrCommandManager {
                         FilePathManager.resetData();
                         StorageReader.getInstance().clear();
                         SackReader.getInstance().clear();
+                        CoinTracker.clear();
                         InventoryReaderClient.clearInventorySnapshot();
                         SandboxWidget.getInstance().resetConfiguration();
                         SackReader.setNeedsReminder(true);

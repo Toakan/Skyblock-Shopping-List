@@ -33,6 +33,10 @@ The HUD shows:
 - One tree per recipe.
 - **Craftable**: intermediates you can make right now.
 
+Recipes cover crafting, the Dwarven Forge and NPC shop purchases (for items with no crafting or forge recipe), so things like the **Golden Dragon (Legendary)** (500M coins, 50 Enchanted Gold Block and one of each Perfect gem) can go on the list. Pets are listed as "<Pet> (<Rarity>)".
+
+**Coins** count as an item: your purse is read from the SkyBlock sidebar, and your bank balance each time you open the bank menu. Balances above about 2.1 billion are shown capped at that.
+
 When a recipe has everything it needs you get a "Ready to craft" pop-up, and once you have made the amount you asked for an "Item achieved" pop-up and the recipe leaves the list. Notifications, auto-remove, the Total section and the maximum list size can all be changed in **Settings** (`/ssl menu` → Settings).
 
 ## Keys and commands
@@ -64,9 +68,11 @@ As Hypixel states, every modification is used at your own risk.
 Everything lives in `.skyblock-shopping-list/data/` inside your Minecraft folder:
 - `resources.json`: tracked item counts
 - `inventorydata.json`, `allcontainerData.json`, `sacks.json`: last-seen inventory, container and sack contents, used to work out changes
+- `coins.json`: last bank balance seen
 - `widget_config.json`: shopping list, HUD position and size, expanded nodes and settings
 - `forging.json`, `gemstone_recipes.json`: built-in fallback recipes
-- `recipes_remote.json`, `recipes_remote_forge.json`: recipes parsed from the NEU repository
+- `recipes_remote.json`, `recipes_remote_forge.json`, `recipes_remote_shop.json`: crafting, forge and NPC shop recipes parsed from the NEU repository
+- `item_names.json`: SkyBlock item ID to name table
 - `remote_sources.json`, `remote_sources_meta.json`: recipe source list and download cache state
 - `neu-repo-extracted/`: the unpacked NEU repository
 
@@ -87,7 +93,7 @@ The jar is written to `build/libs/`. `./gradlew runClient` starts a development 
 ## Known limitations
 - Items are matched by their SkyBlock ID where the item has one, so reforges and stars don't matter. Items without an ID (some sack and menu icons) fall back to their name, with colour codes and stat symbols ignored.
 - Sack contents only resync when you open a sack; between opens they follow the `[Sacks]` chat summaries, so keep those enabled in your SkyBlock settings.
-- Recipes cover what the NEU repository lists as crafting and forge recipes.
+- Recipes cover what the NEU repository lists as crafting, forge and NPC shop recipes. Owned pets are not recognised yet (Hypixel stores all pets under one ID), so pet entries don't auto-complete.
 
 ## License and attribution
 - Code: CC-BY-SA-4.0 (see `LICENSE`). Based on Inventory Reader by Scholiboi.

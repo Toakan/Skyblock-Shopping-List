@@ -76,6 +76,7 @@ public class InventoryReaderClient implements ClientModInitializer {
         StorageViewerMod.register();
         IrCommandManager.register();
         SackChatListener.register();
+        CoinTracker.register();
         ReminderManager.initialize();
         WelcomeManager.initialize();
         SandboxWidget.getInstance();
