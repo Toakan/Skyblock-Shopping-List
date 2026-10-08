@@ -191,6 +191,10 @@ public final class ConfigScreen {
                     () -> style.panelBorderWidth, v -> style.panelBorderWidth = v))
                 .option(slider("Row border", "Thickness of each row's coloured border (0 = none).", 0, 2, d.rowBorderWidth,
                     () -> style.rowBorderWidth, v -> style.rowBorderWidth = v))
+                .option(slider("Panel corners", "Rounds the panel corners by this many pixels (0 = square).", 0, 6,
+                    d.panelRadius, () -> style.panelRadius, v -> style.panelRadius = v))
+                .option(slider("Row corners", "Rounds the corners of each row box by this many pixels (0 = square).", 0, 6,
+                    d.rowRadius, () -> style.rowRadius, v -> style.rowRadius = v))
                 .build())
             .group(OptionGroup.createBuilder()
                 .name(Component.literal("Colours"))

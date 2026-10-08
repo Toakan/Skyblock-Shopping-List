@@ -52,6 +52,9 @@ public final class HudStyle {
     public int rowGap = 0;
     public int panelBorderWidth = 2;
     public int rowBorderWidth = 1;
+    /** Corner rounding in pixels (0 = square). */
+    public int panelRadius = 0;
+    public int rowRadius = 0;
 
     // Text.
     public String font = DEFAULT_FONT;
@@ -123,6 +126,8 @@ public final class HudStyle {
         rowGap = clamp(rowGap, 0, 6);
         panelBorderWidth = clamp(panelBorderWidth, 0, 4);
         rowBorderWidth = clamp(rowBorderWidth, 0, 2);
+        panelRadius = clamp(panelRadius, 0, 6);
+        rowRadius = clamp(rowRadius, 0, 6);
         textScale = clamp(textScale, 0.5f, 2.0f);
         titleScale = clamp(titleScale, 0.5f, 2.0f);
         craftableScale = clamp(craftableScale, 0.5f, 2.0f);
