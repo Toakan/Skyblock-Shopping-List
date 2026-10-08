@@ -235,19 +235,23 @@ public class ResourcesManager {
             List<RecipeManager.RecipeNode> ingredients = new ArrayList<>();
             Map<String, Integer> recipe = forging.get(entry.recipe);
             if (recipe != null) {
+                // Expand both what is missing and what can be crafted now, so the steps still to do show.
+                giveBack(recipe, craftedNow[i], highestPossibleResources);
                 for (Map.Entry<String, Integer> ingredient : recipe.entrySet()) {
-                    ingredients.add(expandRequiredRecipe(ingredient.getKey(), ingredient.getValue() * toCraft[i], forging, highestPossibleResources, owned, 1));
+                    ingredients.add(expandRequiredRecipe(ingredient.getKey(), ingredient.getValue() * (toCraft[i] + craftedNow[i]),
+                        forging, highestPossibleResources, owned, 1));
                 }
             }
             RecipeManager.RecipeNode root = new RecipeManager.RecipeNode(entry.recipe, toCraft[i], entry.amount, ingredients);
             root.toCraft = craftedNow[i];
             trees.add(root);
         }
-        return new ShoppingResponse(trees, totalOf(trees), messages);
+        return new ShoppingResponse(trees, totalOf(trees, forging), messages);
     }
 
     /** Raw materials (leaves) across all trees, summed; missing items first, most missing at the top. */
-    private static RecipeManager.RecipeNode totalOf(List<RecipeManager.RecipeNode> trees) {
+    private static RecipeManager.RecipeNode totalOf(List<RecipeManager.RecipeNode> trees,
+                                                    Map<String, Map<String, Integer>> forging) {
         Map<String, int[]> sums = new LinkedHashMap<>();
         for (RecipeManager.RecipeNode tree : trees) {
             if (tree.ingredients != null) {
@@ -259,7 +263,8 @@ public class ResourcesManager {
         int required = 0;
         for (Map.Entry<String, int[]> e : sums.entrySet()) {
             int[] v = e.getValue();
-            if (v[1] <= 0) continue;
+            // Held intermediates are leaves of the tree too, but the Total only lists raw materials.
+            if (v[1] <= 0 || forging.containsKey(e.getKey())) continue;
             leaves.add(new RecipeManager.RecipeNode(e.getKey(), v[0], v[1], Collections.emptyList()));
             missing += v[0];
             required += v[1];
@@ -381,9 +386,21 @@ public class ResourcesManager {
     }
 
     /**
+     * Phase 1 used up the ingredients of everything it crafted. Before expanding {@code crafted} of an item into
+     * its ingredients, those are put back so the ingredient rows can draw on them again.
+     */
+    private static void giveBack(Map<String, Integer> recipe, int crafted, Map<String, Integer> highestPossibleResources) {
+        if (crafted <= 0) return;
+        for (Map.Entry<String, Integer> ingredient : recipe.entrySet()) {
+            highestPossibleResources.merge(ingredient.getKey(), ingredient.getValue() * crafted, Integer::sum);
+        }
+    }
+
+    /**
      * Builds the shopping-list node for {@code needed} of an item: stock the player has is used first,
-     * {@code amount} is what is still missing, and only that shortfall is expanded into ingredients. Stock
-     * beyond what is in {@code owned} is craftable from held materials and goes into {@code toCraft}.
+     * {@code amount} is what is still missing. Stock beyond what is in {@code owned} is craftable from held
+     * materials and goes into {@code toCraft}. Both the missing part and the part to craft are expanded into
+     * ingredients, so every crafting step still to do shows; held items are not expanded.
      */
     private RecipeManager.RecipeNode expandRequiredRecipe(String currentName, int needed, Map<String, Map<String, Integer>> forging,
                                                           Map<String, Integer> highestPossibleResources, Map<String, Integer> owned,
@@ -398,12 +415,16 @@ public class ResourcesManager {
 
         Map<String, Integer> recipe = forging.get(currentName);
         RecipeManager.RecipeNode node;
-        if (recipe == null || depth > MAX_DEPTH) {
+        // Held items (nothing missing, nothing to craft) have no steps left, so they are not expanded.
+        if (recipe == null || depth > MAX_DEPTH || missing + fromStock - fromHeld <= 0) {
             node = new RecipeManager.RecipeNode(currentName, missing, needed, Collections.emptyList());
         } else {
             List<RecipeManager.RecipeNode> ingredients = new ArrayList<>();
+            int toCraft = fromStock - fromHeld;
+            giveBack(recipe, toCraft, highestPossibleResources);
             for (Map.Entry<String, Integer> entry : recipe.entrySet()) {
-                ingredients.add(expandRequiredRecipe(entry.getKey(), entry.getValue() * missing, forging, highestPossibleResources, owned, depth + 1));
+                ingredients.add(expandRequiredRecipe(entry.getKey(), entry.getValue() * (missing + toCraft), forging,
+                    highestPossibleResources, owned, depth + 1));
             }
             node = new RecipeManager.RecipeNode(currentName, missing, needed, ingredients);
         }
