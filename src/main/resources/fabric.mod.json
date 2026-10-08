@@ -32,6 +32,9 @@
 		"java": ">=25",
 		"fabric-api": ">=0.161.0"
 	},
+	"suggests": {
+		"hypixel-mod-api": ">=1.0.2"
+	},
 	"breaks": {
 		"ir": "*"
 	}

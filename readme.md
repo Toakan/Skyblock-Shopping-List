@@ -9,10 +9,11 @@ This is a renamed, maintained fork of Inventory Reader ([Scholiboi/InventoryRead
 - Fabric Loader 0.19.5 or newer
 - Fabric API 0.161.0+26.2 or newer
 - Java 25
+- Recommended: [Hypixel Mod API](https://modrinth.com/mod/hypixel-mod-api) (official), for reliable SkyBlock detection
 
 ## Installation
 1. Install Fabric Loader for Minecraft 26.2.
-2. Put Fabric API and the Skyblock Shopping List jar in your `mods/` folder.
+2. Put Fabric API, the Hypixel Mod API (recommended) and the Skyblock Shopping List jar in your `mods/` folder.
 3. Launch Minecraft with the Fabric profile.
 
 ## First-time setup
@@ -33,7 +34,7 @@ The mod only knows what you have shown it. Open each of your sacks, backpacks an
 `/ir` still works as an alias for `/ssl`. Keys can be rebound under Options > Controls.
 
 ## SkyBlock only
-The mod only runs on Hypixel SkyBlock, detected from the sidebar scoreboard title ("SKYBLOCK"). In lobbies, other Hypixel games and other servers the HUD is hidden, the keys do nothing and nothing is tracked, so other inventories never change your counts. The `/ssl` commands still work everywhere.
+The mod only runs on Hypixel SkyBlock. With the official Hypixel Mod API installed, it uses the API's location event (Hypixel's own signal, which also reports the island). Without it, it falls back to the sidebar scoreboard title ("SKYBLOCK"). In lobbies, other Hypixel games and other servers the HUD is hidden, the keys do nothing and nothing is tracked, so other inventories never change your counts. The `/ssl` commands still work everywhere.
 
 ## Hypixel rules
 Skyblock Shopping List is designed to stay within the [Hypixel Allowed Modifications](https://support.hypixel.net/hc/en-us/articles/6472550754962-Hypixel-Allowed-Modifications) guidelines:

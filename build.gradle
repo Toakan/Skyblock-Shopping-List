@@ -17,6 +17,7 @@ repositories {
 	// See https://docs.gradle.org/current/userguide/declaring_repositories.html
 	// for more information about repositories.
 	maven { url = "https://repo.nea.moe/releases" }
+	maven { url = "https://repo.hypixel.net/repository/Hypixel/" }
 }
 
 dependencies {
@@ -31,6 +32,10 @@ dependencies {
 	// 'include' bundles it inside the mod JAR via Fabric Jar-in-Jar so it is
 	// available at runtime without requiring a separate mod on the classpath.
 	include implementation("moe.nea:neurepoparser:1.9.0")
+
+	// Official Hypixel Mod API, used for SkyBlock detection when the hypixel-mod-api mod is installed.
+	// Optional at runtime ("suggests" in fabric.mod.json), so it is compile-only and not bundled.
+	compileOnly "net.hypixel:mod-api:1.0.2"
 
 }
 
