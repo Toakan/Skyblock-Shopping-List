@@ -43,6 +43,13 @@ public class SandboxWidget {
     private int widgetHeight = 300;
     private Map<String, Boolean> expandedNodes = new ConcurrentHashMap<>();
     private final List<String> messages = new CopyOnWriteArrayList<>();
+    /** "Forging -" lines: forge slots making something the shopping list needs. */
+    private final List<String> forgingLines = new CopyOnWriteArrayList<>();
+    /** Update thread only: every item name in the current shopping-list trees. */
+    private Set<String> listItemNames = Set.of();
+    /** Update thread only: forge version and minute the forging lines were built for. */
+    private long forgingVersion = -1;
+    private long forgingMinute = -1;
     private volatile boolean showRemaining = true;
     private volatile boolean showTotal = true;
     private volatile boolean notifications = true;
@@ -277,9 +284,17 @@ public class SandboxWidget {
     private void refreshIfStale() {
         try {
             long version = resourcesManager.getVersion();
-            if (version == computedVersion) return;
-            computedVersion = version;
-            updateRecipeData();
+            if (version != computedVersion) {
+                computedVersion = version;
+                updateRecipeData();
+            }
+            // Forge countdowns move every minute even when nothing else changes.
+            long minute = System.currentTimeMillis() / 60_000;
+            if (ForgeTracker.getVersion() != forgingVersion || minute != forgingMinute) {
+                forgingVersion = ForgeTracker.getVersion();
+                forgingMinute = minute;
+                updateForgingLines();
+            }
         } catch (RuntimeException e) {
             // Never let an exception escape: it would cancel the scheduled refresh for good.
             InventoryReader.LOGGER.error("Failed to update HUD recipe", e);
@@ -291,6 +306,8 @@ public class SandboxWidget {
         if (entries.isEmpty()) {
             recipeTree = null;
             messages.clear();
+            listItemNames = Set.of();
+            forgingLines.clear();
             readyEntries.clear();
             achievedEntries.clear();
             baselineSet = true;
@@ -354,6 +371,42 @@ public class SandboxWidget {
         messages.clear();
         messages.addAll(newMessages);
         recipeTree = new RecipeManager.RecipeNode("Shopping list", 0, 0, tops);
+
+        Set<String> itemNames = new HashSet<>();
+        for (RecipeManager.RecipeNode tree : response.trees) collectNames(tree, itemNames);
+        listItemNames = itemNames;
+        updateForgingLines();
+    }
+
+    private static void collectNames(RecipeManager.RecipeNode node, Set<String> out) {
+        out.add(ItemNames.normalize(node.name));
+        if (node.ingredients != null) {
+            for (RecipeManager.RecipeNode child : node.ingredients) collectNames(child, out);
+        }
+    }
+
+    /** Forge slots making something on the list, grouped by item and finish minute; soonest first. */
+    private void updateForgingLines() {
+        long now = System.currentTimeMillis();
+        Map<String, int[]> counts = new LinkedHashMap<>();
+        Map<String, ForgeTracker.Entry> firstOf = new LinkedHashMap<>();
+        List<ForgeTracker.Entry> relevant = new ArrayList<>();
+        for (ForgeTracker.Entry entry : ForgeTracker.getEntries()) {
+            if (listItemNames.contains(ItemNames.normalize(entry.name))) relevant.add(entry);
+        }
+        relevant.sort(java.util.Comparator.comparingLong(e -> e.endsAt));
+        for (ForgeTracker.Entry entry : relevant) {
+            String key = entry.name + "|" + ForgeTracker.formatRemaining(entry.endsAt, now);
+            counts.computeIfAbsent(key, k -> new int[1])[0] += entry.count;
+            firstOf.putIfAbsent(key, entry);
+        }
+        List<String> lines = new ArrayList<>();
+        for (Map.Entry<String, int[]> e : counts.entrySet()) {
+            ForgeTracker.Entry entry = firstOf.get(e.getKey());
+            lines.add("   " + e.getValue()[0] + "× " + entry.name + " - " + ForgeTracker.formatRemaining(entry.endsAt, now));
+        }
+        forgingLines.clear();
+        forgingLines.addAll(lines);
     }
 
     /** Client-side toast; never sent anywhere. Off when notifications are disabled or outside SkyBlock. */
@@ -563,65 +616,41 @@ public class SandboxWidget {
         int desiredHeight = baseHeader + Math.max(0, (lines - 1) * baseLine);
         float scale = desiredHeight > 0 ? Math.min(1.0f, Math.max(0.4f, (float)availableHeight / (float)desiredHeight)) : 1.0f;
 
-        if (y + Math.round(baseLine * scale) <= maxY) {
-            Component messagesHeader = Component.literal("Craftable -")
-                .setStyle(Style.EMPTY.withColor(ChatFormatting.YELLOW).withBold(true));
-            context.pose().pushMatrix();
-            context.pose().translate(x + (width - client.font.width(messagesHeader) * scale) / 2f, y);
-            context.pose().scale(scale, scale);
-            context.text(
-                client.font,
-                messagesHeader,
-                0,
-                0,
-                0xFFFFFFFF,
-                false
-            );
-            context.pose().popMatrix();
-        } else {
-            return;
+        List<String> craftable = new ArrayList<>(messages);
+        craftable.remove("Craftable -");
+        craftable.sort((a, b) -> Integer.compare(extractAmount(b), extractAmount(a)));
+        y = drawSection(context, "Craftable -", craftable, x, y, width, maxY, scale);
+        List<String> forging = new ArrayList<>(forgingLines);
+        if (y >= 0 && !forging.isEmpty()) {
+            drawSection(context, "Forging -", forging, x, y + Math.round(3 * scale), width, maxY, scale);
         }
+    }
 
-        if (messages.size() == 1 && messages.get(0).equals("Craftable -")) {
-            return;
-        }
+    /** Draws a centred yellow header and its wrapped, centred lines. Returns the next y, or -1 when out of room. */
+    private int drawSection(GuiGraphicsExtractor context, String header, List<String> lines, int x, int y, int width,
+                            int maxY, float scale) {
+        Minecraft client = Minecraft.getInstance();
+        int baseHeader = 13;
+        int baseLine = 10;
+        if (y + Math.round(baseLine * scale) > maxY) return -1;
+        Component headerText = Component.literal(header)
+            .setStyle(Style.EMPTY.withColor(ChatFormatting.YELLOW).withBold(true));
+        context.pose().pushMatrix();
+        context.pose().translate(x + (width - client.font.width(headerText) * scale) / 2f, y);
+        context.pose().scale(scale, scale);
+        context.text(client.font, headerText, 0, 0, 0xFFFFFFFF, false);
+        context.pose().popMatrix();
         y += Math.round(baseHeader * scale);
 
-        List<String> messagesCopy = new ArrayList<>(messages);
-        messagesCopy.sort((a, b) -> {
-            if (a.equals("Craftable -")) return -1;
-            if (b.equals("Craftable -")) return 1;
-            try {
-                int amountA = extractAmount(a);
-                int amountB = extractAmount(b);
-                return Integer.compare(amountB, amountA);
-            } catch (Exception e) {
-                return 0;
-            }
-        });
-
         int unscaledWrapWidth = Math.max(10, (int)Math.floor((width - 15) / Math.max(0.01f, scale)));
-        for (String message : messagesCopy) {
-            if (message.equals("Craftable -")) continue;
-            int textColor = message.startsWith("   ") ? 0xFFFF9D00 : 0xFFFFFFFF;
+        for (String message : lines) {
+            int textColor = message.endsWith(" - Ready") ? DONE_GREEN : message.startsWith("   ") ? 0xFFFF9D00 : 0xFFFFFFFF;
             String[] words = message.split(" ");
             StringBuilder line = new StringBuilder();
             for (String word : words) {
                 if (client.font.width(line.toString() + word) > unscaledWrapWidth) {
-                    if (y + Math.round(baseLine * scale) > maxY) return;
-                    context.pose().pushMatrix();
-                    String centred = line.toString().trim();
-                    context.pose().translate(x + (width - client.font.width(centred) * scale) / 2f, y);
-                    context.pose().scale(scale, scale);
-                    context.text(
-                        client.font,
-                        centred,
-                        0,
-                        0,
-                        textColor,
-                        false
-                    );
-                    context.pose().popMatrix();
+                    if (y + Math.round(baseLine * scale) > maxY) return -1;
+                    drawCentred(context, line.toString().trim(), x, y, width, scale, textColor);
                     y += Math.round(baseLine * scale);
                     line = new StringBuilder(message.startsWith("   ") ? "      " : "   ").append(word).append(" ");
                 } else {
@@ -629,23 +658,21 @@ public class SandboxWidget {
                 }
             }
             if (line.length() > 0) {
-                if (y + Math.round((baseLine - 1) * scale) > maxY) return;
-                context.pose().pushMatrix();
-                String centred = line.toString().trim();
-                context.pose().translate(x + (width - client.font.width(centred) * scale) / 2f, y);
-                context.pose().scale(scale, scale);
-                context.text(
-                    client.font,
-                    centred,
-                    0,
-                    0,
-                    textColor,
-                    false
-                );
-                context.pose().popMatrix();
+                if (y + Math.round((baseLine - 1) * scale) > maxY) return -1;
+                drawCentred(context, line.toString().trim(), x, y, width, scale, textColor);
                 y += Math.round((baseLine - 1) * scale);
             }
         }
+        return y;
+    }
+
+    private static void drawCentred(GuiGraphicsExtractor context, String text, int x, int y, int width, float scale, int color) {
+        Minecraft client = Minecraft.getInstance();
+        context.pose().pushMatrix();
+        context.pose().translate(x + (width - client.font.width(text) * scale) / 2f, y);
+        context.pose().scale(scale, scale);
+        context.text(client.font, text, 0, 0, color, false);
+        context.pose().popMatrix();
     }
 
     private int extractAmount(String message) {
@@ -666,6 +693,12 @@ public class SandboxWidget {
         return new ArrayList<>(this.messages);
     }
     private int countMessageLines(Minecraft client, int width) {
+        // Header + one line per forging slot group.
+        int forging = forgingLines.isEmpty() ? 0 : forgingLines.size() + 1;
+        return countCraftableLines(client, width) + forging;
+    }
+
+    private int countCraftableLines(Minecraft client, int width) {
         int lineCount = 1;
         if (messages.isEmpty()) return lineCount;
         if (messages.size() == 1 && messages.get(0).equals("Craftable -")) return lineCount;

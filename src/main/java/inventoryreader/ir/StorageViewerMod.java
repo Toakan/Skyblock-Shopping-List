@@ -39,6 +39,9 @@ public final class StorageViewerMod {
             if (title.contains("Bank")) {
                 CoinTracker.readBank(menu, title);
             }
+            if (ForgeTracker.isForgeMenu(title)) {
+                ForgeTracker.readForge(menu);
+            }
             if (title.contains("Sack")) {
                 SackReader.getInstance().readSack(menu, title);
             }

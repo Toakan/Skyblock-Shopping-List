@@ -37,6 +37,7 @@ The HUD (`H` to toggle) shows:
 - **Total**: every raw material still needed across all recipes, missing items first. Your stock is shared between recipes, never counted twice (earlier entries get it first).
 - One tree per recipe.
 - **Craftable**: intermediates you can make right now.
+- **Forging**: items cooking in your Dwarven Forge that the list needs, with time left. Updated when you open The Forge.
 
 Recipes cover crafting, the Dwarven Forge and NPC shop purchases (for items with no crafting or forge recipe) and Kat pet upgrades, so things like the **Golden Dragon (Legendary)** (500M coins, 50 Enchanted Gold Block and one of each Perfect gem) can go on the list. Pets are listed as "<Pet> (<Rarity>)"; a pet upgrade needs the same pet one rarity lower. Pets you own count once they are in your inventory, a backpack or the ender chest, or after you have opened each page of your Pets menu (`/pets`).
 
@@ -73,6 +74,7 @@ Everything lives in `config/skyblock-shopping-list/` inside your Minecraft folde
 - `resources.json`: tracked item counts
 - `inventorydata.json`, `allcontainerData.json`, `sacks.json`, `sacks_meta.json`: last-seen inventory, container and sack contents, used to work out changes
 - `coins.json`: last bank balance seen
+- `forge.json`: what was cooking in the Forge when you last opened it
 - `widget_config.json`: shopping list, HUD position and size, expanded nodes and settings
 - `forging.json`, `gemstone_recipes.json`: built-in fallback recipes
 - `recipes_remote.json`, `recipes_remote_forge.json`, `recipes_remote_shop.json`: crafting, forge and NPC shop recipes parsed from the NEU repository
