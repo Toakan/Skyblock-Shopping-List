@@ -8,6 +8,7 @@ import io.github.moulberry.repo.data.NEUCraftingRecipe;
 import io.github.moulberry.repo.data.NEUForgeRecipe;
 import io.github.moulberry.repo.data.NEUNpcShopRecipe;
 import io.github.moulberry.repo.data.NEUIngredient;
+import io.github.moulberry.repo.data.NEUKatUpgradeRecipe;
 import io.github.moulberry.repo.data.NEUItem;
 import io.github.moulberry.repo.data.NEURecipe;
 import inventoryreader.ir.FilePathManager;
@@ -48,7 +49,7 @@ public final class RemoteRecipeFetcher {
      * Bump when the way recipes are extracted from the repo changes, so cached snapshots are rebuilt
      * even if the remote reports "not modified".
      */
-    private static final String PARSER_VERSION = "5";
+    private static final String PARSER_VERSION = "6";
     /** NEU's pseudo item for coin costs in shop recipes. */
     private static final String COIN_ID = "SKYBLOCK_COIN";
     public static final String COINS_NAME = "Coins";
@@ -221,6 +222,7 @@ public final class RemoteRecipeFetcher {
             Map<String, Map<String, Integer>> craftingByInternal = new LinkedHashMap<>();
             Map<String, Map<String, Integer>> forgeByInternal    = new LinkedHashMap<>();
             Map<String, Map<String, Integer>> shopByInternal     = new LinkedHashMap<>();
+            Map<String, Map<String, Integer>> katByInternal      = new LinkedHashMap<>();
             for (NEUItem item : neuRepo.getItems().getItems().values()) {
                 for (NEURecipe recipe : item.getRecipes()) {
                     if (recipe instanceof NEUCraftingRecipe cr) {
@@ -229,6 +231,8 @@ public final class RemoteRecipeFetcher {
                         collectRecipeIngredients(forgeByInternal, fr.getAllOutputs(), fr.getAllInputs());
                     } else if (recipe instanceof NEUNpcShopRecipe shop) {
                         collectRecipeIngredients(shopByInternal, shop.getAllOutputs(), shop.getAllInputs());
+                    } else if (recipe instanceof NEUKatUpgradeRecipe kat) {
+                        collectRecipeIngredients(katByInternal, kat.getAllOutputs(), kat.getAllInputs());
                     }
                 }
             }
@@ -240,6 +244,14 @@ public final class RemoteRecipeFetcher {
             shopByInternal.keySet().removeAll(craftingByInternal.keySet());
             shopByInternal.keySet().removeAll(forgeByInternal.keySet());
             shopByInternal.values().removeIf(cost -> cost.keySet().stream().allMatch(COIN_ID::equals));
+            // Kat upgrades (the pet one rarity lower + items + coins) cover most pets above Common. They fill
+            // the remaining gaps and travel with the crafting recipes.
+            katByInternal.keySet().removeAll(forgeByInternal.keySet());
+            katByInternal.keySet().removeAll(shopByInternal.keySet());
+            int katCount = 0;
+            for (Map.Entry<String, Map<String, Integer>> e : katByInternal.entrySet()) {
+                if (craftingByInternal.putIfAbsent(e.getKey(), e.getValue()) == null) katCount++;
+            }
             Map<String, String> recipeNameById = new LinkedHashMap<>(internalToDisplay);
             Map<String, Map<String, Integer>> craftingWire = resolveToDisplayNames(craftingByInternal, internalToDisplay, recipeNameById);
             Map<String, Map<String, Integer>> forgeWire    = resolveToDisplayNames(forgeByInternal,    internalToDisplay, recipeNameById);
@@ -251,7 +263,7 @@ public final class RemoteRecipeFetcher {
             writeSnapshot(recipeNameById, FilePathManager.ITEM_NAMES_JSON, "item_names.json.tmp");
             inventoryreader.ir.ItemIds.reload();
 
-            LOGGER.info("NEU repo parsed (library): {} crafting, {} forge, {} shop recipes", craftingWire.size(), forgeWire.size(), shopWire.size());
+            LOGGER.info("NEU repo parsed (library): {} crafting (incl. {} pet upgrades), {} forge, {} shop recipes", craftingWire.size(), katCount, forgeWire.size(), shopWire.size());
             inventoryreader.ir.RecipeManager.getInstance().reload();
 
             if (metaValToWrite != null && !metaValToWrite.isEmpty()) {
@@ -282,7 +294,8 @@ public final class RemoteRecipeFetcher {
         double outputCount = Math.max(1, output.getAmount());
         Map<String, Double> totals = new LinkedHashMap<>();
         for (NEUIngredient in : inputs) {
-            if (in == null || NEUIngredient.NEU_SENTINEL_EMPTY.equals(in.getItemId())) continue;
+            // Skips free parts too, e.g. the zero-coin cost of some pet upgrades.
+            if (in == null || NEUIngredient.NEU_SENTINEL_EMPTY.equals(in.getItemId()) || in.getAmount() <= 0) continue;
             totals.merge(in.getItemId(), in.getAmount(), Double::sum);
         }
         if (totals.isEmpty()) return;

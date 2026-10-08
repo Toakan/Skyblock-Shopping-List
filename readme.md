@@ -38,7 +38,7 @@ The HUD (`H` to toggle) shows:
 - One tree per recipe.
 - **Craftable**: intermediates you can make right now.
 
-Recipes cover crafting, the Dwarven Forge and NPC shop purchases (for items with no crafting or forge recipe), so things like the **Golden Dragon (Legendary)** (500M coins, 50 Enchanted Gold Block and one of each Perfect gem) can go on the list. Pets are listed as "<Pet> (<Rarity>)".
+Recipes cover crafting, the Dwarven Forge and NPC shop purchases (for items with no crafting or forge recipe) and Kat pet upgrades, so things like the **Golden Dragon (Legendary)** (500M coins, 50 Enchanted Gold Block and one of each Perfect gem) can go on the list. Pets are listed as "<Pet> (<Rarity>)"; a pet upgrade needs the same pet one rarity lower. Pets you own count once they are in your inventory, a backpack or the ender chest, or after you have opened each page of your Pets menu (`/pets`).
 
 **Coins** count as an item: your purse is read from the SkyBlock sidebar, and your bank balance each time you open the bank menu. Balances above about 2.1 billion are shown capped at that.
 
@@ -97,7 +97,7 @@ The jar is written to `build/libs/`. `./gradlew runClient` starts a development 
 ## Known limitations
 - Items are matched by their SkyBlock ID where the item has one, so reforges and stars don't matter. Items without an ID (some sack and menu icons) fall back to their name, with colour codes and stat symbols ignored.
 - Sack contents only resync when you open a sack; between opens they follow the `[Sacks]` chat summaries, so keep those enabled in your SkyBlock settings.
-- Recipes cover what the NEU repository lists as crafting, forge and NPC shop recipes. Owned pets are not recognised yet (Hypixel stores all pets under one ID), so pet entries don't auto-complete.
+- Recipes cover what the NEU repository lists as crafting, forge, NPC shop and Kat upgrade recipes. Pets that only drop have no recipe.
 
 ## License and attribution
 - Code: CC-BY-SA-4.0 (see `LICENSE`). Based on Inventory Reader by Scholiboi.
