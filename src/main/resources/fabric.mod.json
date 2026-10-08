@@ -3,40 +3,33 @@
 	"id": "ir",
 	"version": "${version}",
 	"name": "InventoryReader",
-	"description": "Skyblock Mining Inventory Reader! Reads a count of items in your inventory.",
+	"description": "Hypixel SkyBlock shopping-list HUD. Tracks the items in your inventory, sacks and storage, and shows what you still need for a chosen recipe. Read-only and client-side.",
 	"authors": [
 		"Scholiboi"
 	],
+	"contributors": [
+		"Tad"
+	],
 	"contact": {
-		"homepage": "https://github.com/Scholiboi/InventoryReader-HypixelMining",
-		"sources": "https://github.com/Scholiboi/InventoryReader-HypixelMining",
-		"issues": "https://github.com/Scholiboi/InventoryReader-HypixelMining/issues",
-		"upstreamData": "https://github.com/NotEnoughUpdates/NotEnoughUpdates-REPO"
+		"homepage": "https://github.com/Scholiboi/InventoryReader",
+		"sources": "https://github.com/Scholiboi/InventoryReader",
+		"issues": "https://github.com/Scholiboi/InventoryReader/issues"
 	},
-	"license": "MIT",
+	"license": "CC-BY-SA-4.0",
 	"icon": "assets/ir/icon.png",
 	"environment": "client",
-	"contributors": [
-		"NotEnoughUpdates-REPO (data source)",
-		"Scholiboi (author)"
-	],
 	"entrypoints": {
-  		"main": [
-    		"inventoryreader.ir.InventoryReader"
-  		],
-  		"client": [
-			"inventoryreader.ir.StorageViewerMod",
-			"inventoryreader.ir.InventoryReaderClient",
-			"inventoryreader.ir.IrCommandManager"
-  		]
+		"client": [
+			"inventoryreader.ir.InventoryReaderClient"
+		]
 	},
 	"mixins": [
 		"ir.mixins.json"
 	],
 	"depends": {
-		"fabricloader": ">=0.17.2",
-		"minecraft": "~1.21.10",
-		"java": ">=21",
-		"fabric-api": "*"
+		"fabricloader": ">=0.19.5",
+		"minecraft": "~26.2",
+		"java": ">=25",
+		"fabric-api": ">=0.161.0"
 	}
 }
