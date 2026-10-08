@@ -802,6 +802,7 @@ public class WidgetCustomizationMenu extends Screen {
                 int actualIndex = scrollOffset + recipeIndex;
                 if (actualIndex >= 0 && actualIndex < filteredRecipes.size() && recipeIndex < MAX_RECIPES_SHOWN) {
                     selectedRecipe = filteredRecipes.get(actualIndex);
+                    widget.setSelectedRecipe(selectedRecipe);
                     ResourcesManager.RemainingResponse response = resourcesManager.getRemainingIngredients(selectedRecipe, craftAmount);
                     recipeTree = response.full_recipe;
                     if (recipeTree != null) {
@@ -1043,6 +1044,9 @@ public class WidgetCustomizationMenu extends Screen {
 
     @Override
     public void onClose() {
+        if (selectedRecipe != null && !selectedRecipe.equals(widget.getSelectedRecipe())) {
+            widget.setSelectedRecipe(selectedRecipe);
+        }
         if (widget.getWidgetX() != widgetPositionX || widget.getWidgetY() != widgetPositionY) {
             widget.setWidgetPosition(widgetPositionX, widgetPositionY);
         }

@@ -79,6 +79,10 @@ public class SandboxViewer extends Screen {
 
     public SandboxViewer() {
         super(Component.literal("Hypixel Forge"));
+        // Reopen on the HUD's recipe so the planner and the HUD always show the same thing.
+        SandboxWidget widget = SandboxWidget.getInstance();
+        selectedRecipe = widget.getSelectedRecipe();
+        craftAmount = widget.getCraftAmount();
     }
 
     @Override
@@ -152,6 +156,9 @@ public class SandboxViewer extends Screen {
     private void initForgeMode() {
         loadResources();
         loadRecipes();
+        if (selectedRecipe != null && remainingResult == null) {
+            checkRecipeRequirements();
+        }
 
         searchBox = new EditBox(this.font, 30, 56, 180, 18, Component.literal(""));
         searchBox.setHint(Component.literal("Search recipes..."));
@@ -286,7 +293,7 @@ public class SandboxViewer extends Screen {
             simpleRecipe = recipeManager.getSimpleRecipe(selectedRecipe, craftAmount);
             if (mode == Mode.FORGE_MODE) {
                 checkRecipeRequirements();
-
+                SandboxWidget.getInstance().setCraftAmount(craftAmount);
             }
         }
     }
@@ -317,9 +324,9 @@ public class SandboxViewer extends Screen {
         selectedRecipe = name;
         expandedRecipeTree = recipeManager.expandRecipe(name, craftAmount);
         simpleRecipe = recipeManager.getSimpleRecipe(name, craftAmount);
-        messages.clear(); 
+        messages.clear();
 
-        if (SandboxWidget.getInstance().isEnabled()) {
+        if (mode == Mode.FORGE_MODE) {
             SandboxWidget.getInstance().setSelectedRecipe(name);
         }
 
@@ -1137,19 +1144,19 @@ public class SandboxViewer extends Screen {
             int minusX = x + leftPanelWidth - 80;
             context.fill(minusX, buttonY, minusX + buttonSize, buttonY + buttonSize, 0xFF444444);
             context.outline(minusX, buttonY, buttonSize, buttonSize, BORDER_COLOR);
-            context.text(font, "-", minusX + (buttonSize - font.width("-")) / 2, 
+            context.text(font, "-", minusX + (buttonSize - font.width("-")) / 2,
                              buttonY + (buttonSize - font.lineHeight) / 2, WHITE, false);
 
             int plusX = x + leftPanelWidth - 40;
             context.fill(plusX, buttonY, plusX + buttonSize, buttonY + buttonSize, 0xFF444444);
             context.outline(plusX, buttonY, buttonSize, buttonSize, BORDER_COLOR);
-            context.text(font, "+", plusX + (buttonSize - font.width("+")) / 2, 
+            context.text(font, "+", plusX + (buttonSize - font.width("+")) / 2,
                              buttonY + (buttonSize - font.lineHeight) / 2, WHITE, false);
 
             final int resourceIndex = i;
-            clickableElements.add(new ClickableElement(minusX, buttonY, buttonSize, buttonSize, 
+            clickableElements.add(new ClickableElement(minusX, buttonY, buttonSize, buttonSize,
                                                       () -> decrementResource(resourceIndex)));
-            clickableElements.add(new ClickableElement(plusX, buttonY, buttonSize, buttonSize, 
+            clickableElements.add(new ClickableElement(plusX, buttonY, buttonSize, buttonSize,
                                                       () -> incrementResource(resourceIndex)));
         }
 
@@ -1157,8 +1164,8 @@ public class SandboxViewer extends Screen {
         int modifiedCount = 0;
         for (ResourcesManager.ResourceEntry entry : selectedResources) {
             context.text(font, entry.name, rightPanelX + 10, modifiedY, WHITE, false);
-            context.text(font, String.valueOf(entry.amount), 
-                            rightPanelX + 180 - 10 - font.width(String.valueOf(entry.amount)), 
+            context.text(font, String.valueOf(entry.amount),
+                            rightPanelX + 180 - 10 - font.width(String.valueOf(entry.amount)),
                             modifiedY, GOLD, false);
             modifiedY += 20;
             modifiedCount++;
