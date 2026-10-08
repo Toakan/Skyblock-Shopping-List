@@ -131,12 +131,9 @@ public class SandboxWidget {
         requestRefresh();
         saveConfiguration();
     }
-    /** HUD heading: the recipe when there is one, otherwise the list size. */
+    /** HUD heading. The recipes themselves are the top-level rows underneath. */
     public String getTitle() {
-        List<ShoppingListEntry> list = shoppingList;
-        if (list.isEmpty()) return "Shopping list (empty)";
-        if (list.size() == 1) return "Recipe: " + list.get(0).recipe;
-        return "Shopping list (" + list.size() + ")";
+        return "Shopping List";
     }
     /** The synthetic root the HUD draws (children: Total, then one tree per recipe), or null. */
     public RecipeManager.RecipeNode getDisplayRoot() {
