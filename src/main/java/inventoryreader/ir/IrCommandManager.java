@@ -32,9 +32,9 @@ public final class IrCommandManager {
                         .setStyle(Style.EMPTY.withColor(ChatFormatting.WHITE)));
                     context.getSource().sendFeedback(Component.literal("- /ssl done: Acknowledge reminder")
                         .setStyle(Style.EMPTY.withColor(ChatFormatting.WHITE)));
-                    context.getSource().sendFeedback(Component.literal("- /ssl menu: Open the main menu")
+                    context.getSource().sendFeedback(Component.literal("- /ssl menu: Open the menu (shopping list, resources, recipes, settings)")
                         .setStyle(Style.EMPTY.withColor(ChatFormatting.WHITE)));
-                    context.getSource().sendFeedback(Component.literal("- /ssl widget: Open Widget Customization")
+                    context.getSource().sendFeedback(Component.literal("- /ssl hud: Move or resize the HUD")
                         .setStyle(Style.EMPTY.withColor(ChatFormatting.WHITE)));
                     context.getSource().sendFeedback(Component.literal("- /ssl credits: Show credits")
                         .setStyle(Style.EMPTY.withColor(ChatFormatting.WHITE)));
@@ -70,13 +70,20 @@ public final class IrCommandManager {
                 .then(literal("menu")
                     .executes(context -> {
                         // Deferred to the next tick: the chat screen closes after the command runs.
-                        InventoryReaderClient.shouldOpenSandboxViewer = true;
+                        InventoryReaderClient.shouldOpenMenu = true;
                         return 1;
                     })
                 )
+                // Older name for the menu.
                 .then(literal("widget")
                     .executes(context -> {
-                        InventoryReaderClient.shouldOpenWidgetCustomization = true;
+                        InventoryReaderClient.shouldOpenMenu = true;
+                        return 1;
+                    })
+                )
+                .then(literal("hud")
+                    .executes(context -> {
+                        InventoryReaderClient.shouldOpenMoveHud = true;
                         return 1;
                     })
                 )

@@ -12,26 +12,24 @@ import net.minecraft.network.chat.Component;
 
 /** Mod settings. Every change is applied and saved immediately. */
 public class SettingsScreen extends Screen {
-    private static final int GOLD = 0xFFFFB728;
     private static final int LABEL = 0xFFDDDDDD;
     private static final int COLUMN_WIDTH = 150;
     private static final int COLUMN_GAP = 10;
     private static final int ROW_HEIGHT = 20;
     private static final int ROW_STEP = 24;
-    private static final int TOP = 50;
+    private static final int TOP = 66;
 
-    private final Screen parent;
     private final SandboxWidget widget = SandboxWidget.getInstance();
     private int maxRecipesLabelX;
     private int maxRecipesLabelY;
 
-    public SettingsScreen(Screen parent) {
+    public SettingsScreen() {
         super(Component.literal(InventoryReader.NAME + " Settings"));
-        this.parent = parent;
     }
 
     @Override
     protected void init() {
+        MenuTabs.buttons(MenuTabs.Tab.SETTINGS, this.width).forEach(this::addRenderableWidget);
         int left = this.width / 2 - COLUMN_WIDTH - COLUMN_GAP / 2;
         int right = this.width / 2 + COLUMN_GAP / 2;
 
@@ -66,9 +64,11 @@ public class SettingsScreen extends Screen {
           .tooltip(Tooltip.create(Component.literal("How many recipes the shopping list can hold (1-" + SandboxWidget.MAX_RECIPES_LIMIT + ").")))
           .build());
         y += ROW_STEP;
-        this.addRenderableWidget(Button.builder(Component.literal("Edit shopping list / HUD..."),
-            button -> this.minecraft.gui.setScreen(new WidgetCustomizationMenu())
-        ).bounds(right, y, COLUMN_WIDTH, ROW_HEIGHT).build());
+        this.addRenderableWidget(Button.builder(Component.literal("Move HUD..."),
+            button -> this.minecraft.gui.setScreen(new HudPositionScreen(this))
+        ).bounds(right, y, COLUMN_WIDTH, ROW_HEIGHT)
+          .tooltip(Tooltip.create(Component.literal("Drag the HUD to move it, drag a corner to resize. Also opened with B.")))
+          .build());
         y += ROW_STEP;
         this.addRenderableWidget(Button.builder(Component.literal("Reset HUD position"),
             button -> widget.setWidgetPosition(10, 40)
@@ -98,11 +98,16 @@ public class SettingsScreen extends Screen {
     }
 
     @Override
+    public void extractBackground(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
+    }
+
+    @Override
     public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
-        super.extractRenderState(context, mouseX, mouseY, delta);
-        context.centeredText(this.font, this.title, this.width / 2, 20, GOLD);
+        context.fill(0, 0, this.width, this.height, 0xFF0E0E0E);
+        MenuTabs.renderHeader(context, this.font, this.width, MenuTabs.Tab.SETTINGS);
         int count = widget.getShoppingList().size();
-        context.centeredText(this.font, "Shopping list: " + count + (count == 1 ? " recipe" : " recipes"), this.width / 2, 34, LABEL);
+        context.centeredText(this.font, "Shopping list: " + count + (count == 1 ? " recipe" : " recipes"), this.width / 2, 52, LABEL);
+        super.extractRenderState(context, mouseX, mouseY, delta);
         context.text(this.font, "Max recipes: " + widget.getMaxRecipes(), maxRecipesLabelX, maxRecipesLabelY, LABEL, false);
     }
 
@@ -111,8 +116,4 @@ public class SettingsScreen extends Screen {
         return false;
     }
 
-    @Override
-    public void onClose() {
-        this.minecraft.gui.setScreen(parent);
-    }
 }

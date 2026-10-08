@@ -22,12 +22,12 @@ public class InventoryReaderClient implements ClientModInitializer {
     /** Own section in Options > Controls > Key Binds; label from key.category.skyblock-shopping-list.main. */
     private static final KeyMapping.Category KEY_CATEGORY =
         KeyMapping.Category.register(Identifier.fromNamespaceAndPath(InventoryReader.MOD_ID, "main"));
-    private static KeyMapping openSandboxViewerKey;
-    private static KeyMapping openWidgetCustomizationKey;
+    private static KeyMapping openMenuKey;
+    private static KeyMapping moveHudKey;
     private static KeyMapping toggleWidgetKey;
-    private static KeyMapping openPositioningHudKey;
-    public static boolean shouldOpenSandboxViewer = false;
-    public static boolean shouldOpenWidgetCustomization = false;
+    /** Set by commands; the screen opens on the next tick, after the chat screen has closed. */
+    public static boolean shouldOpenMenu = false;
+    public static boolean shouldOpenMoveHud = false;
 
     /** Last inventory contents written to inventorydata.json; null until loaded. */
     private static Map<String, Integer> lastInventory;
@@ -37,33 +37,29 @@ public class InventoryReaderClient implements ClientModInitializer {
     public void onInitializeClient() {
         FilePathManager.initialize();
 
-        openSandboxViewerKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+        // Key ids are kept from earlier versions so existing bindings in options.txt carry over.
+        openMenuKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
             "key.skyblock-shopping-list.open_sandbox_viewer", GLFW.GLFW_KEY_V, KEY_CATEGORY));
-        openWidgetCustomizationKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+        moveHudKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
             "key.skyblock-shopping-list.open_widget_customization", GLFW.GLFW_KEY_B, KEY_CATEGORY));
         toggleWidgetKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
             "key.skyblock-shopping-list.toggle_widget", GLFW.GLFW_KEY_H, KEY_CATEGORY));
-        openPositioningHudKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
-            "key.skyblock-shopping-list.open_positioning_hud", GLFW.GLFW_KEY_J, KEY_CATEGORY));
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             // Keys only act on SkyBlock (presses are still consumed so they don't queue up);
             // the /ssl commands work anywhere.
             boolean onSkyblock = SkyblockDetector.isOnSkyblock();
-            if ((openSandboxViewerKey.consumeClick() && onSkyblock) || shouldOpenSandboxViewer) {
-                shouldOpenSandboxViewer = false;
-                client.gui.setScreen(new SandboxViewer());
+            if ((openMenuKey.consumeClick() && onSkyblock) || shouldOpenMenu) {
+                shouldOpenMenu = false;
+                MenuTabs.open(MenuTabs.Tab.SHOPPING_LIST);
             }
-            if ((openWidgetCustomizationKey.consumeClick() && onSkyblock) || shouldOpenWidgetCustomization) {
-                shouldOpenWidgetCustomization = false;
-                client.gui.setScreen(new WidgetCustomizationMenu());
+            if ((moveHudKey.consumeClick() && onSkyblock) || shouldOpenMoveHud) {
+                shouldOpenMoveHud = false;
+                client.gui.setScreen(new HudPositionScreen(null));
             }
             if (toggleWidgetKey.consumeClick() && onSkyblock) {
                 SandboxWidget widget = SandboxWidget.getInstance();
                 widget.setEnabled(!widget.isEnabled());
-            }
-            if (openPositioningHudKey.consumeClick() && onSkyblock) {
-                client.gui.setScreen(new WidgetCustomizationMenu(true));
             }
             // Other servers' inventories must never change the SkyBlock counts.
             if (onSkyblock && client.player != null && client.level != null && ++tickCounter >= 2) {

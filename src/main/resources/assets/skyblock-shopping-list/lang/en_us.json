@@ -1,7 +1,6 @@
 {
   "key.category.skyblock-shopping-list.main": "Skyblock Shopping List",
-  "key.skyblock-shopping-list.open_sandbox_viewer": "Open Shopping List Menu",
-  "key.skyblock-shopping-list.open_widget_customization": "Edit Shopping List / HUD",
-  "key.skyblock-shopping-list.toggle_widget": "Toggle HUD",
-  "key.skyblock-shopping-list.open_positioning_hud": "Move HUD"
+  "key.skyblock-shopping-list.open_sandbox_viewer": "Open Menu",
+  "key.skyblock-shopping-list.open_widget_customization": "Move HUD",
+  "key.skyblock-shopping-list.toggle_widget": "Toggle HUD"
 }

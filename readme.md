@@ -25,10 +25,15 @@ The license and credits remain the same as the original Inventory Reader project
 ## First-time setup
 The mod only knows what you have shown it. Open each of your sacks, backpacks and ender chest pages once in SkyBlock. After that, counts stay up to date from your inventory, from the containers you open, and from the `[Sacks]` chat summaries.
 
-## Shopping list
-Press `B` (or `/ssl widget`) and click recipes on the left to add them to your shopping list (up to 3 by default). Each entry has its own amount box and an × to remove it. In `/ssl menu` Forge Mode, **Add to list** adds the recipe you are looking at with the amount typed there.
+## Menu
+Press `V` (or `/ssl menu`) to open the menu. It has five tabs:
+- **Shopping List** (opens first): search recipes, type how many you want and click a recipe to add it (up to 3 by default). Each entry has its own amount box and an × to remove it, plus **Clear list**. Below is a preview of what the HUD shows.
+- **Your Resources**: your item counts with search. Type in a box or use − / + to correct a count; changes save straight away. **Show all** also lists items you have none of.
+- **All Recipes**: browse any recipe's full tree for a chosen amount, and **Add to list**.
+- **Forge Mode**: what you still need for one recipe, with **Add to list**.
+- **Settings**: HUD on/off, Show remaining, Total section, Notifications, Auto-remove, Max recipes, **Move HUD...** and **Key binds...**.
 
-The HUD shows:
+The HUD (`H` to toggle) shows:
 - **Total**: every raw material still needed across all recipes, missing items first. Your stock is shared between recipes, never counted twice (earlier entries get it first).
 - One tree per recipe.
 - **Craftable**: intermediates you can make right now.
@@ -37,21 +42,20 @@ Recipes cover crafting, the Dwarven Forge and NPC shop purchases (for items with
 
 **Coins** count as an item: your purse is read from the SkyBlock sidebar, and your bank balance each time you open the bank menu. Balances above about 2.1 billion are shown capped at that.
 
-When a recipe has everything it needs you get a "Ready to craft" pop-up, and once you have made the amount you asked for an "Item achieved" pop-up and the recipe leaves the list. Notifications, auto-remove, the Total section and the maximum list size can all be changed in **Settings** (`/ssl menu` → Settings).
+When a recipe has everything it needs you get a "Ready to craft" pop-up, and once you have made the amount you asked for an "Item achieved" pop-up and the recipe leaves the list (both can be turned off in Settings).
 
 ## Keys and commands
 | Key / command | Action |
 | --- | --- |
-| `V` or `/ssl menu` | Open the Sandbox Viewer (resources, recipes, forge planner, manual edits) |
-| `B` or `/ssl widget` | Edit the shopping list and HUD position |
-| `H` | Toggle the HUD widget |
-| `J` | Open HUD positioning |
+| `V` or `/ssl menu` | Open the menu |
+| `H` | Toggle the HUD |
+| `B` or `/ssl hud` | Move / resize the HUD |
 | `/ssl` | List commands |
-| `/ssl reset` | Delete all tracked item data and widget settings |
+| `/ssl reset` | Delete all tracked item data and settings |
 | `/ssl done` | Stop the "open a sack" reminder |
 | `/ssl credits` | Show credits |
 
-`/ir` still works as an alias for `/ssl`. Keys can be rebound under Options > Controls > Key Binds > Skyblock Shopping List (or Settings → Key binds...).
+`/ir` still works as an alias for `/ssl`, and `/ssl widget` for `/ssl menu`. Keys can be rebound under Options > Controls > Key Binds > Skyblock Shopping List (or Settings → Key binds...).
 
 ## SkyBlock only
 The mod only runs on Hypixel SkyBlock. With the official Hypixel Mod API installed, it uses the API's location event (Hypixel's own signal, which also reports the island). Without it, it falls back to the sidebar scoreboard title ("SKYBLOCK"). In lobbies, other Hypixel games and other servers the HUD is hidden, the keys do nothing and nothing is tracked, so other inventories never change your counts. The `/ssl` commands still work everywhere.
