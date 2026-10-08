@@ -123,16 +123,6 @@ public class WidgetCustomizationMenu extends Screen {
             .bounds(20, height - 30, 150, 20)
             .build();
             addRenderableWidget(toggleButton);
-
-            addRenderableWidget(Button.builder(
-                showRemainingLabel(),
-                button -> {
-                    widget.setShowRemaining(!widget.isShowRemaining());
-                    button.setMessage(showRemainingLabel());
-                }
-            )
-            .bounds(width - 170, 23, 150, 20)
-            .build());
         } else {
             initPositioningTab();
         }
@@ -145,10 +135,6 @@ public class WidgetCustomizationMenu extends Screen {
             .build();
             addRenderableWidget(saveButton);
         }
-    }
-
-    private Component showRemainingLabel() {
-        return Component.literal("Show remaining: " + (widget.isShowRemaining() ? "ON" : "OFF"));
     }
 
     private void initRecipeTab() {

@@ -113,6 +113,9 @@ public class SandboxViewer extends Screen {
         this.addRenderableWidget(Button.builder(Component.literal("HUD Widget..."),
             button -> this.minecraft.gui.setScreen(new WidgetCustomizationMenu())
         ).bounds(this.width - 110, 5, 100, 20).build());
+        this.addRenderableWidget(Button.builder(Component.literal("Settings"),
+            button -> this.minecraft.gui.setScreen(new SettingsScreen(this))
+        ).bounds(this.width - 175, 5, 60, 20).build());
 
         switch (mode) {
             case RESOURCE_VIEWER -> initResourceViewer();
@@ -521,7 +524,7 @@ public class SandboxViewer extends Screen {
             String titleStr = "Skyblock Resource Calculator";
             context.text(font,
                 Component.literal(titleStr).setStyle(Style.EMPTY.withColor(ChatFormatting.GOLD).withBold(true)),
-                this.width / 2 - font.width(titleStr) / 2, 11, GOLD, false);
+                12, 11, GOLD, false); // left-aligned: the right side holds the Settings / HUD Widget buttons
 
             context.fill(0, 30, this.width, 54, 0xFF161616);
 
