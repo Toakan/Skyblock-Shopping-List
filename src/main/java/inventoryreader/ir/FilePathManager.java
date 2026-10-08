@@ -36,6 +36,8 @@ public class FilePathManager {
     /** What was cooking in the Dwarven Forge when it was last opened. */
     public static final File FORGE_JSON = new File(DATA_DIR, "forge.json");
     public static final File WIDGET_CONFIG_JSON = new File(DATA_DIR, "widget_config.json");
+    /** HUD colours, sizes, font and parts (Settings > Appearance). */
+    public static final File HUD_STYLE_JSON = new File(DATA_DIR, "hud_style.json");
     public static final File FORGING_JSON = new File(DATA_DIR, "forging.json");
     public static final File GEMSTONE_RECIPES_JSON = new File(DATA_DIR, "gemstone_recipes.json");
     public static final File REMOTE_RECIPES_JSON = new File(DATA_DIR, "recipes_remote.json");
@@ -100,7 +102,7 @@ public class FilePathManager {
 
     /** Deletes all tracked item data and widget settings. Recipes are kept. */
     public static synchronized void resetData() {
-        for (File f : new File[]{CONTAINER_JSON, INVENTORY_JSON, RESOURCES_JSON, SACKS_JSON, SACKS_META_JSON, COINS_JSON, FORGE_JSON, WIDGET_CONFIG_JSON}) {
+        for (File f : new File[]{CONTAINER_JSON, INVENTORY_JSON, RESOURCES_JSON, SACKS_JSON, SACKS_META_JSON, COINS_JSON, FORGE_JSON, WIDGET_CONFIG_JSON, HUD_STYLE_JSON}) {
             if (f.exists() && !f.delete()) {
                 InventoryReader.LOGGER.warn("Could not delete {}", f.getName());
             }

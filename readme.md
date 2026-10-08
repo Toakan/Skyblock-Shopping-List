@@ -32,7 +32,11 @@ Press `V` (or `/ssl menu`) to open the menu. It has five tabs:
 - **Resources**: your item counts with search. Type in a box or use − / + to correct a count; changes save straight away. **Show all** also lists items you have none of.
 - **Recipes**: browse any recipe's full tree for a chosen amount, and **Add to list**.
 - **Forge**: what you still need for one recipe, with **Add to list**.
-- **Settings**: opens the settings screen (YetAnotherConfigLib, same style as Skyblocker), with HUD, Notifications and Controls categories: HUD on/off, Show remaining, Total section, Max recipes, **Move HUD...**, Pop-ups, Auto-remove, Sack reminder and **Key binds...**. Changes apply when you press Save.
+- **Settings**: opens the settings screen (YetAnotherConfigLib, same style as Skyblocker), with HUD, Appearance, Notifications and Controls categories: HUD on/off, Total section, Max recipes, **Move HUD...**, Pop-ups, Auto-remove, Sack reminder and **Key binds...**. Changes apply when you press Save.
+- **Appearance** (in Settings): design the HUD yourself. Colours (with transparency) for the panel, borders, title, rows, tree lines, text and the done / partly gathered / missing / can craft states; row height, row gap, indent, padding and border thicknesses; font (Minecraft's fonts plus any your enabled resource packs add), shadow and bold recipe names; separate text sizes for the title, rows, Craftable and Forging, and left / centre / right alignment for the title, Craftable and Forging; tick/cross marks, row boxes, tree lines, and the amount format (Remaining "3×", Have / need "83/5,120", or Required "6×"). **Reset look to defaults** restores the original look.
+  - **HUD scale** (50-300%) sizes every panel. By default the HUD keeps its size whatever Minecraft's GUI Scale is; turn on **Follow GUI Scale** to have it change with GUI Scale.
+  - **Craftable** and **Forging** can each be hidden, or moved to their **own panel** that you place and size separately in Move HUD.
+  - Panels grow to fit their content up to the height set in Move HUD; anything beyond is cut off and marked with "…" (make the panel taller or collapse rows).
 
 The HUD (`H` to toggle) shows:
 - **Total**: every raw material still needed across all recipes, missing items first. Your stock is shared between recipes, never counted twice (earlier entries get it first).
@@ -75,6 +79,7 @@ Everything lives in `config/skyblock-shopping-list/` inside your Minecraft folde
 - `resources.json`: tracked item counts
 - `inventorydata.json`, `allcontainerData.json`, `sacks.json`, `sacks_meta.json`: last-seen inventory, container and sack contents, used to work out changes
 - `coins.json`: last bank balance seen
+- `hud_style.json`: your Appearance settings
 - `forge.json`: what was cooking in the Forge when you last opened it
 - `widget_config.json`: shopping list, HUD position and size, expanded nodes and settings
 - `forging.json`, `gemstone_recipes.json`: built-in fallback recipes

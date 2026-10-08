@@ -342,7 +342,7 @@ public class ShoppingListScreen extends Screen {
         }
 
         String prefix = "";
-        String amountText = SandboxWidget.displayedAmount(node, showRemaining) + "×";
+        String amountText = SandboxWidget.amountText(node);
         int amountColor = SandboxWidget.progressColor(node, showRemaining);
 
         context.text(
