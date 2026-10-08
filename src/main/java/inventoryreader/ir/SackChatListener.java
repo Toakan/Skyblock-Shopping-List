@@ -4,11 +4,8 @@ import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.HoverEvent;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.IdentityHashMap;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -41,8 +38,9 @@ public final class SackChatListener {
         String text = message.getString();
         if (!text.contains("[Sacks]")) return;
 
-        List<String> hoverTexts = new ArrayList<>();
-        collectHoverTexts(message, hoverTexts, Collections.newSetFromMap(new IdentityHashMap<>()));
+        // A set of texts: several parts of the message can carry their own copy of the same hover list.
+        Set<String> hoverTexts = new LinkedHashSet<>();
+        collectHoverTexts(message, hoverTexts);
 
         Map<String, Integer> deltas = new LinkedHashMap<>();
         for (String hover : hoverTexts) {
@@ -65,18 +63,17 @@ public final class SackChatListener {
             InventoryReader.LOGGER.info("Unrecognised [Sacks] message: {} | hover: {}", text, hoverTexts);
             return;
         }
-        InventoryReader.LOGGER.debug("Sack chat deltas: {}", deltas);
+        InventoryReader.LOGGER.info("[Sacks] read: {}", deltas);
         SackReader.getInstance().applyChatDeltas(deltas);
     }
 
-    /** Collects the text of every distinct show-text hover in the component tree. */
-    private static void collectHoverTexts(Component component, List<String> out, Set<Component> seen) {
-        if (component.getStyle().getHoverEvent() instanceof HoverEvent.ShowText(Component value)
-                && value != null && seen.add(value)) {
+    /** Collects the text of every show-text hover in the component tree, each distinct text once. */
+    private static void collectHoverTexts(Component component, Set<String> out) {
+        if (component.getStyle().getHoverEvent() instanceof HoverEvent.ShowText(Component value) && value != null) {
             out.add(value.getString());
         }
         for (Component sibling : component.getSiblings()) {
-            collectHoverTexts(sibling, out, seen);
+            collectHoverTexts(sibling, out);
         }
     }
 
