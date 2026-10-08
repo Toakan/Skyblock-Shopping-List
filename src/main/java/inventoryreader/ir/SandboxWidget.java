@@ -125,6 +125,22 @@ public class SandboxWidget {
             }
         }
     }
+    /**
+     * Moves an entry up (negative) or down (positive) the list. Order is priority: entries higher up get shared
+     * stock first.
+     */
+    public synchronized void moveEntry(String recipe, int delta) {
+        for (int i = 0; i < shoppingList.size(); i++) {
+            if (!shoppingList.get(i).recipe.equals(recipe)) continue;
+            int target = i + delta;
+            if (target < 0 || target >= shoppingList.size()) return;
+            ShoppingListEntry moved = shoppingList.get(i);
+            shoppingList.set(i, shoppingList.get(target));
+            shoppingList.set(target, moved);
+            listChanged();
+            return;
+        }
+    }
     public synchronized void removeFromList(String recipe) {
         if (shoppingList.removeIf(e -> e.recipe.equals(recipe))) listChanged();
     }
@@ -338,7 +354,9 @@ public class SandboxWidget {
 
         List<String> toRemove = new ArrayList<>();
         Set<String> names = new HashSet<>();
-        Set<String> cooking = cookingNames();
+        Map<String, Integer> cooking = cookingCounts();
+        // Finished (not cooking) stock left per item, shared out in list order like the shopping list does.
+        Map<String, Integer> finishedLeft = new HashMap<>();
         waitingOnForge = false;
         for (int i = 0; i < entries.size(); i++) {
             ShoppingListEntry entry = entries.get(i);
@@ -355,8 +373,9 @@ public class SandboxWidget {
             achievedEntries.remove(entry.recipe);
             boolean ready = tree.ingredients != null && !tree.ingredients.isEmpty()
                 && tree.ingredients.stream().allMatch(child -> child.amount <= 0);
-            // Forge items count as owned while cooking, but can't be used until they are done.
-            if (ready && !cooking.isEmpty() && containsAny(tree, cooking)) {
+            // Forge items count as owned while cooking, but can't be used until they are done: hold the pop-up
+            // only if this recipe needs more of an item than is already finished.
+            if (!cooking.isEmpty() && needsCooking(tree, cooking, finishedLeft) && ready) {
                 ready = false;
                 waitingOnForge = true;
             }
@@ -403,24 +422,49 @@ public class SandboxWidget {
         updateForgingLines();
     }
 
-    /** Normalised names of Forge items that are still cooking. */
-    private static Set<String> cookingNames() {
+    /** How many of each Forge item (by normalised name) are still cooking. */
+    private static Map<String, Integer> cookingCounts() {
         long now = System.currentTimeMillis();
-        Set<String> out = new HashSet<>();
+        Map<String, Integer> out = new HashMap<>();
         for (ForgeTracker.Entry entry : ForgeTracker.getEntries()) {
-            if (entry.endsAt > now) out.add(ItemNames.normalize(entry.name));
+            if (entry.endsAt > now) out.merge(ItemNames.normalize(entry.name), entry.count, Integer::sum);
         }
         return out;
     }
 
-    private static boolean containsAny(RecipeManager.RecipeNode node, Set<String> names) {
-        if (names.contains(ItemNames.normalize(node.name))) return true;
-        if (node.ingredients != null) {
-            for (RecipeManager.RecipeNode child : node.ingredients) {
-                if (containsAny(child, names)) return true;
+    /**
+     * True if the tree takes more of a cooking item from stock than is already finished. Uses up
+     * {@code finishedLeft} as it goes (every node is visited), so later recipes only get what is left. The root
+     * is skipped: it never draws on stock of itself.
+     */
+    private boolean needsCooking(RecipeManager.RecipeNode root, Map<String, Integer> cooking, Map<String, Integer> finishedLeft) {
+        boolean short_ = false;
+        if (root.ingredients != null) {
+            for (RecipeManager.RecipeNode child : root.ingredients) {
+                if (useStock(child, cooking, finishedLeft)) short_ = true;
             }
         }
-        return false;
+        return short_;
+    }
+
+    private boolean useStock(RecipeManager.RecipeNode node, Map<String, Integer> cooking, Map<String, Integer> finishedLeft) {
+        boolean short_ = false;
+        String key = ItemNames.normalize(node.name);
+        Integer cookingCount = cooking.get(key);
+        if (cookingCount != null) {
+            // What this node takes from items already held (not missing, not still to craft).
+            int used = Math.max(0, node.required - node.amount - node.toCraft);
+            int left = finishedLeft.computeIfAbsent(key,
+                k -> Math.max(0, resourcesManager.getResourceByName(node.name) - cookingCount));
+            if (used > left) short_ = true;
+            finishedLeft.put(key, Math.max(0, left - used));
+        }
+        if (node.ingredients != null) {
+            for (RecipeManager.RecipeNode child : node.ingredients) {
+                if (useStock(child, cooking, finishedLeft)) short_ = true;
+            }
+        }
+        return short_;
     }
 
     private static void collectNames(RecipeManager.RecipeNode node, Set<String> out) {
@@ -595,7 +639,9 @@ public class SandboxWidget {
             wrapped.add(lines);
             sectionsHeight += sectionHeight(section, lines.size(), ownPanel);
         }
-        int naturalHeight = TITLE_BAR + rowsHeight + sectionsHeight + (empty ? 14 : 4);
+        // With rounded corners wider than the padding, content stops above the bottom corners so it can't cover them.
+        int cornerClip = Math.max(0, style.panelRadius - style.padding) > 0 ? style.panelRadius : 0;
+        int naturalHeight = TITLE_BAR + rowsHeight + sectionsHeight + (empty ? 14 : 4) + cornerClip;
         int panelHeight = Math.min(maxHeight, naturalHeight);
 
         float scale = scaleFactor();
@@ -603,10 +649,12 @@ public class SandboxWidget {
         context.pose().translate(x, y);
         context.pose().scale(scale, scale);
 
-        context.fill(0, 0, width, panelHeight, style.panelBackground);
-        context.fill(0, 0, width, TITLE_BAR, style.headerBackground);
+        RoundedBox.fill(context, 0, 0, width, panelHeight, style.panelRadius, style.panelBackground);
+        RoundedBox.fill(context, 0, 0, width, TITLE_BAR, style.panelRadius, true, false, style.headerBackground);
         for (int i = 0; i < style.panelBorderWidth; i++) {
-            context.outline(-i, -i, width + i * 2, panelHeight + i * 2, style.panelBorder);
+            // Outer border rings grow outward, so their radius grows with them to stay parallel.
+            RoundedBox.outline(context, -i, -i, width + i * 2, panelHeight + i * 2,
+                style.panelRadius > 0 ? style.panelRadius + i : 0, style.panelBorder);
         }
         Component titleText = style.text(title, style.titleText, true);
         int titleWidth = client.font.width(titleText);
@@ -615,7 +663,7 @@ public class SandboxWidget {
             (TITLE_BAR - 8 * titleScale) / 2f, titleScale, style.textShadow);
         context.fill(0, TITLE_BAR - 1, width, TITLE_BAR, style.divider);
 
-        context.enableScissor(0, TITLE_BAR, width, panelHeight);
+        context.enableScissor(0, TITLE_BAR, width, panelHeight - cornerClip);
         int cursorY = TITLE_BAR + 2;
         if (panel == Panel.MAIN) {
             currentPanelWidth = width;
@@ -638,7 +686,7 @@ public class SandboxWidget {
         if (naturalHeight > panelHeight) {
             // Cut off: tell the player there is more (raise the max height in Move HUD, or collapse rows).
             Component more = style.text("…", style.itemText, true);
-            context.fill(0, panelHeight - 9, width, panelHeight, style.panelBackground);
+            RoundedBox.fill(context, 0, panelHeight - 9, width, 9, style.panelRadius, false, true, style.panelBackground);
             drawScaled(context, more, (width - client.font.width(more)) / 2f, panelHeight - 9, 1f, style.textShadow);
         }
         context.pose().popMatrix();
@@ -761,10 +809,11 @@ public class SandboxWidget {
         int statusColor = progressColor(node, showRemaining);
 
         if (style.showRowBoxes) {
-            context.fill(x + indent, y, x + indent + nodeWidth, y + nodeHeight, style.rowBackground);
+            RoundedBox.fill(context, x + indent, y, nodeWidth, nodeHeight, style.rowRadius, style.rowBackground);
             int border = progressBorderColor(node, showRemaining);
             for (int i = 0; i < style.rowBorderWidth; i++) {
-                context.outline(x + indent + i, y + i, nodeWidth - 2 * i, nodeHeight - 2 * i, border);
+                RoundedBox.outline(context, x + indent + i, y + i, nodeWidth - 2 * i, nodeHeight - 2 * i,
+                    Math.max(0, style.rowRadius - i), border);
             }
         }
 

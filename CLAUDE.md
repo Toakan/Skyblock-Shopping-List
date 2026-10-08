@@ -4,8 +4,11 @@ Fabric client mod (mod id `skyblock-shopping-list`, Java package `inventoryreade
 
 ## Versioning
 `mod_version` in `gradle.properties` is MAJOR.MINOR.PATCH, bumped in the same commit as the change:
-- New feature: bump MINOR, reset PATCH (4.4.0 -> 4.5.0).
-- Bug fix or change to existing behaviour: bump PATCH (4.4.0 -> 4.4.1).
+- Major feature (a new area such as Appearance settings, the Forging panel, pet recipes): bump MINOR,
+  reset PATCH (4.4.0 -> 4.5.0).
+- Anything that adds to, removes from or modifies an existing feature (e.g. a new Appearance option such
+  as rounded corners, per-section text sizes, list reordering), and every bug fix: bump PATCH
+  (4.4.0 -> 4.4.1).
 - MAJOR only for breaking changes such as a Minecraft version port.
 One bump per change. Docs-only commits (readme, this file) don't need a bump.
 

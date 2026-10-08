@@ -38,3 +38,32 @@ hs_err_*.log
 replay_*.log
 *.hprof
 *.jfr
+
+# windows
+
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# loom / gradle extras
+
+remappedSrc/
+local.properties
+.kotlin/
+
+# logs and temp files (mod data is written via *.tmp then moved)
+
+/logs/
+*.log
+*.tmp
+
+# mod data folders, if a client is ever run from the repo root
+
+/.skyblock-shopping-list/
+/.ir-data/
+/config/
+
+# local tool settings
+
+.claude/settings.local.json
+.env

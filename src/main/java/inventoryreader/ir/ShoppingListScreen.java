@@ -9,6 +9,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
@@ -92,7 +93,8 @@ public class ShoppingListScreen extends Screen {
         });
         addRenderableWidget(amountBox);
 
-        // Shopping list panel (right column, above the preview): name, amount box, remove button per row.
+        // Shopping list panel (right column, above the preview): name, move up/down, amount box and remove
+        // button per row. Order is priority: rows higher up get shared stock first.
         List<ShoppingListEntry> list = widget.getShoppingList();
         treeViewWidth = Math.max(120, Math.min(400, width - treeViewX - 20));
         int rows = Math.min(list.size(), PANEL_MAX_ROWS);
@@ -111,6 +113,22 @@ public class ShoppingListScreen extends Screen {
                 }
             });
             addRenderableWidget(amount);
+            Button up = Button.builder(Component.literal("▲"), button -> {
+                widget.moveEntry(entry.recipe, -1);
+                rebuildWidgets();
+            }).bounds(treeViewX + treeViewWidth - 116, y, 20, 18)
+              .tooltip(Tooltip.create(Component.literal("Move up: higher rows get shared materials first.")))
+              .build();
+            up.active = i > 0;
+            addRenderableWidget(up);
+            Button down = Button.builder(Component.literal("▼"), button -> {
+                widget.moveEntry(entry.recipe, 1);
+                rebuildWidgets();
+            }).bounds(treeViewX + treeViewWidth - 94, y, 20, 18)
+              .tooltip(Tooltip.create(Component.literal("Move down: lower rows get what is left.")))
+              .build();
+            down.active = i < list.size() - 1;
+            addRenderableWidget(down);
             addRenderableWidget(Button.builder(Component.literal("×"), button -> {
                 widget.removeFromList(entry.recipe);
                 rebuildWidgets();
@@ -288,7 +306,7 @@ public class ShoppingListScreen extends Screen {
         for (int i = 0; i < rows; i++) {
             int y = PANEL_TOP + i * PANEL_ROW;
             context.fill(treeViewX, y - 2, treeViewX + treeViewWidth, y + 20, i % 2 == 0 ? 0xFC271910 : 0xFC2E1F14);
-            String name = font.plainSubstrByWidth(list.get(i).recipe, treeViewWidth - 80);
+            String name = font.plainSubstrByWidth(list.get(i).recipe, treeViewWidth - 124);
             context.text(font, name, treeViewX + 4, y + 5, 0xFFE0E0E0, false);
         }
         if (list.size() > rows) {
