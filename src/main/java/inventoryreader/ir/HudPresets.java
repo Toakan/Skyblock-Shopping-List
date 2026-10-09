@@ -118,12 +118,29 @@ public final class HudPresets {
         write(capture(BACKUP_NAME));
     }
 
+    /** Player preset names (A-Z), kept until the preset folder changes; Settings asks on every rebuild. */
+    private static List<String> playerNames;
+    private static long playerNamesStamp;
+
     /** Player presets (A-Z), then the built-ins. Never empty. */
-    public static List<String> list() {
-        List<String> names = new ArrayList<>(readAll().keySet());
-        names.sort(String.CASE_INSENSITIVE_ORDER);
+    public static synchronized List<String> list() {
+        File[] files = FilePathManager.PRESETS_DIR.listFiles((dir, file) -> file.endsWith(".json"));
+        // Folder time plus file count: changes when a preset is added, removed or renamed outside the game too.
+        long stamp = FilePathManager.PRESETS_DIR.lastModified() * 31 + (files == null ? 0 : files.length);
+        if (playerNames == null || stamp != playerNamesStamp) {
+            List<String> names = new ArrayList<>(readAll().keySet());
+            names.sort(String.CASE_INSENSITIVE_ORDER);
+            playerNames = List.copyOf(names);
+            playerNamesStamp = stamp;
+        }
+        List<String> names = new ArrayList<>(playerNames);
         names.addAll(builtIns().keySet());
         return names;
+    }
+
+    /** Forgets the cached names after this mod saved or deleted a preset. */
+    private static synchronized void namesChanged() {
+        playerNames = null;
     }
 
     public static boolean isBuiltIn(String name) {
@@ -162,7 +179,9 @@ public final class HudPresets {
     public static boolean delete(String name) {
         if (name == null || isBuiltIn(name)) return false;
         File file = fileFor(name);
-        return file.isFile() && file.delete();
+        boolean deleted = file.isFile() && file.delete();
+        namesChanged();
+        return deleted;
     }
 
     /** Copies the current setup to the clipboard as a share code. */
@@ -235,6 +254,7 @@ public final class HudPresets {
 
     private static void write(Preset preset) {
         JsonFiles.write(fileFor(preset.name), preset);
+        namesChanged();
     }
 
     /** File name from the preset name: letters, digits, spaces and a few marks only, so names can't leave the folder. */

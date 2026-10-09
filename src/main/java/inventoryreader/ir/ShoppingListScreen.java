@@ -34,6 +34,8 @@ public class ShoppingListScreen extends Screen {
     private int addAmount = 1;
     /** Recipe names the shopping-list rows were built for; rows are rebuilt when the list changes. */
     private List<String> builtRows = List.of();
+    /** {@link #builtRows} as a set, for the per-frame "already on the list" check. */
+    private java.util.Set<String> builtRowSet = java.util.Set.of();
     private static final int PANEL_TOP = 58;
     private static final int PANEL_ROW = 22;
     private static final int PANEL_MAX_ROWS = 5;
@@ -153,6 +155,7 @@ public class ShoppingListScreen extends Screen {
             }).bounds(treeViewX + treeViewWidth - 26, y, 20, 18).build());
         }
         builtRows = list.stream().map(e -> e.recipe).toList();
+        builtRowSet = java.util.Set.copyOf(builtRows);
         treeViewY = PANEL_TOP + Math.max(1, rows) * PANEL_ROW + 22;
         treeViewHeight = Math.max(60, height - 40 - treeViewY);
 
@@ -222,7 +225,7 @@ public class ShoppingListScreen extends Screen {
         int yPos = 85;
         int itemHeight = 20;
         int endIndex = Math.min(scrollOffset + MAX_RECIPES_SHOWN, filteredRecipes.size());
-        java.util.Set<String> inList = new java.util.HashSet<>(builtRows);
+        java.util.Set<String> inList = builtRowSet;
 
         context.fill(LIST_X, yPos - 5, listRight, yPos + MAX_RECIPES_SHOWN * itemHeight + 15, 0xFC271910);
 
@@ -283,11 +286,13 @@ public class ShoppingListScreen extends Screen {
             treeViewY + treeViewHeight
         );
         if (!tops().isEmpty()) {
-            int treeY = treeViewY + 10 - treeScrollOffset;
+            int treeTop = treeViewY + 10 - treeScrollOffset;
+            int treeY = treeTop;
             for (RecipeManager.RecipeNode top : tops()) {
                 treeY = renderRecipeTree(context, top, treeViewX + 10, treeY, 0, SandboxWidget.LIST_KEY, mouseX, mouseY);
             }
-            int totalHeight = forestHeight();
+            // The draw pass already walked the tree; its end is the height.
+            int totalHeight = treeY - treeTop;
             if (totalHeight > treeViewHeight) {
                 if (treeScrollOffset > 0) {
                     String up = "▲";
@@ -318,7 +323,8 @@ public class ShoppingListScreen extends Screen {
     }
 
     private void renderListPanel(GuiGraphicsExtractor context) {
-        List<ShoppingListEntry> list = widget.getShoppingList();
+        // Names as of the last rebuild (tick() rebuilds when the list changes): no copy of the list per frame.
+        List<String> list = builtRows;
         String header = "Shopping list (" + list.size() + "/" + widget.getMaxRecipes() + ")";
         context.text(font, Component.literal(header).setStyle(Style.EMPTY.withColor(ChatFormatting.GOLD).withBold(true)),
             treeViewX, 47, GOLD, false);
@@ -330,7 +336,7 @@ public class ShoppingListScreen extends Screen {
         for (int i = 0; i < rows; i++) {
             int y = PANEL_TOP + i * PANEL_ROW;
             context.fill(treeViewX, y - 2, treeViewX + treeViewWidth, y + 20, i % 2 == 0 ? 0xFC271910 : 0xFC2E1F14);
-            context.text(font, fitPlain(list.get(i).recipe, listNameWidth, 0xFFE0E0E0), treeViewX + 4, y + 5, 0xFFFFFFFF, false);
+            context.text(font, fitPlain(list.get(i), listNameWidth, 0xFFE0E0E0), treeViewX + 4, y + 5, 0xFFFFFFFF, false);
         }
         if (list.size() > rows) {
             context.text(font, "+" + (list.size() - rows) + " more", treeViewX + 4, PANEL_TOP + rows * PANEL_ROW, 0xFFAAAAAA, false);

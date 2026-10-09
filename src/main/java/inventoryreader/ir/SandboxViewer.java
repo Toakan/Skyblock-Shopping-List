@@ -42,6 +42,8 @@ public class SandboxViewer extends Screen {
 
     private List<ResourcesManager.ResourceEntry> resources = new ArrayList<>();
     private List<ResourcesManager.ResourceEntry> filteredResources = new ArrayList<>();
+    /** The filteredResources list the edit fields were last pruned for (it is replaced, never changed in place). */
+    private List<ResourcesManager.ResourceEntry> prunedFor;
     private String resourceSearchTerm = "";
 
     private List<String> recipeNames = new ArrayList<>();
@@ -583,30 +585,29 @@ public class SandboxViewer extends Screen {
         int maxVisibleItems = getRecipeMaxVisibleItems();
         int totalItems = filteredRecipeNames.size();
 
-        int visibleIndex = 0;
-        for (String name : filteredRecipeNames) {
-            if (visibleIndex >= scrollOffset && visibleIndex < scrollOffset + maxVisibleItems) {
-                int itemY = recipeListY + (visibleIndex - scrollOffset) * lineHeight;
-                boolean isSelected = name.equals(selectedRecipe);
-                int itemBgColor = (visibleIndex % 2 == 0) ? ITEM_BG : ITEM_BG_ALT;
-                context.fill(x, itemY, x + width - 16, itemY + lineHeight - 2, itemBgColor);
+        // Only the visible slice is drawn; no need to walk the whole filtered list every frame.
+        int lastIndex = Math.min(totalItems, scrollOffset + maxVisibleItems);
+        for (int visibleIndex = Math.max(0, scrollOffset); visibleIndex < lastIndex; visibleIndex++) {
+            String name = filteredRecipeNames.get(visibleIndex);
+            int itemY = recipeListY + (visibleIndex - scrollOffset) * lineHeight;
+            boolean isSelected = name.equals(selectedRecipe);
+            int itemBgColor = (visibleIndex % 2 == 0) ? ITEM_BG : ITEM_BG_ALT;
+            context.fill(x, itemY, x + width - 16, itemY + lineHeight - 2, itemBgColor);
 
-                if (isSelected) {
-                    context.fill(x, itemY, x + width - 16, itemY + lineHeight - 2, SELECTED_BG);
-                }
-                if (isMouseOver(x, itemY, width - 16, lineHeight - 2) && !isSelected) {
-                    context.fill(x, itemY, x + width - 16, itemY + lineHeight - 2, 0x32FFFFFF);
-                }
-
-                final String currentName = name;
-                clickableElements.add(new ClickableElement(x, itemY, width - 16, lineHeight - 2, () -> selectRecipe(currentName)));
-
-                int color = isSelected ? WHITE : TEXT_SECONDARY;
-                Component displayName = SandboxWidget.fitName(font,
-                    t -> Component.literal(t).setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(color & 0xFFFFFF)), name, width - 30);
-                context.text(font, displayName, x + 8, itemY + (lineHeight - font.lineHeight) / 2, 0xFFFFFFFF, false);
+            if (isSelected) {
+                context.fill(x, itemY, x + width - 16, itemY + lineHeight - 2, SELECTED_BG);
             }
-            visibleIndex++;
+            if (isMouseOver(x, itemY, width - 16, lineHeight - 2) && !isSelected) {
+                context.fill(x, itemY, x + width - 16, itemY + lineHeight - 2, 0x32FFFFFF);
+            }
+
+            final String currentName = name;
+            clickableElements.add(new ClickableElement(x, itemY, width - 16, lineHeight - 2, () -> selectRecipe(currentName)));
+
+            int color = isSelected ? WHITE : TEXT_SECONDARY;
+            Component displayName = SandboxWidget.fitName(font,
+                t -> Component.literal(t).setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(color & 0xFFFFFF)), name, width - 30);
+            context.text(font, displayName, x + 8, itemY + (lineHeight - font.lineHeight) / 2, 0xFFFFFFFF, false);
         }
 
         if (totalItems > maxVisibleItems) {
@@ -920,12 +921,15 @@ public class SandboxViewer extends Screen {
 
         int leftPanelWidth = contentWidth;
 
-        Set<String> currentResourceKeys = new HashSet<>();
-        for (ResourcesManager.ResourceEntry resource : filteredResources) {
-            currentResourceKeys.add(resource.name);
+        // Drop edit fields for items no longer listed; only when the list was replaced, not every frame.
+        if (filteredResources != prunedFor) {
+            prunedFor = filteredResources;
+            Set<String> currentResourceKeys = new HashSet<>();
+            for (ResourcesManager.ResourceEntry resource : filteredResources) {
+                currentResourceKeys.add(resource.name);
+            }
+            resourceAmountFields.entrySet().removeIf(entry -> !currentResourceKeys.contains(entry.getKey()));
         }
-
-        resourceAmountFields.entrySet().removeIf(entry -> !currentResourceKeys.contains(entry.getKey()));
 
         int gridStartY = contentY + 35;
         int totalItems = filteredResources.size();

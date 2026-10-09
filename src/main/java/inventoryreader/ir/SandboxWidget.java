@@ -1030,8 +1030,17 @@ public class SandboxWidget {
     }
 
     /** Splits each line into pieces that fit the content width at the section's scale. */
+    /** Wrapped section lines by (lines, width, font); render thread only. The lines rarely change between frames. */
+    private record WrapKey(List<String> lines, int maxWidth, String font) {}
+    private static final Map<WrapKey, List<String>> WRAP_CACHE = new HashMap<>();
+
     private static List<String> wrap(Minecraft client, HudStyle style, Section section, int contentWidth) {
         int maxWidth = Math.max(10, (int) Math.floor(contentWidth / Math.max(0.01f, section.scale())));
+        WrapKey key = new WrapKey(List.copyOf(section.lines()), maxWidth, style.font);
+        List<String> cached = WRAP_CACHE.get(key);
+        if (cached != null) return cached;
+        // A handful of sections are on screen at once; drop old entries rather than growing forever.
+        if (WRAP_CACHE.size() > 16) WRAP_CACHE.clear();
         List<String> out = new ArrayList<>();
         for (String message : section.lines()) {
             StringBuilder line = new StringBuilder();
@@ -1046,6 +1055,8 @@ public class SandboxWidget {
             }
             if (!line.isEmpty()) out.add(line.toString());
         }
+        out = List.copyOf(out);
+        WRAP_CACHE.put(key, out);
         return out;
     }
 
