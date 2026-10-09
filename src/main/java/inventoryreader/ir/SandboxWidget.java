@@ -53,6 +53,11 @@ public class SandboxWidget {
     private volatile List<String> messages = List.of();
     /** "Forging -" lines: forge slots making something the shopping list needs. */
     private volatile List<String> forgingLines = List.of();
+    /**
+     * Changes whenever the list is replaced wholesale (profile switch, data reset). An update that started on the
+     * old list sees the change and neither publishes its results nor removes entries from the new list.
+     */
+    private volatile long listGeneration = 0;
     /** Update thread only: every item name in the current shopping-list trees. */
     private Set<String> listItemNames = Set.of();
     /** Update thread only: forge version and minute the forging lines were built for. */
@@ -183,6 +188,11 @@ public class SandboxWidget {
     public synchronized void removeFromList(String recipe) {
         if (shoppingList.removeIf(e -> e.recipe.equals(recipe))) listChanged();
     }
+    /** Auto-remove: takes achieved entries off the list the update was worked out for, if it is still current. */
+    private synchronized void removeAchieved(List<String> recipes, long generation) {
+        if (generation != listGeneration) return;
+        if (shoppingList.removeIf(e -> recipes.contains(e.recipe))) listChanged();
+    }
     public synchronized void clearList() {
         if (shoppingList.isEmpty()) return;
         shoppingList.clear();
@@ -220,6 +230,7 @@ public class SandboxWidget {
      */
     public synchronized void reloadShoppingList(Runnable switchFolder) {
         switchFolder.run();
+        listGeneration++;
         loadShoppingList();
         scheduler.execute(() -> {
             readyEntries.clear();
@@ -329,6 +340,7 @@ public class SandboxWidget {
     /** Restores defaults after a reset deleted the config file. */
     public synchronized void resetConfiguration() {
         enabled = false;
+        listGeneration++;
         shoppingList.clear();
         recipeTree = null;
         widgetX = 10;
@@ -421,6 +433,8 @@ public class SandboxWidget {
     }
 
     private void updateRecipeData() {
+        // Read before the entries: a switch in between makes this update stale, never the other way round.
+        long generation = listGeneration;
         List<ShoppingListEntry> entries = getShoppingList();
         if (entries.isEmpty()) {
             recipeTree = null;
@@ -485,7 +499,7 @@ public class SandboxWidget {
         achievedEntries.retainAll(names);
         if (!toRemove.isEmpty()) {
             // Removing schedules another refresh, which redraws without these entries.
-            for (String recipe : toRemove) removeFromList(recipe);
+            removeAchieved(toRemove, generation);
             return;
         }
 
@@ -512,6 +526,8 @@ public class SandboxWidget {
             tops.add(tree);
             expandedNodes.putIfAbsent(makePathKey(LIST_KEY, tree.name), true);
         }
+        // The list was swapped while this ran: its results belong to the old list. The swap queued a fresh update.
+        if (generation != listGeneration) return;
         messages = List.copyOf(newMessages);
         recipeTree = new RecipeManager.RecipeNode("Shopping list", 0, 0, tops);
 
