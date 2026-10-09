@@ -2,7 +2,7 @@ Pick the items you want to make, and a HUD shopping list shows what you can alre
 
 Built with Ironman accounts in mind, but just as useful on a regular profile for keeping track of your stock and planning crafts.
 
-**Fork notice:** this is a renamed, maintained fork of [Inventory Reader](https://github.com/Scholiboi/InventoryReader) by Scholiboi. Remove any old Inventory Reader jar before installing; its data is moved to `config/skyblock-shopping-list/` automatically on first launch.
+**Coming from Inventory Reader?** This mod grew out of [Inventory Reader](https://github.com/Scholiboi/InventoryReader) by Scholiboi. Remove the old jar before installing; your data is moved to `config/skyblock-shopping-list/` automatically on first launch.
 
 ## Features
 - **Shopping list HUD:** add recipes with an amount and reorder them by priority. A **Total** section lists every raw material still needed (missing items first), followed by one tree per recipe. Your stock is shared between recipes and never counted twice. Each amount is either a total to hold (what you already have counts) or how many more to make.
@@ -60,4 +60,4 @@ Minecraft 26.2 or 26.3 (one jar for both), Java 25, Fabric Loader 0.19.5+, Fabri
 - Pets that only drop have no recipe.
 
 ## License and credits
-CC-BY-SA-4.0. Based on [Inventory Reader](https://github.com/Scholiboi/InventoryReader) by Scholiboi. Recipe and item data comes from [NotEnoughUpdates-REPO](https://github.com/NotEnoughUpdates/NotEnoughUpdates-REPO). Source code: [Toakan/Skyblock-Shopping-List](https://github.com/Toakan/Skyblock-Shopping-List).
+CC-BY-SA-4.0. Originally based on [Inventory Reader](https://github.com/Scholiboi/InventoryReader) by Scholiboi, whose inventory reading, recipe trees and HUD this mod was built on. Recipe and item data comes from [NotEnoughUpdates-REPO](https://github.com/NotEnoughUpdates/NotEnoughUpdates-REPO). Source code: [Toakan/Skyblock-Shopping-List](https://github.com/Toakan/Skyblock-Shopping-List).

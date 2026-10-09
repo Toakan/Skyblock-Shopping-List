@@ -5,10 +5,8 @@ Skyblock Shopping List is a Fabric client mod for Hypixel SkyBlock. It keeps a c
 This tool has been updated to be really beneficial for Ironman accounts, however it can still be useful for regular accounts to keep track of their inventory and plan their crafting efficiently.
 
 
-# Notification of Change
-This is a renamed, maintained fork of Inventory Reader ([Scholiboi/InventoryReader](https://github.com/Scholiboi/InventoryReader)), originally written by Scholiboi. Remove any old Inventory Reader jar from `mods/` before installing; its data folder (`.ir-data`, or `.skyblock-shopping-list` from earlier versions of this fork) is moved to `config/skyblock-shopping-list/` automatically on first launch.
-
-The license and credits remain the same as the original Inventory Reader project, with modifications only for the renaming and maintenance of this fork.
+## Coming from Inventory Reader?
+Skyblock Shopping List grew out of [Inventory Reader](https://github.com/Scholiboi/InventoryReader) by Scholiboi (see [Credits](#license-and-attribution)). Remove the old Inventory Reader jar from `mods/` before installing; its data folder (`.ir-data`, or `.skyblock-shopping-list` from earlier versions of this mod) is moved to `config/skyblock-shopping-list/` automatically on first launch.
 
 ## Requirements
 - Minecraft 26.2 or 26.3 (the same jar runs on both)
@@ -130,5 +128,6 @@ The jar is written to `build/libs/`. `./gradlew runClient` starts a development 
 - Recipes cover what the NEU repository lists as crafting, forge, NPC shop and Kat upgrade recipes. Pets that only drop have no recipe.
 
 ## License and attribution
-- Code: CC-BY-SA-4.0 (see `LICENSE`). Based on Inventory Reader by Scholiboi.
+- Code: CC-BY-SA-4.0 (see `LICENSE`), the same licence as the original.
+- Originally based on [Inventory Reader](https://github.com/Scholiboi/InventoryReader) by Scholiboi. Its core ideas and code (reading items from your inventory, sacks and storage, working out recipe trees, the HUD and the recipe viewer) are what this mod was built on. Thanks to Scholiboi for the original project.
 - Recipe and item data comes from NotEnoughUpdates-REPO; follow its license when reusing that data.
