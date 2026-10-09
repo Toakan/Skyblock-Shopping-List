@@ -14,6 +14,7 @@ import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
+import org.lwjgl.glfw.GLFW;
 
 /**
  * Menu tab "Shopping List": search recipes and click to add them, edit amounts or remove entries, and see
@@ -29,11 +30,19 @@ public class ShoppingListScreen extends Screen {
     private int MAX_RECIPES_SHOWN = 10;
     private static final int LIST_X = 20;
     /** Top of the first recipe row; rows are {@link #ROW_HEIGHT} tall. Drawing and clicks both use these. */
-    private static final int LIST_TOP = 85;
+    private static final int LIST_TOP = 107;
+    /** Filter buttons row, between the search box and the recipe list. */
+    private static final int FILTER_Y = 79;
     private static final int ROW_HEIGHT = 20;
     /** Left column (search + recipe list) right edge; set in init() from the screen width. */
     private int listRight = 270;
     private String searchText = "";
+    /** Search filters; kept across init() like the search text, not saved. */
+    private boolean matchUses = false;
+    private TypeFilter typeFilter = TypeFilter.ALL;
+    private RarityFilter rarityFilter = RarityFilter.ALL;
+    private OwnedFilter ownedFilter = OwnedFilter.ALL;
+    private Button matchButton, typeButton, rarityButton, ownedButton;
     /** How many of a recipe one click adds. */
     private int addAmount = 1;
     /** Recipe names the shopping-list rows were built for; rows are rebuilt when the list changes. */
@@ -91,10 +100,11 @@ public class ShoppingListScreen extends Screen {
         MAX_RECIPES_SHOWN = Math.max(3, (height - 40 - LIST_TOP - 15) / ROW_HEIGHT);
         searchField = new EditBox(font, LIST_X, 55, listWidth - 54, 20, Component.literal(""));
         searchField.setMaxLength(50);
-        searchField.setHint(Component.literal("Search recipes..."));
+        searchField.setHint(searchHint());
         searchField.setValue(searchText);
         searchField.setResponder(this::updateFilteredRecipes);
         addRenderableWidget(searchField);
+        initFilterRow(listWidth);
 
         // How many to add when a recipe is clicked.
         EditBox amountBox = new EditBox(font, listRight - 40, 55, 40, 20, Component.literal("Amount"));
@@ -275,17 +285,138 @@ public class ShoppingListScreen extends Screen {
     public void extractBackground(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
     }
 
+    private Component searchHint() {
+        return Component.literal(matchUses ? "Search ingredients..." : "Search recipes...");
+    }
+
+    /** Four cycle buttons: match by name or ingredient, type group, rarity, owned. Left click steps forward, right click back. */
+    private void initFilterRow(int listWidth) {
+        int gap = 2;
+        int w = (listWidth - 3 * gap) / 4;
+        int x = LIST_X;
+        matchButton = addRenderableWidget(Button.builder(Component.literal(matchUses ? "Uses" : "Name"), button -> cycleFilter(button, 1))
+            .bounds(x, FILTER_Y, w, 18)
+            .tooltip(Tooltip.create(Component.literal("Name: search item names.\nUses: search ingredients, e.g. coal finds Torch.")))
+            .build());
+        x += w + gap;
+        typeButton = addRenderableWidget(Button.builder(Component.literal(typeFilter.label), button -> cycleFilter(button, 1))
+            .bounds(x, FILTER_Y, w, 18)
+            .tooltip(Tooltip.create(Component.literal("Item type: Armor, Accessory, Pet, Weapon, Tool, Equipment or Other.")))
+            .build());
+        x += w + gap;
+        rarityButton = addRenderableWidget(Button.builder(Component.literal(rarityFilter.label), button -> cycleFilter(button, 1))
+            .bounds(x, FILTER_Y, w, 18)
+            .tooltip(Tooltip.create(Component.literal("Rarity: Common to Divine, or Special.")))
+            .build());
+        x += w + gap;
+        ownedButton = addRenderableWidget(Button.builder(Component.literal(ownedFilter.label), button -> cycleFilter(button, 1))
+            .bounds(x, FILTER_Y, listRight - x, 18)
+            .tooltip(Tooltip.create(Component.literal("Owned: items you have at least one of (inventory, sacks, storage).\nMissing: items you have none of.")))
+            .build());
+    }
+
+    /** Steps the filter behind {@code button} by {@code step} (1 forward, -1 back), wrapping around, and re-filters. */
+    private void cycleFilter(Button button, int step) {
+        if (button == matchButton) {
+            matchUses = !matchUses;
+            button.setMessage(Component.literal(matchUses ? "Uses" : "Name"));
+            searchField.setHint(searchHint());
+        } else if (button == typeButton) {
+            typeFilter = TypeFilter.values()[Math.floorMod(typeFilter.ordinal() + step, TypeFilter.values().length)];
+            button.setMessage(Component.literal(typeFilter.label));
+        } else if (button == rarityButton) {
+            rarityFilter = RarityFilter.values()[Math.floorMod(rarityFilter.ordinal() + step, RarityFilter.values().length)];
+            button.setMessage(Component.literal(rarityFilter.label));
+        } else if (button == ownedButton) {
+            ownedFilter = OwnedFilter.values()[Math.floorMod(ownedFilter.ordinal() + step, OwnedFilter.values().length)];
+            button.setMessage(Component.literal(ownedFilter.label));
+        } else {
+            return;
+        }
+        updateFilteredRecipes(searchText);
+    }
+
     private void updateFilteredRecipes(String searchTerm) {
         searchText = searchTerm == null ? "" : searchTerm;
-        if (searchTerm == null || searchTerm.isEmpty()) {
-            this.filteredRecipes = new ArrayList<>(recipeManager.getRecipeNames());
-        } else {
-            String lowerSearchTerm = searchTerm.toLowerCase(Locale.ROOT);
-            this.filteredRecipes = recipeManager.getRecipeNames().stream()
-                .filter(name -> name.toLowerCase(Locale.ROOT).contains(lowerSearchTerm))
-                .collect(Collectors.toList());
-        }
+        String term = searchText.toLowerCase(Locale.ROOT);
+        ResourcesManager resources = ResourcesManager.getInstance();
+        this.filteredRecipes = recipeManager.getRecipeNames().stream()
+            .filter(name -> term.isEmpty()
+                || (matchUses ? recipeManager.usesIngredient(name, term) : name.toLowerCase(Locale.ROOT).contains(term)))
+            .filter(name -> typeFilter.matches(recipeManager.getType(name)))
+            .filter(name -> rarityFilter.matches(recipeManager.getRarity(name)))
+            .filter(name -> ownedFilter == OwnedFilter.ALL
+                || (resources.getResourceByName(name) > 0) == (ownedFilter == OwnedFilter.OWNED))
+            .collect(Collectors.toList());
         scrollOffset = 0;
+    }
+
+    /** Groups of NEU item types ("HELMET" also covers "DUNGEON HELMET"); Other is any type in no group. */
+    private enum TypeFilter {
+        ALL("Type"),
+        ARMOR("Armor", "HELMET", "CHESTPLATE", "LEGGINGS", "BOOTS"),
+        ACCESSORY("Acc.", "ACCESSORY", "HATCESSORY"),
+        PET("Pet", "PET"),
+        WEAPON("Weapon", "SWORD", "LONGSWORD", "BOW", "WAND"),
+        TOOL("Tool", "PICKAXE", "AXE", "DRILL", "SHOVEL", "HOE", "FARMING TOOL", "FISHING ROD"),
+        EQUIPMENT("Equip", "NECKLACE", "CLOAK", "BELT", "GLOVES", "BRACELET"),
+        OTHER("Other");
+
+        final String label;
+        final List<String> types;
+
+        TypeFilter(String label, String... types) {
+            this.label = label;
+            this.types = List.of(types);
+        }
+
+        boolean has(String type) {
+            for (String t : types) {
+                if (type.equals(t) || type.endsWith(" " + t)) return true;
+            }
+            return false;
+        }
+
+        boolean matches(String type) {
+            return switch (this) {
+                case ALL -> true;
+                case OTHER -> {
+                    if (type.isEmpty()) yield false;
+                    for (TypeFilter group : values()) if (group.has(type)) yield false;
+                    yield true;
+                }
+                default -> has(type);
+            };
+        }
+    }
+
+    private enum RarityFilter {
+        ALL("Rarity", ""), COMMON("Com", "COMMON"), UNCOMMON("Unc", "UNCOMMON"), RARE("Rare", "RARE"),
+        EPIC("Epic", "EPIC"), LEGENDARY("Leg", "LEGENDARY"), MYTHIC("Myth", "MYTHIC"), DIVINE("Div", "DIVINE"),
+        SPECIAL("Spec", "SPECIAL");
+
+        final String label;
+        final String rarity;
+
+        RarityFilter(String label, String rarity) {
+            this.label = label;
+            this.rarity = rarity;
+        }
+
+        /** Special also covers Very Special. */
+        boolean matches(String r) {
+            return this == ALL || r.equals(rarity) || r.endsWith(" " + rarity);
+        }
+    }
+
+    private enum OwnedFilter {
+        ALL("All"), MISSING("Missing"), OWNED("Owned");
+
+        final String label;
+
+        OwnedFilter(String label) {
+            this.label = label;
+        }
     }
 
     @Override
@@ -550,6 +681,15 @@ public class ShoppingListScreen extends Screen {
     public boolean mouseClicked(MouseButtonEvent ctx, boolean doubleClick) {
         double mouseX = ctx.x();
         double mouseY = ctx.y();
+        if (ctx.button() == GLFW.GLFW_MOUSE_BUTTON_RIGHT) {
+            for (Button button : new Button[] {matchButton, typeButton, rarityButton, ownedButton}) {
+                if (button != null && button.isMouseOver(mouseX, mouseY)) {
+                    button.playDownSound(Minecraft.getInstance().getSoundManager());
+                    cycleFilter(button, -1);
+                    return true;
+                }
+            }
+        }
         if (mouseX >= LIST_X && mouseX <= listRight && mouseY >= LIST_TOP && mouseY < LIST_TOP + MAX_RECIPES_SHOWN * ROW_HEIGHT) {
             int recipeIndex = (int) ((mouseY - LIST_TOP) / ROW_HEIGHT);
             int actualIndex = scrollOffset + recipeIndex;
