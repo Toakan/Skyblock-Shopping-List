@@ -18,25 +18,29 @@ import java.util.regex.Pattern;
  * cancels or edits them.
  */
 public final class SackChatListener {
-    /** "+1,234 Enchanted Coal (Mining Sack)": optional sign, count, item name, optional sack name. */
     /**
      * The whole message, "[Sacks] +12 items, -3 items. (Last 30s.)". Player chat always starts with the
      * sender's name or a channel prefix, so a player typing "[Sacks] ..." can't match.
      */
     private static final Pattern SACKS_MESSAGE = Pattern.compile("^\\[Sacks] [+-][\\d,]+ items?.*\\(Last \\d+s\\.\\)$");
+    /** "+1,234 Enchanted Coal (Mining Sack)": optional sign, count, item name, optional sack name. */
     private static final Pattern ITEM_LINE = Pattern.compile("^\\s*([+-]?)([\\d,]+)\\s+(.+?)(?:\\s+\\([^()]*\\))?\\s*$");
 
     private SackChatListener() {}
 
     public static void register() {
-        ClientReceiveMessageEvents.GAME.register((message, overlay) -> {
-            if (overlay || !SkyblockDetector.isTracking()) return;
-            try {
-                onGameMessage(message);
-            } catch (RuntimeException e) {
-                InventoryReader.LOGGER.warn("Could not parse sack message: {}", message.getString(), e);
-            }
-        });
+        // Every message fires exactly one of these: hidden by another mod (e.g. a chat filter) or shown.
+        ClientReceiveMessageEvents.GAME.register(SackChatListener::read);
+        ClientReceiveMessageEvents.GAME_CANCELED.register(SackChatListener::read);
+    }
+
+    private static void read(Component message, boolean overlay) {
+        if (overlay || !SkyblockDetector.isTracking()) return;
+        try {
+            onGameMessage(message);
+        } catch (RuntimeException e) {
+            InventoryReader.LOGGER.warn("Could not parse sack message: {}", message.getString(), e);
+        }
     }
 
     private static void onGameMessage(Component message) {
