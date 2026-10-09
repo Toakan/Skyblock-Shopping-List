@@ -42,7 +42,7 @@ public final class RemoteRecipeFetcher {
      * Bump when the way recipes are extracted from the repo changes, so cached snapshots are rebuilt
      * even if the remote reports "not modified".
      */
-    private static final String PARSER_VERSION = "8";
+    private static final String PARSER_VERSION = "9";
     /** NEU's pseudo item for coin costs in shop recipes. */
     private static final String COIN_ID = "SKYBLOCK_COIN";
     public static final String COINS_NAME = "Coins";
@@ -279,6 +279,7 @@ public final class RemoteRecipeFetcher {
             Map<String, String> itemTypes = new LinkedHashMap<>();
             typeByInternal.forEach((id, rarityType) -> itemTypes.putIfAbsent(recipeNameById.getOrDefault(id, id), rarityType));
             changed |= writeSnapshot(itemTypes, FilePathManager.ITEM_TYPES_JSON, meta);
+            changed |= writeSnapshot(itemSacks(repoExtracted, recipeNameById), FilePathManager.ITEM_SACKS_JSON, meta);
             changed |= writeSnapshot(recipeNameById, FilePathManager.ITEM_NAMES_JSON, meta);
 
             inventoryreader.ir.InventoryReader.debug("NEU repo parsed (library): {} crafting (incl. {} pet upgrades), {} forge, {} shop recipes", craftingWire.size(), katCount, forgeWire.size(), shopWire.size());
@@ -472,6 +473,28 @@ public final class RemoteRecipeFetcher {
         } catch (IllegalArgumentException e) {
             return false;
         }
+    }
+
+    /** One entry of NEU's constants/sacks.json: the internal IDs a sack holds. */
+    private static class SackDef {
+        List<String> contents;
+    }
+
+    /**
+     * Item name (as the recipes name it) to the sack that holds it ("Enchanted Coal" -> "Enchanted Mining Sack"),
+     * from the repo's constants/sacks.json. Empty when the file is missing.
+     */
+    private static Map<String, String> itemSacks(Path repo, Map<String, String> recipeNameById) {
+        Map<String, Map<String, SackDef>> root = inventoryreader.ir.JsonFiles.read(
+            repo.resolve("constants").resolve("sacks.json").toFile(),
+            new TypeToken<Map<String, Map<String, SackDef>>>(){}.getType());
+        Map<String, String> out = new LinkedHashMap<>();
+        if (root == null || root.get("sacks") == null) return out;
+        root.get("sacks").forEach((sack, def) -> {
+            if (def == null || def.contents == null) return;
+            for (String id : def.contents) out.putIfAbsent(recipeNameById.getOrDefault(id, id), sack + " Sack");
+        });
+        return out;
     }
 
     private static final List<String> RARITIES = List.of("VERY SPECIAL", "UNCOMMON", "COMMON", "RARE", "EPIC",

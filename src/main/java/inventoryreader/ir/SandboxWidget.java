@@ -91,6 +91,19 @@ public class SandboxWidget {
     private final AtomicLong refreshRequests = new AtomicLong();
     /** Update thread only: {@link #refreshRequests} as of the last recompute. */
     private long handledRequests = -1;
+    /** Update thread only: {@link SackReader#getScanVersion()} the current tree was computed with. */
+    private long sackScanVersion = -1;
+    /** Sacks the list still needs read (unscanned sacks holding an item still missing), in order first needed. */
+    private volatile List<String> neededSacks = List.of();
+    /** All sacks holding an item still missing, read or not; with {@link #neededSacks} gives "1/3 read". */
+    private volatile List<String> listSacks = List.of();
+    /**
+     * Name the unread sacks in chat on the next list update: set on joining (start of the session) and by each
+     * recipe add, cleared once the line is sent. Count changes alone never prompt.
+     */
+    private volatile boolean sackPromptDue = true;
+    /** Grey for amounts that depend on a sack not read yet. */
+    private static final int UNCERTAIN_COLOR = 0xFF9A9A9A;
     /** Render thread only: row size and panel width of the HUD being drawn. */
     private int currentNodeLineHeight = 16;
     private int currentRowGap = 0;
@@ -154,6 +167,7 @@ public class SandboxWidget {
             ShoppingListEntry e = shoppingList.get(i);
             if (e.recipe.equals(recipe)) {
                 shoppingList.set(i, new ShoppingListEntry(recipe, e.amount + amount, e.startCount, e.isHaveTotal()));
+                sackPromptDue = true;
                 listChanged();
                 return AddResult.INCREASED;
             }
@@ -161,6 +175,7 @@ public class SandboxWidget {
         if (shoppingList.size() >= maxRecipes) return AddResult.FULL;
         shoppingList.add(new ShoppingListEntry(recipe, amount, resourcesManager.getResourceByName(recipe)));
         expandedNodes.putIfAbsent(makePathKey(LIST_KEY, recipe), true);
+        sackPromptDue = true;
         listChanged();
         return AddResult.ADDED;
     }
@@ -458,9 +473,11 @@ public class SandboxWidget {
             long recipes = RecipeManager.getInstance().getVersion();
             // Read before recomputing: a request made while this runs is still seen as new next time.
             long requests = refreshRequests.get();
+            long scans = SackReader.getInstance().getScanVersion();
             if (version != computedVersion || requests != handledRequests || ForgeSpeed.getVersion() != forgeSpeedVersion
-                    || recipes != recipeVersion) {
+                    || recipes != recipeVersion || scans != sackScanVersion) {
                 computedVersion = version;
+                sackScanVersion = scans;
                 handledRequests = requests;
                 forgeSpeedVersion = ForgeSpeed.getVersion();
                 recipeVersion = recipes;
@@ -494,6 +511,8 @@ public class SandboxWidget {
             messages = List.of();
             listItemNames = Set.of();
             forgingLines = List.of();
+            neededSacks = List.of();
+            listSacks = List.of();
             readyEntries.clear();
             achievedEntries.clear();
             baselineSet = true;
@@ -586,11 +605,56 @@ public class SandboxWidget {
         }
         Set<String> itemNames = new HashSet<>();
         for (RecipeManager.RecipeNode tree : response.trees) collectNames(tree, itemNames);
+        updateNeededSacks(response.trees, toasts);
         if (!publish(generation, List.copyOf(newMessages), new RecipeManager.RecipeNode("Shopping list", 0, 0, tops),
                 itemNames, toasts)) {
             return;
         }
         updateForgingLines();
+    }
+
+    /**
+     * Works out which sacks hold items the list is still missing, and which of those haven't been read. When a
+     * prompt is due (after joining, or adding a recipe) the unread ones are named in one chat line.
+     */
+    private void updateNeededSacks(List<RecipeManager.RecipeNode> trees, List<Runnable> toasts) {
+        Set<String> missing = new LinkedHashSet<>();
+        for (RecipeManager.RecipeNode tree : trees) collectMissing(tree, missing, 0);
+        RecipeManager recipes = RecipeManager.getInstance();
+        Set<String> all = new LinkedHashSet<>();
+        for (String name : missing) {
+            String sack = recipes.getSack(name);
+            if (!sack.isEmpty()) all.add(sack);
+        }
+        List<String> unread = SackReader.getInstance().unscannedSacks(missing);
+        neededSacks = List.copyOf(unread);
+        listSacks = List.copyOf(all);
+        if (sackPromptDue && SkyblockDetector.isOnSkyblock() && ProfileManager.isReady()) {
+            // Runs only if this update is published; the check keeps two queued updates from both sending it.
+            toasts.add(() -> {
+                if (!sackPromptDue) return;
+                sackPromptDue = false;
+                ReminderManager.promptSacks(unread);
+            });
+        }
+    }
+
+    private static void collectMissing(RecipeManager.RecipeNode node, Set<String> out, int depth) {
+        if (node == null || depth > RecipeManager.MAX_DEPTH) return;
+        if (node.amount > 0 || node.toCraft > 0) out.add(node.name);
+        if (node.ingredients != null) {
+            for (RecipeManager.RecipeNode child : node.ingredients) collectMissing(child, out, depth + 1);
+        }
+    }
+
+    /** Every sack holding an item the list is still missing, read or not. */
+    public List<String> getListSacks() {
+        return listSacks;
+    }
+
+    /** Sacks still to open for the current list, in the order first needed. */
+    public List<String> getNeededSacks() {
+        return neededSacks;
     }
 
     /** When the last Forge slot cooking each item (by normalised name) is done, for items still cooking. */
@@ -1233,7 +1297,8 @@ public class SandboxWidget {
         boolean showRemaining = isShowRemaining();
         int nodeHeight = currentNodeLineHeight;
         int nodeWidth = Math.max(100, currentPanelWidth - 2 * style.padding) - indent;
-        int statusColor = progressColor(node, showRemaining);
+        boolean uncertain = isUncertain(node);
+        int statusColor = uncertain ? UNCERTAIN_COLOR : progressColor(node, showRemaining);
 
         if (style.showRowBoxes) {
             RoundedBox.fill(context, x + indent, y, nodeWidth, nodeHeight, style.rowRadius, style.rowBackground);
@@ -1258,13 +1323,19 @@ public class SandboxWidget {
         Component name = style.text(node.name, nameColor, bold);
         String forge = forgeText(node, level);
         Component tag = forge.isEmpty() ? Component.empty() : style.text(forge, nameColor, false);
+        List<String> sacksLeft = neededSacks;
+        int listSackCount = listSacks.size();
+        if (level == 0 && "Total".equals(node.name) && !sacksLeft.isEmpty()) {
+            // How far the sack scan for this list has got; gone once every needed sack has been opened.
+            tag = style.text(" (sacks " + (listSackCount - sacksLeft.size()) + "/" + listSackCount + " read)", UNCERTAIN_COLOR, false);
+        }
         int markWidth = client.font.width(mark);
         int amountWidth = client.font.width(amount);
         int tagWidth = client.font.width(tag);
         int maxTextWidth = Math.max(10, nodeWidth - iconOffset);
         float textScale;
         if (forge.isEmpty()) {
-            int totalTextWidth = markWidth + amountWidth + client.font.width(name);
+            int totalTextWidth = markWidth + amountWidth + client.font.width(name) + tagWidth;
             textScale = Math.min(rowScale, (float) maxTextWidth / Math.max(1, totalTextWidth));
         } else {
             // The forge time always shows; a long name is cut short to make room instead of shrinking the row.
@@ -1363,12 +1434,21 @@ public class SandboxWidget {
      * held of needed ("83/5,120"), or the full amount the recipe needs ("6×").
      */
     public static String amountText(RecipeManager.RecipeNode node) {
+        boolean uncertain = isUncertain(node);
         return switch (HudStyle.get().amountFormat) {
-            case REMAINING -> number((long) node.amount + node.toCraft) + "×";
+            case REMAINING -> (uncertain ? "≤" : "") + number((long) node.amount + node.toCraft) + "×";
             case REQUIRED -> number(node.required) + "×";
-            case HAVE_NEED -> number(Math.max(0L, (long) node.required - node.amount - node.toCraft)) + "/"
-                + number(node.required);
+            case HAVE_NEED -> (uncertain ? "≥" : "") + number(Math.max(0L, (long) node.required - node.amount - node.toCraft))
+                + "/" + number(node.required);
         };
+    }
+
+    /**
+     * True when the row is still missing items and its count depends on a sack not read yet: the player may
+     * have more than shown.
+     */
+    public static boolean isUncertain(RecipeManager.RecipeNode node) {
+        return (node.amount > 0 || node.toCraft > 0) && SackReader.getInstance().isUncertain(node.name);
     }
 
     /**

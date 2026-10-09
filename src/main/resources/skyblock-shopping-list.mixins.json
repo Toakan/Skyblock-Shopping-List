@@ -4,6 +4,7 @@
   "package": "inventoryreader.ir.mixin",
   "compatibilityLevel": "JAVA_25",
   "client": [
+    "SackHighlightMixin",
     "SlotClickMixin"
   ],
   "injectors": {

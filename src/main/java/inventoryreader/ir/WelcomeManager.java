@@ -62,7 +62,6 @@ public class WelcomeManager {
         client.player.sendSystemMessage(Component.literal("§e- §b/ssl menu§e: Open the menu"));
         client.player.sendSystemMessage(Component.literal("§e- §b/ssl hud§e: Move the HUD"));
         client.player.sendSystemMessage(Component.literal("§e- §b/ssl reset§e: Reset all mod data"));
-        client.player.sendSystemMessage(Component.literal("§e- §b/ssl done§e: Acknowledge reminders"));
         client.player.sendSystemMessage(Component.literal("§e- §b/ssl§e: Show all available commands"));
 
         client.player.sendSystemMessage(Component.literal(""));
@@ -70,7 +69,7 @@ public class WelcomeManager {
             Style.EMPTY.withBold(true).withColor(ChatFormatting.LIGHT_PURPLE)
         );
         client.player.sendSystemMessage(firstTimeText);
-        MutableComponent warningText = Component.literal("⚠️ For the mod to work, open all your Sacks, Backpacks and Ender Chests once in Skyblock. ⚠️").setStyle(
+        MutableComponent warningText = Component.literal("⚠️ Open your Backpacks and Ender Chest once so they are counted. The HUD tells you which Sacks to open. ⚠️").setStyle(
             Style.EMPTY.withBold(true).withColor(ChatFormatting.RED)
         );
         client.player.sendSystemMessage(warningText);

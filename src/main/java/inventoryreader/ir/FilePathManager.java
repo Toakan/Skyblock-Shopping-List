@@ -59,6 +59,8 @@ public class FilePathManager {
     public static final File FORGE_TIMES_JSON = new File(DATA_DIR, "forge_times.json");
     /** Item name to "RARITY|TYPE" from its lore, written by the recipe fetch; feeds the List tab filters. */
     public static final File ITEM_TYPES_JSON = new File(DATA_DIR, "item_types.json");
+    /** Item name to the sack that holds it ("Enchanted Mining Sack"), written by the recipe fetch. */
+    public static final File ITEM_SACKS_JSON = new File(DATA_DIR, "item_sacks.json");
     /** NPC shop purchases (coins + items) for items with no crafting or forge recipe. */
     public static final File REMOTE_SHOP_JSON = new File(DATA_DIR, "recipes_remote_shop.json");
     /** SkyBlock item ID to the name recipes use, written by the recipe fetch. */
