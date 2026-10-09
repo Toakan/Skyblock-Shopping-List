@@ -24,24 +24,22 @@ public class SackReader {
     private static final Pattern GEMSTONE_LINE = Pattern.compile("\\b(Rough|Flawed|Fine|Flawless|Perfect):\\s*([\\d,]+)");
     private static final Type MAP_TYPE = new TypeToken<Map<String, Integer>>() {}.getType();
     private static final SackReader INSTANCE = new SackReader();
-    private static volatile boolean needsReminder = false;
 
     private Map<String, Integer> snapshot;
     /** Epoch ms of the last sack menu read, 0 if never; null until loaded. */
     private Long lastRead;
+    /**
+     * Items read from an open sack menu ({@link ItemNames#normalize} keys), so their count is known. Chat
+     * updates don't add to it: they only report changes. Null until loaded.
+     */
+    private Set<String> scanned;
+    /** Changes whenever {@link #scanned} grows or is cleared, so callers can cache what depends on it. */
+    private volatile long scanVersion = 0;
 
     private SackReader() {}
 
     public static SackReader getInstance() {
         return INSTANCE;
-    }
-
-    public static void setNeedsReminder(boolean state) {
-        needsReminder = state;
-    }
-
-    public static boolean getNeedsReminder() {
-        return needsReminder;
     }
 
     private Map<String, Integer> snapshot() {
@@ -56,24 +54,63 @@ public class SackReader {
     public synchronized void clear() {
         snapshot = null;
         lastRead = null;
+        scanned = null;
+        scanVersion++;
     }
 
     /** When a sack menu was last read (epoch ms), or 0 if never. Chat updates don't count. */
     public synchronized long getLastRead() {
-        if (lastRead == null) {
-            SackMeta meta = JsonFiles.read(FilePathManager.sacksMetaJson(), SackMeta.class);
-            lastRead = meta != null ? meta.lastRead : 0L;
-        }
+        loadMeta();
         return lastRead;
+    }
+
+    private void loadMeta() {
+        if (lastRead != null) return;
+        SackMeta meta = JsonFiles.read(FilePathManager.sacksMetaJson(), SackMeta.class);
+        lastRead = meta != null ? meta.lastRead : 0L;
+        scanned = meta != null && meta.scanned != null ? new HashSet<>(meta.scanned) : new HashSet<>();
+    }
+
+    /** Changes whenever the set of scanned sack items changes. */
+    public long getScanVersion() {
+        return scanVersion;
+    }
+
+    /**
+     * True when {@code name} is kept in a sack that hasn't been read from its menu yet, so the count shown for
+     * it may be too low.
+     */
+    public synchronized boolean isUncertain(String name) {
+        if (RecipeManager.getInstance().getSack(name).isEmpty()) return false;
+        loadMeta();
+        return !scanned.contains(ItemNames.normalize(name));
+    }
+
+    /** The sacks still to open for {@code names}, each once, in the order first needed. */
+    public synchronized List<String> unscannedSacks(Collection<String> names) {
+        Set<String> out = new LinkedHashSet<>();
+        for (String name : names) {
+            if (isUncertain(name)) out.add(RecipeManager.getInstance().getSack(name));
+        }
+        return new ArrayList<>(out);
+    }
+
+    /** Whether any item of {@code sack} ("Enchanted Mining Sack") has been read from its menu. */
+    public synchronized boolean isSackScanned(String sack) {
+        loadMeta();
+        for (Map.Entry<String, String> e : RecipeManager.getInstance().getItemSacks().entrySet()) {
+            if (e.getValue().equals(sack) && scanned.contains(ItemNames.normalize(e.getKey()))) return true;
+        }
+        return false;
     }
 
     private static class SackMeta {
         long lastRead;
+        List<String> scanned;
     }
 
     /** Reads every sack item's stored amount from an open sack menu. */
     public synchronized void readSack(AbstractContainerMenu handler, String title) {
-        setNeedsReminder(false);
         Map<String, Integer> current = new LinkedHashMap<>();
         boolean gemstoneSack = title.contains("Gemstone");
         for (ItemStack stack : MenuSlots.containerStacks(handler)) {
@@ -88,8 +125,13 @@ public class SackReader {
         }
         if (current.isEmpty()) return;
 
+        loadMeta();
+        boolean grew = false;
+        for (String name : current.keySet()) grew |= scanned.add(ItemNames.normalize(name));
+        if (grew) scanVersion++;
         SackMeta meta = new SackMeta();
         meta.lastRead = lastRead = System.currentTimeMillis();
+        meta.scanned = new ArrayList<>(scanned);
         JsonFiles.writeAsync(FilePathManager.sacksMetaJson(), () -> meta);
 
         Map<String, Integer> snap = snapshot();

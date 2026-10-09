@@ -24,7 +24,13 @@ The license and credits remain the same as the original Inventory Reader project
 3. Launch Minecraft with the Fabric profile.
 
 ## First-time setup
-The mod only knows what you have shown it. Open each of your sacks, backpacks and ender chest pages once in SkyBlock, plus each Accessory Bag page, each wardrobe page and the Stats & Equipment menu (for worn necklace, cloak, belt and gloves). Worn armor counts with your inventory. After that, counts stay up to date from your inventory, from the containers you open, and from the `[Sacks]` chat summaries.
+The mod only knows what you have shown it. Open your backpacks and ender chest pages once in SkyBlock, plus each Accessory Bag page, each wardrobe page and the Stats & Equipment menu (for worn necklace, cloak, belt and gloves). Worn armor counts with your inventory. After that, counts stay up to date from your inventory, from the containers you open, and from the `[Sacks]` chat summaries.
+
+You don't need to open every sack. When you add a recipe, a chat line names the sacks its materials live in (e.g. "Open your Enchanted Mining Sack for accurate counts."), and until you open them:
+- rows for those materials are grey with `≥` (have at least, e.g. `≥12/160`) or `≤` (still need at most) instead of a number that may be too low,
+- the HUD's **Total** row shows how far you've got, e.g. `(sacks 1/3 read)`,
+- in the sack menus (`/sacks`), the sacks still to open have a gold square behind them.
+Everything goes back to normal as soon as each sack has been opened once.
 
 ## Menu
 Press `V` (or `/ssl menu`) to open the menu. It has five tabs:
@@ -61,7 +67,6 @@ When a recipe has everything it needs you get a "Ready to craft" pop-up, and onc
 | `B` or `/ssl hud` | Move / resize the HUD |
 | `/ssl` | List commands |
 | `/ssl reset` | Delete the current profile's tracked data and the HUD settings |
-| `/ssl done` | Stop the "open a sack" reminder |
 | `/ssl credits` | Show credits |
 
 `/ir` still works as an alias for `/ssl`, and `/ssl widget` for `/ssl menu`. Keys can be rebound under Options > Controls > Key Binds > Skyblock Shopping List (or Settings → Key binds...).

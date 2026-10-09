@@ -22,6 +22,8 @@ public class RecipeManager {
     /** Upper-case rarity ("LEGENDARY") and type ("DUNGEON HELMET", may be empty) per item, from the NEU lore. */
     private volatile Map<String, String> rarities = Collections.emptyMap();
     private volatile Map<String, String> types = Collections.emptyMap();
+    /** The sack that holds each sack item ("Enchanted Mining Sack"), from the NEU sack list. */
+    private volatile Map<String, String> sacks = Collections.emptyMap();
     /** Changes every time the recipes are (re)loaded, so the HUD knows to recompute. */
     private volatile long version = 0;
 
@@ -89,6 +91,9 @@ public class RecipeManager {
             }
             rarities = Collections.unmodifiableMap(newRarities);
             types = Collections.unmodifiableMap(newTypes);
+            Map<String, String> itemSacks = JsonFiles.read(FilePathManager.ITEM_SACKS_JSON,
+                new com.google.gson.reflect.TypeToken<Map<String, String>>(){}.getType());
+            sacks = itemSacks == null ? Collections.emptyMap() : Collections.unmodifiableMap(new HashMap<>(itemSacks));
             version++;
         } catch (IOException | JsonParseException e) {
             InventoryReader.LOGGER.error("Failed to load recipes", e);
@@ -146,6 +151,16 @@ public class RecipeManager {
     /** Upper-case item type such as "ACCESSORY" or "DUNGEON HELMET", or "" for plain materials and unknown items. */
     public String getType(String name) {
         return types.getOrDefault(name, "");
+    }
+
+    /** The sack that holds {@code name} ("Enchanted Mining Sack"), or "" when it isn't a sack item. */
+    public String getSack(String name) {
+        return sacks.getOrDefault(name, "");
+    }
+
+    /** Every sack item, item name to sack name. Read only. */
+    public Map<String, String> getItemSacks() {
+        return sacks;
     }
 
     /** Whether the recipe for {@code name} has a direct ingredient whose name contains {@code lowerTerm}. */

@@ -30,8 +30,6 @@ public final class IrCommandManager {
                         .setStyle(Style.EMPTY.withColor(ChatFormatting.GOLD)));
                     context.getSource().sendFeedback(Component.literal("- /ssl reset: Reset this profile's tracked data and the HUD settings (saved lists and presets are kept)")
                         .setStyle(Style.EMPTY.withColor(ChatFormatting.WHITE)));
-                    context.getSource().sendFeedback(Component.literal("- /ssl done: Acknowledge reminder")
-                        .setStyle(Style.EMPTY.withColor(ChatFormatting.WHITE)));
                     context.getSource().sendFeedback(Component.literal("- /ssl menu: Open the menu (shopping list, resources, recipes, settings)")
                         .setStyle(Style.EMPTY.withColor(ChatFormatting.WHITE)));
                     context.getSource().sendFeedback(Component.literal("- /ssl hud: Move or resize the HUD")
@@ -47,21 +45,10 @@ public final class IrCommandManager {
                         ProfileManager.clearCaches();
                         HudStyle.clear();
                         SandboxWidget.getInstance().resetConfiguration();
-                        SackReader.setNeedsReminder(true);
                         context.getSource().sendFeedback(
-                            Component.literal(InventoryReader.NAME + " data reset! ")
+                            Component.literal(InventoryReader.NAME + " data reset!")
                                 .setStyle(Style.EMPTY.withColor(ChatFormatting.GREEN))
-                                .append(Component.literal("Open a sack or type /ssl done to stop reminders.")
-                                    .setStyle(Style.EMPTY.withColor(ChatFormatting.YELLOW)))
                         );
-                        return 1;
-                    })
-                )
-                .then(literal("done")
-                    .executes(context -> {
-                        SackReader.setNeedsReminder(false);
-                        context.getSource().sendFeedback(Component.literal("Acknowledged! Reminders stopped.")
-                            .setStyle(Style.EMPTY.withColor(ChatFormatting.GREEN)));
                         return 1;
                     })
                 )
