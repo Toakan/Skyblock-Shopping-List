@@ -617,8 +617,13 @@ public class SandboxWidget {
         Set<String> itemNames = new HashSet<>();
         for (RecipeManager.RecipeNode tree : response.trees) collectNames(tree, itemNames);
         updateNeededSacks(response.trees, toasts);
-        // Every raw material the list needs, held or not: the whole bill at NPC prices.
-        List<String> prices = NpcPrices.summary(response.total.ingredients);
+        // Every raw material the list needs, held or not: the whole bill at NPC prices. Entries with no recipe
+        // (e.g. 100k Titanium) are raw materials themselves; the Total only holds leaves under recipes.
+        List<RecipeManager.RecipeNode> priced = new ArrayList<>(response.total.ingredients);
+        for (RecipeManager.RecipeNode tree : response.trees) {
+            if (tree.ingredients == null || tree.ingredients.isEmpty()) priced.add(tree);
+        }
+        List<String> prices = NpcPrices.summary(priced);
         if (!publish(generation, List.copyOf(newMessages), new RecipeManager.RecipeNode("Shopping list", 0, 0, tops),
                 itemNames, prices, toasts)) {
             return;

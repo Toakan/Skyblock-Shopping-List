@@ -44,7 +44,7 @@ public final class NpcPrices {
     }
 
     /**
-     * "Buy" and "Sell" lines for these rows (name, how many): coins to buy them all at NPCs and coins NPCs pay for
+     * "Buy" and "Sell" lines for these rows (name, how many; rows of the same item are added together): coins to buy them all at NPCs and coins NPCs pay for
      * them, each with how many of the items have a price. Coins on the list count as their own buy price and are left out of Sell. Empty when
      * nothing has a price.
      */
@@ -57,20 +57,25 @@ public final class NpcPrices {
         int coinRows = 0;
         Map<String, Double> buyNow = buy;
         Map<String, Double> sellNow = sell;
+        Map<String, Long> required = new java.util.LinkedHashMap<>();
         for (RecipeManager.RecipeNode row : rows) {
-            if (row.required <= 0) continue;
+            if (row.required > 0) required.merge(ItemNames.normalize(row.name), (long) row.required, Long::sum);
+        }
+        String coins = ItemNames.normalize(inventoryreader.ir.recipes.RemoteRecipeFetcher.COINS_NAME);
+        for (Map.Entry<String, Long> row : required.entrySet()) {
+            String key = row.getKey();
+            long amount = row.getValue();
             count++;
-            if (inventoryreader.ir.recipes.RemoteRecipeFetcher.COINS_NAME.equals(row.name)) {
-                buyTotal += row.required;
+            if (coins.equals(key)) {
+                buyTotal += amount;
                 buyPriced++;
                 coinRows++;
                 continue;
             }
-            String key = ItemNames.normalize(row.name);
             Double b = buyNow.get(key);
-            if (b != null) { buyTotal += b * row.required; buyPriced++; }
+            if (b != null) { buyTotal += b * amount; buyPriced++; }
             Double s = sellNow.get(key);
-            if (s != null) { sellTotal += s * row.required; sellPriced++; }
+            if (s != null) { sellTotal += s * amount; sellPriced++; }
         }
         if (buyPriced == 0 && sellPriced == 0) return List.of();
         return List.of(
