@@ -22,7 +22,6 @@ public final class SkyblockDetector {
 
     private static boolean useModApi = false;
     private static volatile boolean onSkyblock = false;
-    private static volatile String island = null;
 
     private SkyblockDetector() {}
 
@@ -50,11 +49,6 @@ public final class SkyblockDetector {
         return onSkyblock && ProfileManager.isReady();
     }
 
-    /** The SkyBlock island mode from the Mod API (e.g. "mining_3"), or null if unknown. */
-    public static String getIsland() {
-        return island;
-    }
-
     /** Called by {@link HypixelLocationListener} on every server change. */
     static void onModApiLocation(boolean skyblock, String mode) {
         set(skyblock, skyblock ? mode : null);
@@ -78,7 +72,6 @@ public final class SkyblockDetector {
     }
 
     private static void set(boolean skyblock, String mode) {
-        island = mode;
         if (skyblock != onSkyblock) {
             onSkyblock = skyblock;
             InventoryReader.debug(skyblock ? "Entered SkyBlock{}" : "Left SkyBlock{}", mode != null ? " (" + mode + ")" : "");

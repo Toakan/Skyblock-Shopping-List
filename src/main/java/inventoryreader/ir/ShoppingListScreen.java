@@ -2,7 +2,6 @@ package inventoryreader.ir;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
@@ -378,23 +377,13 @@ public class ShoppingListScreen extends Screen {
             textColor = hasEnough ? 0xFFFFFFFF : SandboxWidget.progressColor(node, showRemaining);
         }
 
-        String prefix = "";
         String amountText = SandboxWidget.amountText(node);
         int amountColor = SandboxWidget.progressColor(node, showRemaining);
 
         context.text(
             client.font,
-            prefix,
-            nameX,
-            y + 4,
-            0xFFFFFFFF,
-            false
-        );
-
-        context.text(
-            client.font,
             amountText,
-            nameX + client.font.width(prefix),
+            nameX,
             y + 4,
             amountColor,
             false
@@ -402,15 +391,12 @@ public class ShoppingListScreen extends Screen {
 
         Style nameStyle = Style.EMPTY.withColor(textColor).withBold(isBold);
         Component itemName = Component.literal(node.name).setStyle(nameStyle);
-        int itemNameX = nameX + client.font.width(prefix + amountText + " ");
+        int itemNameX = nameX + client.font.width(amountText + " ");
         String forge = SandboxWidget.forgeText(node, level);
         if (!forge.isEmpty()) {
             // The forge time always shows; a long name is cut short to make room.
             int room = x + indent + nodeWidth - 4 - itemNameX - client.font.width(forge);
-            itemName = Component.literal(node.name + " ").setStyle(nameStyle);
-            for (int end = node.name.length(); client.font.width(itemName) > room && end > 0; end--) {
-                itemName = Component.literal(node.name.substring(0, end).stripTrailing() + "...").setStyle(nameStyle);
-            }
+            itemName = SandboxWidget.fitName(client.font, text -> Component.literal(text).setStyle(nameStyle), node.name, room);
         }
 
         context.text(
@@ -537,18 +523,13 @@ public class ShoppingListScreen extends Screen {
             mouseY >= treeViewY && mouseY <= treeViewY + treeViewHeight) {
             if (mouseX >= x + indent && mouseX <= x + indent + nodeWidth) {
         String nodeKey = SandboxWidget.makePathKey(pathKey, node.name);
-                if (hasChildren && mouseX <= x + indent + 25) {
-                    widget.toggleNodeExpansion(nodeKey);
-                    return true;
-                }
-                else if (hasChildren) {
+                if (hasChildren) {
                     widget.toggleNodeExpansion(nodeKey);
                     return true;
                 }
                 else {
                     Minecraft client = Minecraft.getInstance();
-                    Map<String, Integer> resources = ResourcesManager.getInstance().getAllResources();
-                    int available = resources.getOrDefault(node.name, 0);
+                    int available = ResourcesManager.getInstance().getResourceByName(node.name);
                     boolean hasEnough = available >= node.required;
                     Component message = Component.literal("You have " + available + "/" + node.required + " of " + node.name)
                         .setStyle(Style.EMPTY.withColor(hasEnough ? ChatFormatting.GREEN : ChatFormatting.RED));

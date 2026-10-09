@@ -320,7 +320,6 @@ public class SandboxViewer extends Screen {
     public boolean mouseClicked(MouseButtonEvent ctx, boolean doubleClick) {
         double mouseX = ctx.x();
         double mouseY = ctx.y();
-        int button = ctx.button();
 
         if (mode == Mode.RESOURCES) {
             String previousActiveField = activeTextField;
@@ -621,10 +620,7 @@ public class SandboxViewer extends Screen {
             context.fill(scrollbarX, listStartY, scrollbarX + scrollbarWidth, listStartY + listHeight, ITEM_BG_ALT);
 
             int thumbHeight = Math.max(10, listHeight * maxVisibleItems / totalItems);
-            int thumbY = listStartY;
-            if (totalItems > maxVisibleItems) {
-                thumbY += (scrollOffset * (listHeight - thumbHeight) / (totalItems - maxVisibleItems));
-            }
+            int thumbY = listStartY + scrollOffset * (listHeight - thumbHeight) / (totalItems - maxVisibleItems);
             context.fill(scrollbarX, thumbY, scrollbarX + scrollbarWidth, thumbY + thumbHeight, BORDER_COLOR);
         }
     }
@@ -869,7 +865,7 @@ public class SandboxViewer extends Screen {
 
         int textColor = WHITE;
         if (mode == Mode.FORGE && amount > 0) {
-            textColor = resourcesManager.getResourceByName(name) >= amount ? SUCCESS_GREEN : ERROR_RED;
+            textColor = heldCount(name) >= amount ? SUCCESS_GREEN : ERROR_RED;
         }
 
         int nodeWidth = Math.min(300, Math.max(100, font.width(name) + font.width(amount + "×") + 40));
@@ -903,14 +899,22 @@ public class SandboxViewer extends Screen {
     }
 
 
-    @Override
-    public boolean isPauseScreen() {
-        return false;
+    /** Item counts for the Forge tree, kept until resources change: the tree is drawn every frame. */
+    private final Map<String, Integer> heldCounts = new HashMap<>();
+    private long heldCountsVersion = -1;
+
+    private int heldCount(String name) {
+        long version = resourcesManager.getVersion();
+        if (version != heldCountsVersion) {
+            heldCounts.clear();
+            heldCountsVersion = version;
+        }
+        return heldCounts.computeIfAbsent(name, resourcesManager::getResourceByName);
     }
 
     @Override
-    public boolean shouldCloseOnEsc() {
-        return true;
+    public boolean isPauseScreen() {
+        return false;
     }
 
     private void renderModifyResources(GuiGraphicsExtractor context, int contentX, int contentY, int contentWidth, int contentHeight) {
@@ -1053,11 +1057,7 @@ public class SandboxViewer extends Screen {
         if (totalItems > maxVisibleItems) {
             int scrollHeight = contentHeight - (listStartY - contentY);
             int scrollThumbHeight = Math.max(32, scrollHeight * maxVisibleItems / totalItems);
-            int scrollThumbY = listStartY;
-
-            if (totalItems > maxVisibleItems) {
-                scrollThumbY += (scrollOffset * (scrollHeight - scrollThumbHeight)) / (totalItems - maxVisibleItems);
-            }
+            int scrollThumbY = listStartY + (scrollOffset * (scrollHeight - scrollThumbHeight)) / (totalItems - maxVisibleItems);
 
             context.fill(contentX + leftPanelWidth - 8, listStartY, contentX + leftPanelWidth - 4, contentY + contentHeight, 0xFF333333);
             context.fill(contentX + leftPanelWidth - 8, scrollThumbY, contentX + leftPanelWidth - 4, scrollThumbY + scrollThumbHeight, 0xFF666666);

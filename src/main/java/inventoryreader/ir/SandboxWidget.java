@@ -9,7 +9,6 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.toasts.SystemToast;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.Style;
 import net.minecraft.resources.Identifier;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -225,33 +224,9 @@ public class SandboxWidget {
     public RecipeManager.RecipeNode getDisplayRoot() {
         return recipeTree;
     }
-    public int getWidgetX() {
-        return widgetX;
-    }
-    public int getWidgetY() {
-        return widgetY;
-    }
-    public void setWidgetPosition(int x, int y) {
-        this.widgetX = x;
-        this.widgetY = y;
-        saveConfiguration();
-    }
-    public int getWidgetWidth() { return widgetWidth; }
-    public int getWidgetHeight() { return widgetHeight; }
-    public void setWidgetSize(int width, int height) {
-        Minecraft client = Minecraft.getInstance();
-        int screenW = client.getWindow().getGuiScaledWidth();
-        int screenH = client.getWindow().getGuiScaledHeight();
-        this.widgetWidth = Math.max(180, Math.min(width, screenW - 20));
-        this.widgetHeight = Math.max(120, Math.min(height, screenH - 20));
-        saveConfiguration();
-    }
     public boolean isNodeExpanded(String nodeKey) {
         Boolean result = expandedNodes.getOrDefault(nodeKey, false);
         return result != null ? result : false;
-    }
-    public void setNodeExpansion(String nodeKey, boolean expanded) {
-        expandedNodes.put(nodeKey, expanded);
     }
     public void toggleNodeExpansion(String nodeKey) {
         Boolean currentState = expandedNodes.getOrDefault(nodeKey, false);
@@ -1031,7 +1006,7 @@ public class SandboxWidget {
             for (String message : previewing ? SAMPLE_CRAFTABLE : messages) {
                 if (!message.equals("Craftable -")) craftable.add(message.trim());
             }
-            craftable.sort((a, b) -> Integer.compare(extractAmount(b), extractAmount(a)));
+            // Already sorted, most first, when the lines are built (updateRecipeData).
             if (panel != Panel.MAIN || !craftable.isEmpty()) {
                 sections.add(new Section("Craftable", craftable, style.craftableScale, style.craftableAlign,
                     style.sectionHeader, style.sectionText));
@@ -1211,17 +1186,6 @@ public class SandboxWidget {
         context.pose().popMatrix();
     }
 
-    private int extractAmount(String message) {
-        try {
-            int xIndex = message.indexOf('×');
-            if (xIndex > 0) {
-                String amountStr = message.substring(0, xIndex).trim();
-                return Integer.parseInt(amountStr);
-            }
-        } catch (Exception e) {
-        }
-        return 0;
-    }
     /** False when the amount format shows the full required amounts (colours then skip "partly gathered"). */
     public boolean isShowRemaining() {
         return HudStyle.get().amountFormat != HudStyle.AmountFormat.REQUIRED;
@@ -1301,16 +1265,22 @@ public class SandboxWidget {
      * with "..." (so a forge time drawn straight after reads "Mithril Dri...[25hrs]").
      */
     static Component fitName(Font font, HudStyle style, String name, int color, boolean bold, int room) {
-        Component full = style.text(name + " ", color, bold);
+        return fitName(font, text -> style.text(text, color, bold), name, room);
+    }
+
+    /** As above, with {@code make} turning text into a styled component (screens use their own style). */
+    static Component fitName(Font font, java.util.function.Function<String, Component> make, String name, int room) {
+        Component full = make.apply(name + " ");
         if (font.width(full) <= room) return full;
-        int end = name.length();
-        Component cut = style.text("...", color, bold);
-        while (end > 0) {
-            cut = style.text(name.substring(0, end).stripTrailing() + "...", color, bold);
-            if (font.width(cut) <= room) break;
-            end--;
+        // Longest start of the name that still fits with "..." (binary search: runs every frame per row).
+        int lo = 0;
+        int hi = name.length();
+        while (lo < hi) {
+            int mid = (lo + hi + 1) >>> 1;
+            if (font.width(make.apply(name.substring(0, mid).stripTrailing() + "...")) <= room) lo = mid;
+            else hi = mid - 1;
         }
-        return cut;
+        return make.apply(name.substring(0, lo).stripTrailing() + "...");
     }
 
     /** An amount as the style wants it: "512", "5,120", or with Short numbers on "5.1k", "500m", "1.5b". */
