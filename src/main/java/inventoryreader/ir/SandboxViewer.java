@@ -140,7 +140,6 @@ public class SandboxViewer extends Screen {
     }
 
     private void initForgeMode() {
-        loadResources();
         loadRecipes();
         if (selectedRecipe != null && remainingResult == null) {
             checkRecipeRequirements();
@@ -222,19 +221,10 @@ public class SandboxViewer extends Screen {
 
     private void filterResources() {
         String term = resourceSearchTerm.toLowerCase(Locale.ROOT);
-        if (mode == Mode.RESOURCES) {
-            filteredResources = resources.stream()
-                .filter(resource -> term.isEmpty() || resource.name.toLowerCase(Locale.ROOT).contains(term))
-                .sorted((a, b) -> a.name.compareToIgnoreCase(b.name))
-                .collect(Collectors.toList());
-        } else {
-            boolean hasSearch = resourceSearchTerm != null && !resourceSearchTerm.isEmpty();
-            filteredResources = resources.stream()
-                .filter(resource -> hasSearch || resource.amount > 0)
-                .filter(resource -> term.isEmpty() || resource.name.toLowerCase(Locale.ROOT).contains(term))
-                .sorted((a, b) -> a.name.compareToIgnoreCase(b.name))
-                .collect(Collectors.toList());
-        }
+        filteredResources = resources.stream()
+            .filter(resource -> term.isEmpty() || resource.name.toLowerCase(Locale.ROOT).contains(term))
+            .sorted((a, b) -> a.name.compareToIgnoreCase(b.name))
+            .collect(Collectors.toList());
         int maxVisible = getResourceMaxVisibleItems();
         int maxOffset = Math.max(0, filteredResources.size() - maxVisible);
         if (scrollOffset > maxOffset) scrollOffset = maxOffset;
@@ -442,13 +432,7 @@ public class SandboxViewer extends Screen {
 
     private int getResourceMaxVisibleItems() {
         int listHeight = Math.max(0, this.height - 10 - 139);
-        int lineHeight = 30;
-        if (mode == Mode.RESOURCES) {
-            return Math.max(1, listHeight / lineHeight);
-        } else {
-            int columnsCount = Math.max(1, (this.width - 40) / 220);
-            return Math.max(1, listHeight / lineHeight) * columnsCount;
-        }
+        return Math.max(1, listHeight / 30);
     }
 
     private int getRecipeMaxVisibleItems() {
