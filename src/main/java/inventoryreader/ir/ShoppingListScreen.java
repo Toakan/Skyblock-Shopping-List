@@ -14,6 +14,7 @@ import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
+import org.lwjgl.glfw.GLFW;
 
 /**
  * Menu tab "Shopping List": search recipes and click to add them, edit amounts or remove entries, and see
@@ -41,6 +42,7 @@ public class ShoppingListScreen extends Screen {
     private TypeFilter typeFilter = TypeFilter.ALL;
     private RarityFilter rarityFilter = RarityFilter.ALL;
     private OwnedFilter ownedFilter = OwnedFilter.ALL;
+    private Button matchButton, typeButton, rarityButton, ownedButton;
     /** How many of a recipe one click adds. */
     private int addAmount = 1;
     /** Recipe names the shopping-list rows were built for; rows are rebuilt when the list changes. */
@@ -287,43 +289,51 @@ public class ShoppingListScreen extends Screen {
         return Component.literal(matchUses ? "Search ingredients..." : "Search recipes...");
     }
 
-    /** Four cycle buttons: match by name or ingredient, type group, rarity, owned. Each click re-filters. */
+    /** Four cycle buttons: match by name or ingredient, type group, rarity, owned. Left click steps forward, right click back. */
     private void initFilterRow(int listWidth) {
         int gap = 2;
         int w = (listWidth - 3 * gap) / 4;
         int x = LIST_X;
-        addRenderableWidget(Button.builder(Component.literal(matchUses ? "Uses" : "Name"), button -> {
+        matchButton = addRenderableWidget(Button.builder(Component.literal(matchUses ? "Uses" : "Name"), button -> cycleFilter(button, 1))
+            .bounds(x, FILTER_Y, w, 18)
+            .tooltip(Tooltip.create(Component.literal("Name: search item names.\nUses: search ingredients, e.g. coal finds Torch.")))
+            .build());
+        x += w + gap;
+        typeButton = addRenderableWidget(Button.builder(Component.literal(typeFilter.label), button -> cycleFilter(button, 1))
+            .bounds(x, FILTER_Y, w, 18)
+            .tooltip(Tooltip.create(Component.literal("Item type: Armor, Accessory, Pet, Weapon, Tool, Equipment or Other.")))
+            .build());
+        x += w + gap;
+        rarityButton = addRenderableWidget(Button.builder(Component.literal(rarityFilter.label), button -> cycleFilter(button, 1))
+            .bounds(x, FILTER_Y, w, 18)
+            .tooltip(Tooltip.create(Component.literal("Rarity: Common to Divine, or Special.")))
+            .build());
+        x += w + gap;
+        ownedButton = addRenderableWidget(Button.builder(Component.literal(ownedFilter.label), button -> cycleFilter(button, 1))
+            .bounds(x, FILTER_Y, listRight - x, 18)
+            .tooltip(Tooltip.create(Component.literal("Owned: items you have at least one of (inventory, sacks, storage).\nMissing: items you have none of.")))
+            .build());
+    }
+
+    /** Steps the filter behind {@code button} by {@code step} (1 forward, -1 back), wrapping around, and re-filters. */
+    private void cycleFilter(Button button, int step) {
+        if (button == matchButton) {
             matchUses = !matchUses;
             button.setMessage(Component.literal(matchUses ? "Uses" : "Name"));
             searchField.setHint(searchHint());
-            updateFilteredRecipes(searchText);
-        }).bounds(x, FILTER_Y, w, 18)
-          .tooltip(Tooltip.create(Component.literal("Name: search item names.\nUses: search ingredients, e.g. coal finds Torch.")))
-          .build());
-        x += w + gap;
-        addRenderableWidget(Button.builder(Component.literal(typeFilter.label), button -> {
-            typeFilter = TypeFilter.values()[(typeFilter.ordinal() + 1) % TypeFilter.values().length];
+        } else if (button == typeButton) {
+            typeFilter = TypeFilter.values()[Math.floorMod(typeFilter.ordinal() + step, TypeFilter.values().length)];
             button.setMessage(Component.literal(typeFilter.label));
-            updateFilteredRecipes(searchText);
-        }).bounds(x, FILTER_Y, w, 18)
-          .tooltip(Tooltip.create(Component.literal("Item type: Armor, Accessory, Pet, Weapon, Tool, Equipment or Other.")))
-          .build());
-        x += w + gap;
-        addRenderableWidget(Button.builder(Component.literal(rarityFilter.label), button -> {
-            rarityFilter = RarityFilter.values()[(rarityFilter.ordinal() + 1) % RarityFilter.values().length];
+        } else if (button == rarityButton) {
+            rarityFilter = RarityFilter.values()[Math.floorMod(rarityFilter.ordinal() + step, RarityFilter.values().length)];
             button.setMessage(Component.literal(rarityFilter.label));
-            updateFilteredRecipes(searchText);
-        }).bounds(x, FILTER_Y, w, 18)
-          .tooltip(Tooltip.create(Component.literal("Rarity: Common to Divine, or Special.")))
-          .build());
-        x += w + gap;
-        addRenderableWidget(Button.builder(Component.literal(ownedFilter.label), button -> {
-            ownedFilter = OwnedFilter.values()[(ownedFilter.ordinal() + 1) % OwnedFilter.values().length];
+        } else if (button == ownedButton) {
+            ownedFilter = OwnedFilter.values()[Math.floorMod(ownedFilter.ordinal() + step, OwnedFilter.values().length)];
             button.setMessage(Component.literal(ownedFilter.label));
-            updateFilteredRecipes(searchText);
-        }).bounds(x, FILTER_Y, listRight - x, 18)
-          .tooltip(Tooltip.create(Component.literal("Owned: items you have at least one of (inventory, sacks, storage).\nMissing: items you have none of.")))
-          .build());
+        } else {
+            return;
+        }
+        updateFilteredRecipes(searchText);
     }
 
     private void updateFilteredRecipes(String searchTerm) {
@@ -671,6 +681,15 @@ public class ShoppingListScreen extends Screen {
     public boolean mouseClicked(MouseButtonEvent ctx, boolean doubleClick) {
         double mouseX = ctx.x();
         double mouseY = ctx.y();
+        if (ctx.button() == GLFW.GLFW_MOUSE_BUTTON_RIGHT) {
+            for (Button button : new Button[] {matchButton, typeButton, rarityButton, ownedButton}) {
+                if (button != null && button.isMouseOver(mouseX, mouseY)) {
+                    button.playDownSound(Minecraft.getInstance().getSoundManager());
+                    cycleFilter(button, -1);
+                    return true;
+                }
+            }
+        }
         if (mouseX >= LIST_X && mouseX <= listRight && mouseY >= LIST_TOP && mouseY < LIST_TOP + MAX_RECIPES_SHOWN * ROW_HEIGHT) {
             int recipeIndex = (int) ((mouseY - LIST_TOP) / ROW_HEIGHT);
             int actualIndex = scrollOffset + recipeIndex;
