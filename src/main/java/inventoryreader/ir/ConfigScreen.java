@@ -162,10 +162,19 @@ public final class ConfigScreen {
                 .name(Component.literal("Size"))
                 .option(slider("HUD scale", "Size of every HUD panel, in percent. 100% is the original size.", 50, 300,
                     d.hudScale, s -> s.hudScale, (s, v) -> s.hudScale = v))
-                .option(toggle("Follow GUI Scale",
-                    "OFF: the HUD keeps its size whatever Minecraft's GUI Scale is set to.\n"
-                        + "ON: the HUD grows and shrinks with GUI Scale like the rest of the interface.",
-                    d.followGuiScale, s -> s.followGuiScale, (s, v) -> s.followGuiScale = v))
+                .option(styled(Option.<HudStyle.Sizing>createBuilder()
+                    .name(Component.literal("HUD sizing"))
+                    .description(describe(
+                        "Window size: grows and shrinks with the game window (HUD scale 100% is the original "
+                            + "size at 1080p).\nMinecraft GUI Scale: follows GUI Scale in steps, like vanilla "
+                            + "menus.\nFixed pixels: the same size on screen whatever the window or GUI Scale."))
+                    .controller(opt -> EnumControllerBuilder.create(opt).enumClass(HudStyle.Sizing.class)
+                        .formatValue(v -> Component.literal(switch (v) {
+                            case WINDOW -> "Window size";
+                            case GUI_SCALE -> "Minecraft GUI Scale";
+                            case FIXED -> "Fixed pixels";
+                        }))),
+                    d.sizing, s -> s.sizing, (s, v) -> s.sizing = v))
                 .build())
             .group(OptionGroup.createBuilder()
                 .name(Component.literal("Text"))

@@ -42,9 +42,14 @@ public final class HudStyle {
     public int forgingHeader = 0xFFFFFF55;
     public int forgingText = 0xFFFF9D00;
 
-    // Size: percent of the original size. Ignores Minecraft's GUI Scale unless followGuiScale is on.
+    /** How the HUD size reacts to the window: with its height, with GUI Scale, or not at all. */
+    public enum Sizing { WINDOW, GUI_SCALE, FIXED }
+
+    // Size: percent of the original size (as drawn in a 1080p window).
     public int hudScale = 100;
-    public boolean followGuiScale = false;
+    public Sizing sizing = Sizing.WINDOW;
+    /** Read only: the Follow GUI Scale toggle from before HUD sizing, carried over in {@link #clamp()}. */
+    public Boolean followGuiScale;
 
     // Sizes (GUI pixels).
     public int rowHeight = 16;
@@ -134,9 +139,9 @@ public final class HudStyle {
         JsonFiles.write(FilePathManager.HUD_STYLE_JSON, style);
     }
 
-    /** Switches to {@code style} (from a preset) and saves. The player's own Follow GUI Scale choice is kept. */
+    /** Switches to {@code style} (from a preset) and saves. The player's own HUD sizing choice is kept. */
     public static void replace(HudStyle style) {
-        style.followGuiScale = get().followGuiScale;
+        style.sizing = get().sizing;
         style.fontDescription = null;
         style.clamp();
         current = style;
@@ -175,6 +180,12 @@ public final class HudStyle {
         if (forgingPlacement == null) forgingPlacement = Placement.MAIN_PANEL;
         if (font == null || Identifier.tryParse(font) == null) font = DEFAULT_FONT;
         if (amountFormat == null) amountFormat = AmountFormat.REMAINING;
+        // Files from before HUD sizing: Follow GUI Scale ON keeps following it, OFF gets the new default.
+        if (followGuiScale != null) {
+            if (Boolean.TRUE.equals(followGuiScale)) sizing = Sizing.GUI_SCALE;
+            followGuiScale = null;
+        }
+        if (sizing == null) sizing = Sizing.WINDOW;
     }
 
     private static int clamp(int value, int min, int max) {

@@ -1,5 +1,6 @@
 package inventoryreader.ir;
 
+import com.mojang.blaze3d.platform.Window;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
@@ -37,6 +38,9 @@ public class SandboxWidget {
     private int widgetHeight = 300;
     /** Main panel scale in percent, on top of the HUD scale from Settings. */
     private int widgetScale = 100;
+    /** GUI-scaled screen size when the main panel was placed (0 = not recorded yet). */
+    private int widgetRefWidth = 0;
+    private int widgetRefHeight = 0;
     /** Craftable / Forging panels, used when Appearance puts them in their own panel. */
     private PanelRect craftablePanel = new PanelRect(270, 40, 180, 150);
     private PanelRect forgingPanel = new PanelRect(270, 200, 180, 120);
@@ -227,6 +231,8 @@ public class SandboxWidget {
         config.enabled = enabled;
         config.widgetX = widgetX;
         config.widgetY = widgetY;
+        config.widgetRefWidth = widgetRefWidth;
+        config.widgetRefHeight = widgetRefHeight;
         config.widgetWidth = widgetWidth;
         config.widgetHeight = widgetHeight;
         config.widgetScale = widgetScale;
@@ -248,6 +254,8 @@ public class SandboxWidget {
         this.enabled = config.enabled;
         this.widgetX = config.widgetX;
         this.widgetY = config.widgetY;
+        this.widgetRefWidth = config.widgetRefWidth;
+        this.widgetRefHeight = config.widgetRefHeight;
         if (config.expandedNodes != null) {
             this.expandedNodes = new ConcurrentHashMap<>(config.expandedNodes);
         }
@@ -292,6 +300,8 @@ public class SandboxWidget {
         widgetWidth = 250;
         widgetHeight = 300;
         widgetScale = 100;
+        widgetRefWidth = 0;
+        widgetRefHeight = 0;
         craftablePanel = new PanelRect(270, 40, 180, 150);
         forgingPanel = new PanelRect(270, 200, 180, 120);
         expandedNodes = new ConcurrentHashMap<>();
@@ -309,6 +319,8 @@ public class SandboxWidget {
         boolean enabled;
         int widgetX;
         int widgetY;
+        int widgetRefWidth;
+        int widgetRefHeight;
         int widgetWidth;
         int widgetHeight;
         Integer widgetScale;
@@ -553,6 +565,9 @@ public class SandboxWidget {
         public int height;
         /** 0 in configs saved before panels had their own scale; read through {@link #scalePercent()}. */
         public int scale;
+        /** GUI-scaled screen size x / y were saved at (0 = not recorded yet); positions follow the screen. */
+        public int refWidth;
+        public int refHeight;
 
         public PanelRect(int x, int y, int width, int height, int scale) {
             this.x = x;
@@ -645,31 +660,64 @@ public class SandboxWidget {
         return previewing || expandedNodes.getOrDefault(nodeKey, false);
     }
 
-    /** HUD units -> GUI pixels. Ignores Minecraft's GUI Scale unless the style says to follow it. */
+    /**
+     * HUD units -> GUI pixels. Window size: 100% is the original size in a 1080p window and grows and shrinks
+     * with the window height. GUI Scale: follows Minecraft's GUI Scale. Fixed: same size on screen always.
+     */
     public static float scaleFactor() {
         HudStyle style = HudStyle.get();
         float scale = style.hudScale / 100f;
-        if (style.followGuiScale) return scale;
-        int guiScale = Math.max(1, Minecraft.getInstance().getWindow().getGuiScale());
-        return scale * 2f / guiScale;
+        if (style.sizing == HudStyle.Sizing.GUI_SCALE) return scale;
+        Window window = Minecraft.getInstance().getWindow();
+        int guiScale = Math.max(1, window.getGuiScale());
+        if (style.sizing == HudStyle.Sizing.FIXED) return scale * 2f / guiScale;
+        return scale * 2f * (window.getScreenHeight() / 1080f) / guiScale;
     }
 
     /** HUD units -> GUI pixels for one panel: the HUD scale times that panel's own scale. */
     public float scaleFactor(Panel panel) {
-        return scaleFactor() * getPanelRect(panel).scalePercent() / 100f;
+        return scaleFactor() * storedRect(panel).scalePercent() / 100f;
     }
 
+    /**
+     * Where a panel goes on the current screen: its saved position moved in proportion to how the screen size
+     * changed since it was placed, then kept on screen.
+     */
     public PanelRect getPanelRect(Panel panel) {
+        PanelRect r = storedRect(panel);
+        Window window = Minecraft.getInstance().getWindow();
+        int screenW = window.getGuiScaledWidth();
+        int screenH = window.getGuiScaledHeight();
+        int x = r.refWidth > 0 ? Math.round(r.x * (float) screenW / r.refWidth) : r.x;
+        int y = r.refHeight > 0 ? Math.round(r.y * (float) screenH / r.refHeight) : r.y;
+        int w = Math.round(r.width * scaleFactor() * r.scalePercent() / 100f);
+        // Height is only a limit (panels are often shorter), so just keep the top in view.
+        x = Math.max(0, Math.min(x, screenW - Math.min(w, screenW)));
+        y = Math.max(0, Math.min(y, screenH - 20));
+        PanelRect out = new PanelRect(x, y, r.width, r.height, r.scalePercent());
+        out.refWidth = screenW;
+        out.refHeight = screenH;
+        return out;
+    }
+
+    /** The panel as saved, before fitting it to the current screen. */
+    private PanelRect storedRect(Panel panel) {
         return switch (panel) {
-            case MAIN -> new PanelRect(widgetX, widgetY, widgetWidth, widgetHeight, widgetScale);
-            case CRAFTABLE -> copy(craftablePanel);
-            case FORGING -> copy(forgingPanel);
+            case MAIN -> {
+                PanelRect r = new PanelRect(widgetX, widgetY, widgetWidth, widgetHeight, widgetScale);
+                r.refWidth = widgetRefWidth;
+                r.refHeight = widgetRefHeight;
+                yield r;
+            }
+            case CRAFTABLE -> craftablePanel;
+            case FORGING -> forgingPanel;
         };
     }
 
     public void setPanelRect(Panel panel, int x, int y, int width, int height, int scale) {
         PanelRect rect = new PanelRect(x, y, Math.max(minWidth(panel), width), Math.max(minHeight(panel), height),
             clampPanelScale(scale));
+        setRef(rect);
         switch (panel) {
             case MAIN -> {
                 widgetX = rect.x;
@@ -677,10 +725,35 @@ public class SandboxWidget {
                 widgetWidth = rect.width;
                 widgetHeight = rect.height;
                 widgetScale = rect.scale;
+                widgetRefWidth = rect.refWidth;
+                widgetRefHeight = rect.refHeight;
             }
             case CRAFTABLE -> craftablePanel = rect;
             case FORGING -> forgingPanel = rect;
         }
+        saveConfiguration();
+    }
+
+    /** Records the current screen size as the one {@code rect}'s position was placed at. */
+    private static void setRef(PanelRect rect) {
+        Window window = Minecraft.getInstance().getWindow();
+        rect.refWidth = window.getGuiScaledWidth();
+        rect.refHeight = window.getGuiScaledHeight();
+    }
+
+    /**
+     * Configs from before positions followed the screen: take the screen size the HUD is first drawn at as
+     * the one the panels were placed at. Render thread only.
+     */
+    private void recordMissingRefs() {
+        if (widgetRefWidth > 0 && craftablePanel.refWidth > 0 && forgingPanel.refWidth > 0) return;
+        Window window = Minecraft.getInstance().getWindow();
+        if (widgetRefWidth <= 0) {
+            widgetRefWidth = window.getGuiScaledWidth();
+            widgetRefHeight = window.getGuiScaledHeight();
+        }
+        if (craftablePanel.refWidth <= 0) setRef(craftablePanel);
+        if (forgingPanel.refWidth <= 0) setRef(forgingPanel);
         saveConfiguration();
     }
 
@@ -693,6 +766,11 @@ public class SandboxWidget {
             craftablePanel.scalePercent());
         forgingPanel = new PanelRect(sideX, widgetY + Math.round(craftablePanel.height * scaleFactor(Panel.CRAFTABLE)) + 10,
             forgingPanel.width, forgingPanel.height, forgingPanel.scalePercent());
+        Window window = Minecraft.getInstance().getWindow();
+        widgetRefWidth = window.getGuiScaledWidth();
+        widgetRefHeight = window.getGuiScaledHeight();
+        setRef(craftablePanel);
+        setRef(forgingPanel);
         saveConfiguration();
     }
 
@@ -702,10 +780,6 @@ public class SandboxWidget {
 
     public static int minHeight(Panel panel) {
         return panel == Panel.MAIN ? 120 : 40;
-    }
-
-    private static PanelRect copy(PanelRect r) {
-        return new PanelRect(r.x, r.y, r.width, r.height, r.scalePercent());
     }
 
     /** Panels the current style draws: the main one, plus Craftable / Forging when they have their own. */
@@ -719,6 +793,7 @@ public class SandboxWidget {
     }
 
     private void render(GuiGraphicsExtractor context) {
+        recordMissingRefs();
         for (Panel panel : activePanels()) {
             PanelRect rect = getPanelRect(panel);
             renderPanel(context, panel, rect.x, rect.y, rect.width, rect.height, false);
