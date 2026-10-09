@@ -12,6 +12,7 @@ Built with Ironman accounts in mind, but just as useful on a regular profile for
 - **Per-profile data:** each SkyBlock profile keeps its own counts and shopping list, and switching profile switches them with it.
 - **Craftable:** intermediates you can make right now.
 - **Forging:** items cooking in your Dwarven Forge that the list needs, with time left.
+- **NPC price:** a bottom line showing what the whole list costs to buy from NPCs and what NPCs pay for it, with how many items have an NPC price.
 - **Forge times:** forge rows show how long is still ahead, e.g. `Titanium Drill DR-X455 [25hrs]`, taking your Quick Forge perk and Cole's Molten Forge into account.
 - **Recipes beyond the crafting table:** Dwarven Forge, NPC shop purchases and Kat pet upgrades. Even the Golden Dragon (Legendary), with its 500M coins, Enchanted Gold Blocks and Perfect gems, can go on the list.
 - **Coins count as an item:** purse from the sidebar, bank balance when you open the bank. Shop currencies such as Agatha's Coupon can be added to the list too, to track how many you hold.
@@ -45,12 +46,14 @@ As Hypixel states, every modification is used at your own risk.
 ## Network access
 Recipe Data: On startup the mod downloads the [NotEnoughUpdates-REPO](https://github.com/NotEnoughUpdates/NotEnoughUpdates-REPO) archive from GitHub to get recipes (cached with an ETag, so unchanged data isn't downloaded again). Nothing from the archive is executed.
 
+NPC Sell Prices: On startup it reads Hypixel's public item list for NPC sell prices, and only downloads it again when Hypixel has changed it.
+
 Mayor Interaction Data: At most once an hour while you're on SkyBlock it reads Hypixel's public election data to know whether Cole's Molten Forge perk is active. With Forge times turned off (Settings > Appearance), this data is not read.
 
 No player data is sent anywhere.
 
 ## Requirements
-Minecraft 26.2, Java 25, Fabric Loader 0.19.5+, Fabric API, YetAnotherConfigLib (already installed if you use Skyblocker) and the [Hypixel Mod API](https://modrinth.com/mod/hypixel-mod-api) (required: the game won't start without it).
+Minecraft 26.2 or 26.3 (one jar for both), Java 25, Fabric Loader 0.19.5+, Fabric API, YetAnotherConfigLib (already installed if you use Skyblocker) and the [Hypixel Mod API](https://modrinth.com/mod/hypixel-mod-api) (required: the game won't start without it).
 
 ## Known limitations
 - Sack contents only fully resync when you open a sack; in between they follow the `[Sacks]` chat summaries. A reminder appears if no sack has been opened for an hour.

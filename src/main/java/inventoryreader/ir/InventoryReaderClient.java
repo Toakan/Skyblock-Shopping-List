@@ -1,6 +1,7 @@
 package inventoryreader.ir;
 
 import com.google.gson.reflect.TypeToken;
+import com.mojang.blaze3d.platform.InputConstants;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -10,7 +11,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
-import org.lwjgl.glfw.GLFW;
 
 import java.lang.reflect.Type;
 import java.util.HashMap;
@@ -34,17 +34,29 @@ public class InventoryReaderClient implements ClientModInitializer {
     private static Map<String, Integer> lastInventory;
     private int tickCounter = 0;
 
+    /**
+     * Reads an InputConstants code at runtime. The codes differ between Minecraft versions (26.3 moved
+     * from GLFW to SDL), and javac would inline a direct reference, so one jar works on both this way.
+     */
+    public static int inputCode(String name) {
+        try {
+            return InputConstants.class.getField(name).getInt(null);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Missing InputConstants." + name, e);
+        }
+    }
+
     @Override
     public void onInitializeClient() {
         FilePathManager.initialize();
 
         // Key ids are kept from earlier versions so existing bindings in options.txt carry over.
         openMenuKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
-            "key.skyblock-shopping-list.open_sandbox_viewer", GLFW.GLFW_KEY_V, KEY_CATEGORY));
+            "key.skyblock-shopping-list.open_sandbox_viewer", inputCode("KEY_V"), KEY_CATEGORY));
         moveHudKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
-            "key.skyblock-shopping-list.open_widget_customization", GLFW.GLFW_KEY_B, KEY_CATEGORY));
+            "key.skyblock-shopping-list.open_widget_customization", inputCode("KEY_B"), KEY_CATEGORY));
         toggleWidgetKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
-            "key.skyblock-shopping-list.toggle_widget", GLFW.GLFW_KEY_H, KEY_CATEGORY));
+            "key.skyblock-shopping-list.toggle_widget", inputCode("KEY_H"), KEY_CATEGORY));
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             // Keys only act on SkyBlock (presses are still consumed so they don't queue up);

@@ -63,6 +63,10 @@ public class FilePathManager {
     public static final File ITEM_SACKS_JSON = new File(DATA_DIR, "item_sacks.json");
     /** NPC shop purchases (coins + items) for items with no crafting or forge recipe. */
     public static final File REMOTE_SHOP_JSON = new File(DATA_DIR, "recipes_remote_shop.json");
+    /** Item name to the cheapest coins-only NPC shop price per item, written by the recipe fetch. */
+    public static final File NPC_BUY_PRICES_JSON = new File(DATA_DIR, "npc_buy_prices.json");
+    /** Item name to what an NPC pays per item, from Hypixel's item list. */
+    public static final File NPC_SELL_PRICES_JSON = new File(DATA_DIR, "npc_sell_prices.json");
     /** SkyBlock item ID to the name recipes use, written by the recipe fetch. */
     public static final File ITEM_NAMES_JSON = new File(DATA_DIR, "item_names.json");
     public static final File REMOTE_SOURCES_JSON = new File(DATA_DIR, "remote_sources.json");

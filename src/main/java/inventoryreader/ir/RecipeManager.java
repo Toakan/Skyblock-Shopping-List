@@ -103,6 +103,7 @@ public class RecipeManager {
     /** Re-reads all recipe files. Called at startup and by RemoteRecipeFetcher after a successful fetch. */
     public synchronized void reload() {
         loadRecipes();
+        NpcPrices.reload();
         // New recipes can bring new item names; add them to the current profile (once a profile is known).
         FilePathManager.seedResources();
     }

@@ -88,6 +88,8 @@ public final class HudStyle {
     public boolean shortNumbers = true;
     public boolean showCraftable = true;
     public boolean showForging = true;
+    /** Coins to buy the list's raw materials at NPCs and what NPCs pay for them, at the bottom of the main panel. */
+    public boolean showNpcPrice = true;
     public ForgeTimes forgeTimes = ForgeTimes.ALL;
     public Placement craftablePlacement = Placement.MAIN_PANEL;
     public Placement forgingPlacement = Placement.MAIN_PANEL;

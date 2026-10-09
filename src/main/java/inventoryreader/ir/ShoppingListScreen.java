@@ -14,7 +14,6 @@ import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
-import org.lwjgl.glfw.GLFW;
 
 /**
  * Menu tab "Shopping List": search recipes and click to add them, edit amounts or remove entries, and see
@@ -28,6 +27,7 @@ public class ShoppingListScreen extends Screen {
     private int scrollOffset = 0;
     /** Recipe rows that fit between the search box and the bottom buttons; set in init(). */
     private int MAX_RECIPES_SHOWN = 10;
+    private static final int MOUSE_BUTTON_RIGHT = InventoryReaderClient.inputCode("MOUSE_BUTTON_RIGHT");
     private static final int LIST_X = 20;
     /** Top of the first recipe row; rows are {@link #ROW_HEIGHT} tall. Drawing and clicks both use these. */
     private static final int LIST_TOP = 107;
@@ -180,7 +180,8 @@ public class ShoppingListScreen extends Screen {
         builtRows = list.stream().map(e -> e.recipe).toList();
         builtRowSet = java.util.Set.copyOf(builtRows);
         treeViewY = PANEL_TOP + Math.max(1, rows) * PANEL_ROW + 22;
-        treeViewHeight = Math.max(60, height - 40 - treeViewY);
+        // Room under the preview for the NPC price line.
+        treeViewHeight = Math.max(60, height - 52 - treeViewY);
 
         addRenderableWidget(Button.builder(Component.literal("Clear list"), button -> {
             widget.clearList();
@@ -532,6 +533,11 @@ public class ShoppingListScreen extends Screen {
             context.text(font, "Click recipes on the left", treeViewX + 10, treeViewY + 20, 0xFFAAAAAA, false);
         }
         context.disableScissor();
+        List<String> prices = widget.getNpcPriceLines();
+        if (!prices.isEmpty() && !builtRows.isEmpty()) {
+            context.text(font, fitPlain("NPC price - " + String.join("   ", prices), treeViewWidth, 0xFFFF9D00),
+                treeViewX, treeViewY + treeViewHeight + 4, 0xFFFFFFFF, false);
+        }
     }
 
     /** {@code text} in the default font, cut with "..." to fit {@code width}. */
@@ -681,7 +687,7 @@ public class ShoppingListScreen extends Screen {
     public boolean mouseClicked(MouseButtonEvent ctx, boolean doubleClick) {
         double mouseX = ctx.x();
         double mouseY = ctx.y();
-        if (ctx.button() == GLFW.GLFW_MOUSE_BUTTON_RIGHT) {
+        if (ctx.button() == MOUSE_BUTTON_RIGHT) {
             for (Button button : new Button[] {matchButton, typeButton, rarityButton, ownedButton}) {
                 if (button != null && button.isMouseOver(mouseX, mouseY)) {
                     button.playDownSound(Minecraft.getInstance().getSoundManager());
