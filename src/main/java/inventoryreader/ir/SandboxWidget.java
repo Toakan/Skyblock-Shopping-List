@@ -448,8 +448,16 @@ public class SandboxWidget {
             RecipeManager.RecipeNode tree = response.trees.get(i);
             names.add(entry.recipe);
             // Have total: done once you hold the amount. Add more: once you hold that many more than when added.
-            boolean achieved = resourcesManager.getResourceByName(entry.recipe)
-                >= (entry.isHaveTotal() ? 0 : entry.startCount) + entry.amount;
+            // Copies still cooking in the Forge are counted as held but aren't made yet, so they don't count here.
+            int target = (entry.isHaveTotal() ? 0 : entry.startCount) + entry.amount;
+            int held = resourcesManager.getResourceByName(entry.recipe);
+            int finished = held - cooking.getOrDefault(ItemNames.normalize(entry.recipe), 0);
+            boolean achieved = finished >= target;
+            if (!achieved && held >= target) {
+                // Only the Forge is left: show it as cooking, and check again each minute until it is done.
+                tree.cooking = true;
+                waitingOnForge = true;
+            }
             if (achieved) {
                 if (achievedEntries.add(entry.recipe) && announce) {
                     notifyPlayer(ACHIEVED_TOAST, "Item achieved", entry.amount + "× " + entry.recipe);
