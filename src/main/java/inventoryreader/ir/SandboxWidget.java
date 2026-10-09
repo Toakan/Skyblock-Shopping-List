@@ -19,7 +19,6 @@ import java.util.concurrent.TimeUnit;
 
 public class SandboxWidget {
     private static final Identifier SANDBOX_WIDGET_LAYER = Identifier.fromNamespaceAndPath(InventoryReader.MOD_ID, "sandbox_widget");
-    private static final SandboxWidget INSTANCE = new SandboxWidget();
     /** Expansion-key root for the top-level nodes (Total and each recipe). */
     public static final String LIST_KEY = "list";
     public static final int MAX_RECIPES_LIMIT = 10;
@@ -104,8 +103,16 @@ public class SandboxWidget {
         scheduler.scheduleWithFixedDelay(this::refreshIfStale, 0, 1, TimeUnit.SECONDS);
     }
 
+    /**
+     * Made on first use, after every static field of SandboxWidget is set: the constructor loads the list with
+     * {@link #SHOPPING_LIST_TYPE}, which would still be null if the instance were a static field declared above it.
+     */
+    private static final class Holder {
+        static final SandboxWidget INSTANCE = new SandboxWidget();
+    }
+
     public static SandboxWidget getInstance() {
-        return INSTANCE;
+        return Holder.INSTANCE;
     }
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
