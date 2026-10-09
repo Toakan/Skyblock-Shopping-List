@@ -400,7 +400,7 @@ public class ShoppingListScreen extends Screen {
     }
 
     private enum OwnedFilter {
-        ALL("Owned?"), OWNED("Owned"), MISSING("Missing");
+        ALL("All"), MISSING("Missing"), OWNED("Owned");
 
         final String label;
 
