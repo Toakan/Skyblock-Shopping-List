@@ -67,6 +67,11 @@ public final class ItemIds {
         return stack.getHoverName().getString();
     }
 
+    /** True for a real SkyBlock item; menu buttons ("Go Back", "Next Page", glass panes) have no ID. */
+    public static boolean hasSkyblockId(ItemStack stack) {
+        return !cachedId(stack).isEmpty();
+    }
+
     /** True for a SkyBlock pet item. */
     public static boolean isPet(ItemStack stack) {
         // Pets get the NEU form "TYPE;rarity" (only pets get a ';'); one whose info couldn't be read keeps "PET".

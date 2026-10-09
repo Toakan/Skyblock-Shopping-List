@@ -24,7 +24,7 @@ The license and credits remain the same as the original Inventory Reader project
 3. Launch Minecraft with the Fabric profile.
 
 ## First-time setup
-The mod only knows what you have shown it. Open each of your sacks, backpacks and ender chest pages once in SkyBlock. After that, counts stay up to date from your inventory, from the containers you open, and from the `[Sacks]` chat summaries.
+The mod only knows what you have shown it. Open each of your sacks, backpacks and ender chest pages once in SkyBlock, plus each Accessory Bag page, each wardrobe page and the Stats & Equipment menu (for worn necklace, cloak, belt and gloves). Worn armor counts with your inventory. After that, counts stay up to date from your inventory, from the containers you open, and from the `[Sacks]` chat summaries.
 
 ## Menu
 Press `V` (or `/ssl menu`) to open the menu. It has five tabs:
