@@ -11,6 +11,8 @@ Fabric client mod (mod id `skyblock-shopping-list`, Java package `inventoryreade
   (4.4.0 -> 4.4.1).
 - MAJOR only for breaking changes such as a Minecraft version port.
 One bump per change. Docs-only commits (readme, this file) don't need a bump.
+Order per change: edit, bump `mod_version`, `./gradlew build`, commit. Bump before the final build so
+`build/libs` has the jar for the committed version.
 
 ## Docs
 When a change adds or changes something a player would notice, update `readme.md` (detailed) and, if it is
