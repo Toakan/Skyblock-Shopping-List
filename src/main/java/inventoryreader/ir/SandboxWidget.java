@@ -58,6 +58,8 @@ public class SandboxWidget {
     private long forgingMinute = -1;
     /** Update thread only: Quick Forge / mayor bonus version the forge times were worked out with. */
     private long forgeSpeedVersion = -1;
+    /** Update thread only: recipe version the tree was worked out with (the recipe download replaces them). */
+    private long recipeVersion = -1;
     /** Update thread only: a recipe has everything but something in its tree is still cooking in the Forge. */
     private boolean waitingOnForge = false;
     private volatile boolean showTotal = true;
@@ -382,9 +384,11 @@ public class SandboxWidget {
         try {
             ForgeSpeed.refreshMayorIfDue();
             long version = resourcesManager.getVersion();
-            if (version != computedVersion || ForgeSpeed.getVersion() != forgeSpeedVersion) {
+            long recipes = RecipeManager.getInstance().getVersion();
+            if (version != computedVersion || ForgeSpeed.getVersion() != forgeSpeedVersion || recipes != recipeVersion) {
                 computedVersion = version;
                 forgeSpeedVersion = ForgeSpeed.getVersion();
+                recipeVersion = recipes;
                 updateRecipeData();
             }
             // Forge countdowns move every minute even when nothing else changes.

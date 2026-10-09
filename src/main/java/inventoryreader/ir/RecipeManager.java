@@ -19,6 +19,8 @@ public class RecipeManager {
     private volatile Set<String> itemNames = Collections.emptySet();
     /** Base forge time in seconds per forge item (before Quick Forge or mayor bonuses). */
     private volatile Map<String, Integer> forgeSeconds = Collections.emptyMap();
+    /** Changes every time the recipes are (re)loaded, so the HUD knows to recompute. */
+    private volatile long version = 0;
 
     /** Recipe trees are acyclic after sanitising; this only stops pathological data from overflowing the stack. */
     static final int MAX_DEPTH = 64;
@@ -68,6 +70,7 @@ public class RecipeManager {
             Map<String, Integer> times = JsonFiles.read(FilePathManager.FORGE_TIMES_JSON,
                 new com.google.gson.reflect.TypeToken<Map<String, Integer>>(){}.getType());
             forgeSeconds = times == null ? Collections.emptyMap() : Collections.unmodifiableMap(new HashMap<>(times));
+            version++;
         } catch (IOException | JsonParseException e) {
             InventoryReader.LOGGER.error("Failed to load recipes", e);
         }
@@ -78,6 +81,11 @@ public class RecipeManager {
         loadRecipes();
         // New recipes can bring new item names; add them to the current profile (once a profile is known).
         FilePathManager.seedResources();
+    }
+
+    /** Changes every time the recipes are (re)loaded. */
+    public long getVersion() {
+        return version;
     }
 
     /** Every item name in the recipes, as outputs or ingredients. */
