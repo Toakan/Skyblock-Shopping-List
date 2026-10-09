@@ -97,6 +97,11 @@ public class SandboxWidget {
     private volatile List<String> neededSacks = List.of();
     /** All sacks holding an item still missing, read or not; with {@link #neededSacks} gives "1/3 read". */
     private volatile List<String> listSacks = List.of();
+    /**
+     * Name the unread sacks in chat on the next list update: set on joining (start of the session) and by each
+     * recipe add, cleared once the line is sent. Count changes alone never prompt.
+     */
+    private volatile boolean sackPromptDue = true;
     /** Grey for amounts that depend on a sack not read yet. */
     private static final int UNCERTAIN_COLOR = 0xFF9A9A9A;
     /** Render thread only: row size and panel width of the HUD being drawn. */
@@ -162,6 +167,7 @@ public class SandboxWidget {
             ShoppingListEntry e = shoppingList.get(i);
             if (e.recipe.equals(recipe)) {
                 shoppingList.set(i, new ShoppingListEntry(recipe, e.amount + amount, e.startCount, e.isHaveTotal()));
+                sackPromptDue = true;
                 listChanged();
                 return AddResult.INCREASED;
             }
@@ -169,6 +175,7 @@ public class SandboxWidget {
         if (shoppingList.size() >= maxRecipes) return AddResult.FULL;
         shoppingList.add(new ShoppingListEntry(recipe, amount, resourcesManager.getResourceByName(recipe)));
         expandedNodes.putIfAbsent(makePathKey(LIST_KEY, recipe), true);
+        sackPromptDue = true;
         listChanged();
         return AddResult.ADDED;
     }
@@ -598,7 +605,7 @@ public class SandboxWidget {
         }
         Set<String> itemNames = new HashSet<>();
         for (RecipeManager.RecipeNode tree : response.trees) collectNames(tree, itemNames);
-        updateNeededSacks(response.trees, announce, toasts);
+        updateNeededSacks(response.trees, toasts);
         if (!publish(generation, List.copyOf(newMessages), new RecipeManager.RecipeNode("Shopping list", 0, 0, tops),
                 itemNames, toasts)) {
             return;
@@ -607,10 +614,10 @@ public class SandboxWidget {
     }
 
     /**
-     * Works out which sacks hold items the list is still missing, and which of those haven't been read. Sacks
-     * that become needed since the last update are named once in chat (after adding a recipe, typically).
+     * Works out which sacks hold items the list is still missing, and which of those haven't been read. When a
+     * prompt is due (after joining, or adding a recipe) the unread ones are named in one chat line.
      */
-    private void updateNeededSacks(List<RecipeManager.RecipeNode> trees, boolean announce, List<Runnable> toasts) {
+    private void updateNeededSacks(List<RecipeManager.RecipeNode> trees, List<Runnable> toasts) {
         Set<String> missing = new LinkedHashSet<>();
         for (RecipeManager.RecipeNode tree : trees) collectMissing(tree, missing, 0);
         RecipeManager recipes = RecipeManager.getInstance();
@@ -620,11 +627,16 @@ public class SandboxWidget {
             if (!sack.isEmpty()) all.add(sack);
         }
         List<String> unread = SackReader.getInstance().unscannedSacks(missing);
-        List<String> previous = neededSacks;
-        List<String> fresh = unread.stream().filter(sack -> !previous.contains(sack)).toList();
         neededSacks = List.copyOf(unread);
         listSacks = List.copyOf(all);
-        if (announce && !fresh.isEmpty()) toasts.add(() -> ReminderManager.promptSacks(fresh));
+        if (sackPromptDue && SkyblockDetector.isOnSkyblock() && ProfileManager.isReady()) {
+            // Runs only if this update is published; the check keeps two queued updates from both sending it.
+            toasts.add(() -> {
+                if (!sackPromptDue) return;
+                sackPromptDue = false;
+                ReminderManager.promptSacks(unread);
+            });
+        }
     }
 
     private static void collectMissing(RecipeManager.RecipeNode node, Set<String> out, int depth) {
