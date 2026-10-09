@@ -453,10 +453,11 @@ public class SandboxWidget {
             int held = resourcesManager.getResourceByName(entry.recipe);
             int finished = held - cooking.getOrDefault(ItemNames.normalize(entry.recipe), 0);
             boolean achieved = finished >= target;
-            if (!achieved && held >= target) {
-                // Only the Forge is left: show it as cooking, and check again each minute until it is done.
+            if (!achieved && finished < held) {
+                // Copies cooking now count towards this entry: it waits on the Forge (and shows its timer).
                 tree.cooking = true;
-                waitingOnForge = true;
+                // Only the Forge is left: check again each minute until it is done.
+                if (held >= target) waitingOnForge = true;
             }
             if (achieved) {
                 if (achievedEntries.add(entry.recipe) && announce) {
@@ -546,7 +547,9 @@ public class SandboxWidget {
         Map<String, Long> own = new HashMap<>();
         String key = ItemNames.normalize(node.name);
         Long cookingEnd = cookingEnds.get(key);
-        if (cookingEnd != null) own.put(key, cookingEnd);
+        // Only rows that wait on the Forge get its timer; one met from finished stock ignores a copy cooking for
+        // something else. node.cooking is set before this runs (useStock, and the entry check for list rows).
+        if (cookingEnd != null && node.cooking) own.put(key, cookingEnd);
         long ms = 0;
         int toMake = node.amount + node.toCraft;
         if (toMake > 0) {
