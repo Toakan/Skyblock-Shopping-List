@@ -205,9 +205,13 @@ public class SandboxWidget {
         if (!editable()) return;
         if (shoppingList.removeIf(e -> e.recipe.equals(recipe))) listChanged();
     }
-    /** Auto-remove: takes achieved entries off the list the update was worked out for, if it is still current. */
-    private synchronized void removeAchieved(List<String> recipes, long generation) {
+    /**
+     * Auto-remove: takes achieved entries off the list the update was worked out for and shows its pop-ups, if
+     * that list is still current.
+     */
+    private synchronized void removeAchieved(List<String> recipes, List<Runnable> toasts, long generation) {
         if (generation != listGeneration) return;
+        toasts.forEach(Runnable::run);
         if (shoppingList.removeIf(e -> recipes.contains(e.recipe))) listChanged();
     }
     public synchronized void clearList() {
@@ -473,6 +477,9 @@ public class SandboxWidget {
         baselineSet = true;
 
         List<String> toRemove = new ArrayList<>();
+        // Pop-ups wait until the results are known to belong to the current list. The ready/achieved sets
+        // themselves are cleared by a profile switch after this update ends (it is queued behind it).
+        List<Runnable> toasts = new ArrayList<>();
         Set<String> names = new HashSet<>();
         Map<String, Integer> cooking = cookingCounts();
         // Finished (not cooking) stock left per item, shared out in list order like the shopping list does.
@@ -496,7 +503,8 @@ public class SandboxWidget {
             }
             if (achieved) {
                 if (achievedEntries.add(entry.recipe) && announce) {
-                    notifyPlayer(ACHIEVED_TOAST, "Item achieved", entry.amount + "× " + entry.recipe);
+                    String message = entry.amount + "× " + entry.recipe;
+                    toasts.add(() -> notifyPlayer(ACHIEVED_TOAST, "Item achieved", message));
                 }
                 if (autoRemove) toRemove.add(entry.recipe);
                 continue;
@@ -513,14 +521,15 @@ public class SandboxWidget {
             if (!ready) {
                 readyEntries.remove(entry.recipe);
             } else if (readyEntries.add(entry.recipe) && announce) {
-                notifyPlayer(READY_TOAST, "Ready to craft", entry.amount + "× " + entry.recipe);
+                String message = entry.amount + "× " + entry.recipe;
+                toasts.add(() -> notifyPlayer(READY_TOAST, "Ready to craft", message));
             }
         }
         readyEntries.retainAll(names);
         achievedEntries.retainAll(names);
         if (!toRemove.isEmpty()) {
             // Removing schedules another refresh, which redraws without these entries.
-            removeAchieved(toRemove, generation);
+            removeAchieved(toRemove, toasts, generation);
             return;
         }
 
@@ -547,14 +556,12 @@ public class SandboxWidget {
             tops.add(tree);
             expandedNodes.putIfAbsent(makePathKey(LIST_KEY, tree.name), true);
         }
-        // The list was swapped while this ran: its results belong to the old list. The swap queued a fresh update.
-        if (generation != listGeneration) return;
-        messages = List.copyOf(newMessages);
-        recipeTree = new RecipeManager.RecipeNode("Shopping list", 0, 0, tops);
-
         Set<String> itemNames = new HashSet<>();
         for (RecipeManager.RecipeNode tree : response.trees) collectNames(tree, itemNames);
-        listItemNames = itemNames;
+        if (!publish(generation, List.copyOf(newMessages), new RecipeManager.RecipeNode("Shopping list", 0, 0, tops),
+                itemNames, toasts)) {
+            return;
+        }
         updateForgingLines();
     }
 
@@ -660,6 +667,20 @@ public class SandboxWidget {
     }
 
     /** Forge slots making something on the list, grouped by item and finish minute; soonest first. */
+    /**
+     * Shows an update's results and pop-ups, unless the list was swapped while it ran (they belong to the old
+     * list; the swap queued a fresh update). Under the lock the swap takes, so the check and the publish are one step.
+     */
+    private synchronized boolean publish(long generation, List<String> newMessages, RecipeManager.RecipeNode tree,
+                                         Set<String> itemNames, List<Runnable> toasts) {
+        if (generation != listGeneration) return false;
+        messages = newMessages;
+        recipeTree = tree;
+        listItemNames = itemNames;
+        toasts.forEach(Runnable::run);
+        return true;
+    }
+
     private void updateForgingLines() {
         long now = System.currentTimeMillis();
         Map<String, int[]> counts = new LinkedHashMap<>();
