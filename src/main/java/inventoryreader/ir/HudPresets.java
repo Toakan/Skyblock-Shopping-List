@@ -34,6 +34,9 @@ public final class HudPresets {
     public static final String MIGRATED_NAME = "My look";
     private static final String BUILT_IN = "Built-in: ";
     private static final int NAME_LIMIT = 40;
+    /** Share codes are a few KB; anything far bigger is refused before it is decoded or unpacked. */
+    private static final int MAX_CODE_CHARS = 64 * 1024;
+    private static final int MAX_JSON_BYTES = 256 * 1024;
     /** Compact JSON for share codes (the files use the pretty {@link JsonFiles#GSON}). */
     private static final Gson CODE_GSON = new Gson();
     private static final SystemToast.SystemToastId TOAST = new SystemToast.SystemToastId(3000L);
@@ -213,13 +216,14 @@ public final class HudPresets {
     static Preset decode(String code) {
         if (code == null) return null;
         code = code.trim();
-        if (!code.startsWith(CODE_PREFIX)) return null;
+        if (!code.startsWith(CODE_PREFIX) || code.length() - CODE_PREFIX.length() > MAX_CODE_CHARS) return null;
         try {
             byte[] packed = Base64.getDecoder().decode(code.substring(CODE_PREFIX.length()));
             String json;
             try (GZIPInputStream gzip = new GZIPInputStream(new ByteArrayInputStream(packed))) {
-                // Share codes are a few KB; refuse anything absurd.
-                byte[] raw = gzip.readNBytes(256 * 1024);
+                // One byte over the limit tells an oversized preset from one that just fits.
+                byte[] raw = gzip.readNBytes(MAX_JSON_BYTES + 1);
+                if (raw.length > MAX_JSON_BYTES) return null;
                 json = new String(raw, StandardCharsets.UTF_8);
             }
             Preset preset = CODE_GSON.fromJson(json, Preset.class);
