@@ -95,7 +95,7 @@ public class SackReader {
 
         SackMeta meta = new SackMeta();
         meta.lastRead = lastRead = System.currentTimeMillis();
-        JsonFiles.write(FilePathManager.sacksMetaJson(), meta);
+        JsonFiles.writeAsync(FilePathManager.sacksMetaJson(), () -> meta);
 
         Map<String, Integer> snap = snapshot();
         Map<String, Integer> deltas = new LinkedHashMap<>();
@@ -106,7 +106,8 @@ public class SackReader {
         });
         if (!deltas.isEmpty()) {
             ResourcesManager.getInstance().saveData(deltas);
-            JsonFiles.write(FilePathManager.sacksJson(), snap);
+            Map<String, Integer> copy = new LinkedHashMap<>(snap);
+            JsonFiles.writeAsync(FilePathManager.sacksJson(), () -> copy);
         }
     }
 
@@ -116,7 +117,8 @@ public class SackReader {
         Map<String, Integer> snap = snapshot();
         deltas.forEach((name, delta) -> snap.merge(ItemNames.clean(name), delta, Integer::sum));
         ResourcesManager.getInstance().saveData(deltas);
-        JsonFiles.write(FilePathManager.sacksJson(), snap);
+        Map<String, Integer> copy = new LinkedHashMap<>(snap);
+        JsonFiles.writeAsync(FilePathManager.sacksJson(), () -> copy);
     }
 
     private static void readStoredLore(String itemName, List<Component> lines, Map<String, Integer> out) {

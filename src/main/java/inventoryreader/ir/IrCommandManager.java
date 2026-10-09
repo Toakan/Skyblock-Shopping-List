@@ -44,13 +44,8 @@ public final class IrCommandManager {
                     .executes(context -> {
                         InventoryReader.debug("Executing complete mod reset");
                         FilePathManager.resetData();
-                        StorageReader.getInstance().clear();
-                        SackReader.getInstance().clear();
-                        CoinTracker.clear();
-                        ForgeTracker.clear();
-                        ForgeSpeed.clear();
+                        ProfileManager.clearCaches();
                         HudStyle.clear();
-                        InventoryReaderClient.clearInventorySnapshot();
                         SandboxWidget.getInstance().resetConfiguration();
                         SackReader.setNeedsReminder(true);
                         context.getSource().sendFeedback(

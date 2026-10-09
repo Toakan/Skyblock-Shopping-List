@@ -79,7 +79,8 @@ public class StorageReader {
         });
 
         containers.put(title, newData);
-        JsonFiles.write(FilePathManager.containerJson(), containers);
+        Map<String, Map<String, Integer>> copy = new HashMap<>(containers);
+        JsonFiles.writeAsync(FilePathManager.containerJson(), () -> copy);
         ResourcesManager.getInstance().saveData(changes);
     }
 }

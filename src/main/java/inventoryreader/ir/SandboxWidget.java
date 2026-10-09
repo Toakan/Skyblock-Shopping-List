@@ -47,10 +47,11 @@ public class SandboxWidget {
     /** Craftable / Forging panels, used when Appearance puts them in their own panel. */
     private PanelRect craftablePanel = new PanelRect(270, 40, 180, 150);
     private PanelRect forgingPanel = new PanelRect(270, 200, 180, 120);
-    private Map<String, Boolean> expandedNodes = new ConcurrentHashMap<>();
-    private final List<String> messages = new CopyOnWriteArrayList<>();
+    private volatile Map<String, Boolean> expandedNodes = new ConcurrentHashMap<>();
+    /** Craftable lines; replaced whole (never cleared and refilled) so the HUD never sees an empty list mid-update. */
+    private volatile List<String> messages = List.of();
     /** "Forging -" lines: forge slots making something the shopping list needs. */
-    private final List<String> forgingLines = new CopyOnWriteArrayList<>();
+    private volatile List<String> forgingLines = List.of();
     /** Update thread only: every item name in the current shopping-list trees. */
     private Set<String> listItemNames = Set.of();
     /** Update thread only: forge version and minute the forging lines were built for. */
@@ -188,7 +189,8 @@ public class SandboxWidget {
     }
     /** The list lives with the SkyBlock profile (shopping_list.json in its folder). */
     private synchronized void saveShoppingList() {
-        JsonFiles.write(FilePathManager.shoppingListJson(), getShoppingList());
+        List<ShoppingListEntry> list = getShoppingList();
+        JsonFiles.writeAsync(FilePathManager.shoppingListJson(), () -> list);
     }
     private synchronized void loadShoppingList() {
         shoppingList.clear();
@@ -261,7 +263,7 @@ public class SandboxWidget {
         expandedNodes.put(nodeKey, newState);
         saveConfiguration();
     }
-    public void saveConfiguration() {
+    public synchronized void saveConfiguration() {
         WidgetConfig config = new WidgetConfig();
         config.enabled = enabled;
         config.widgetX = widgetX;
@@ -281,7 +283,7 @@ public class SandboxWidget {
         config.staleSackWarning = staleSackWarning;
         config.debugLogging = InventoryReader.debugLogging;
         config.maxRecipes = maxRecipes;
-        JsonFiles.write(FilePathManager.WIDGET_CONFIG_JSON, config);
+        JsonFiles.writeAsync(FilePathManager.WIDGET_CONFIG_JSON, () -> config);
     }
     private void loadConfiguration() {
         WidgetConfig config = JsonFiles.read(FilePathManager.WIDGET_CONFIG_JSON, WidgetConfig.class);
@@ -336,7 +338,7 @@ public class SandboxWidget {
         }
     }
     /** Restores defaults after a reset deleted the config file. */
-    public void resetConfiguration() {
+    public synchronized void resetConfiguration() {
         enabled = false;
         shoppingList.clear();
         recipeTree = null;
@@ -357,7 +359,7 @@ public class SandboxWidget {
         staleSackWarning = true;
         InventoryReader.debugLogging = false;
         maxRecipes = 3;
-        messages.clear();
+        messages = List.of();
         saveConfiguration();
         requestRefresh();
     }
@@ -431,9 +433,9 @@ public class SandboxWidget {
         List<ShoppingListEntry> entries = getShoppingList();
         if (entries.isEmpty()) {
             recipeTree = null;
-            messages.clear();
+            messages = List.of();
             listItemNames = Set.of();
-            forgingLines.clear();
+            forgingLines = List.of();
             readyEntries.clear();
             achievedEntries.clear();
             baselineSet = true;
@@ -511,8 +513,7 @@ public class SandboxWidget {
             tops.add(tree);
             expandedNodes.putIfAbsent(makePathKey(LIST_KEY, tree.name), true);
         }
-        messages.clear();
-        messages.addAll(newMessages);
+        messages = List.copyOf(newMessages);
         recipeTree = new RecipeManager.RecipeNode("Shopping list", 0, 0, tops);
 
         Set<String> itemNames = new HashSet<>();
@@ -640,8 +641,7 @@ public class SandboxWidget {
             ForgeTracker.Entry entry = firstOf.get(e.getKey());
             lines.add("   " + e.getValue()[0] + "× " + entry.name + " - " + ForgeTracker.formatRemaining(entry.endsAt, now));
         }
-        forgingLines.clear();
-        forgingLines.addAll(lines);
+        forgingLines = List.copyOf(lines);
     }
 
     /** Client-side toast; never sent anywhere. Off when notifications are disabled or outside SkyBlock. */
@@ -815,7 +815,7 @@ public class SandboxWidget {
         };
     }
 
-    public void setPanelRect(Panel panel, int x, int y, int width, int height, int scale) {
+    public synchronized void setPanelRect(Panel panel, int x, int y, int width, int height, int scale) {
         PanelRect rect = new PanelRect(x, y, Math.max(minWidth(panel), width), Math.max(minHeight(panel), height),
             clampPanelScale(scale));
         setRef(rect);
@@ -848,18 +848,27 @@ public class SandboxWidget {
      */
     private void recordMissingRefs() {
         if (widgetRefWidth > 0 && craftablePanel.refWidth > 0 && forgingPanel.refWidth > 0) return;
-        Window window = Minecraft.getInstance().getWindow();
-        if (widgetRefWidth <= 0) {
-            widgetRefWidth = window.getGuiScaledWidth();
-            widgetRefHeight = window.getGuiScaledHeight();
+        synchronized (this) {
+            Window window = Minecraft.getInstance().getWindow();
+            if (widgetRefWidth <= 0) {
+                widgetRefWidth = window.getGuiScaledWidth();
+                widgetRefHeight = window.getGuiScaledHeight();
+            }
+            // New copies rather than changing the saved ones in place (the update thread may be saving them).
+            if (craftablePanel.refWidth <= 0) craftablePanel = withCurrentRef(craftablePanel);
+            if (forgingPanel.refWidth <= 0) forgingPanel = withCurrentRef(forgingPanel);
+            saveConfiguration();
         }
-        if (craftablePanel.refWidth <= 0) setRef(craftablePanel);
-        if (forgingPanel.refWidth <= 0) setRef(forgingPanel);
-        saveConfiguration();
+    }
+
+    private static PanelRect withCurrentRef(PanelRect r) {
+        PanelRect copy = new PanelRect(r.x, r.y, r.width, r.height, r.scalePercent());
+        setRef(copy);
+        return copy;
     }
 
     /** Puts every panel back to its starting place (sizes and scales are kept): own panels go right of the main one. */
-    public void resetPanelPositions() {
+    public synchronized void resetPanelPositions() {
         widgetX = 10;
         widgetY = 40;
         int sideX = widgetX + Math.round(widgetWidth * scaleFactor(Panel.MAIN)) + 10;

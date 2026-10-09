@@ -61,7 +61,8 @@ public final class CoinTracker {
                 Matcher m = BANK.matcher(ItemNames.clean(line.getString()));
                 if (m.find()) {
                     bank = parse(m.group(1));
-                    JsonFiles.write(FilePathManager.coinsJson(), Map.of("bank", bank));
+                    Map<String, Long> saved = Map.of("bank", bank);
+                    JsonFiles.writeAsync(FilePathManager.coinsJson(), () -> saved);
                     publish();
                     return;
                 }

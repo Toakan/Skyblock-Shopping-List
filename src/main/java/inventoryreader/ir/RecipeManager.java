@@ -16,6 +16,7 @@ public class RecipeManager {
     private static final RecipeManager INSTANCE = new RecipeManager();
     private volatile Map<String, Map<String, Integer>> recipes = Collections.emptyMap();
     private volatile List<String> recipeNames = Collections.emptyList();
+    private volatile Set<String> itemNames = Collections.emptySet();
     /** Base forge time in seconds per forge item (before Quick Forge or mayor bonuses). */
     private volatile Map<String, Integer> forgeSeconds = Collections.emptyMap();
 
@@ -60,7 +61,7 @@ public class RecipeManager {
 
             Set<String> allNames = new LinkedHashSet<>(sanitized.keySet());
             for (Map<String, Integer> m : sanitized.values()) allNames.addAll(m.keySet());
-            ResourcesManager.getInstance().ensureResourceNames(allNames);
+            itemNames = Collections.unmodifiableSet(allNames);
 
             recipes = Collections.unmodifiableMap(sanitized);
             recipeNames = Collections.unmodifiableList(newNames);
@@ -75,6 +76,13 @@ public class RecipeManager {
     /** Re-reads all recipe files. Called at startup and by RemoteRecipeFetcher after a successful fetch. */
     public synchronized void reload() {
         loadRecipes();
+        // New recipes can bring new item names; add them to the current profile (once a profile is known).
+        FilePathManager.seedResources();
+    }
+
+    /** Every item name in the recipes, as outputs or ingredients. */
+    public Set<String> getItemNames() {
+        return itemNames;
     }
 
     private Map<String, Map<String, Integer>> readRecipeMap(Gson gson, File file) throws IOException {
@@ -170,8 +178,8 @@ public class RecipeManager {
             Map<String, Integer> cleaned = new LinkedHashMap<>();
             for (Map.Entry<String, Integer> ie : ing.entrySet()) {
                 String name = ie.getKey();
-                if (name == null || name.isEmpty()) continue;
-                if (name.matches("\\d+")) continue;
+                // Empty or digits-only names are junk.
+                if (ItemNames.isJunk(name)) continue;
                 // --- Pass 2: remove self-references ---
                 // Items that list themselves as their own ingredient cause immediate
                 // infinite recursion. Explicitly strip them out.

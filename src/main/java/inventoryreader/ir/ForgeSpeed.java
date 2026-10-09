@@ -153,19 +153,23 @@ public final class ForgeSpeed {
     }
 
     /** Forgets the in-memory copy (after a reset deleted the file). */
-    public static void clear() {
+    public static synchronized void clear() {
         data = null;
         version++;
     }
 
     private static Data get() {
         Data d = data;
-        if (d == null) {
-            d = JsonFiles.read(FilePathManager.forgeSpeedJson(), Data.class);
-            if (d == null) d = new Data();
-            data = d;
+        return d != null ? d : load();
+    }
+
+    /** Under the same lock as {@link #clear()}, so a load from before a profile switch can't be kept after it. */
+    private static synchronized Data load() {
+        if (data == null) {
+            Data d = JsonFiles.read(FilePathManager.forgeSpeedJson(), Data.class);
+            data = d != null ? d : new Data();
         }
-        return d;
+        return data;
     }
 
     /**
@@ -181,7 +185,7 @@ public final class ForgeSpeed {
         change.accept(next);
         data = next;
         version++;
-        JsonFiles.write(FilePathManager.forgeSpeedJson(), next);
+        JsonFiles.writeAsync(FilePathManager.forgeSpeedJson(), () -> next);
     }
 
     private static double parse(String number) {

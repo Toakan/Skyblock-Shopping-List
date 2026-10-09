@@ -438,9 +438,8 @@ public final class RemoteRecipeFetcher {
     }
 
     private static void writeMeta(File f, Map<String, String> meta) {
-        try (FileWriter fw = new FileWriter(f, StandardCharsets.UTF_8)) {
-            GSON.toJson(meta, fw);
-        } catch (Exception ignored) {}
+        // Temp file and move, so a crash mid-write can't leave a half-written cache state.
+        inventoryreader.ir.JsonFiles.write(f, meta);
     }
 
     /**

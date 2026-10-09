@@ -11,9 +11,10 @@ import java.util.regex.Pattern;
  * {@link ProfileManager}. Observes messages only; never cancels or edits them.
  */
 public final class ProfileChatListener {
+    /** A SkyBlock profile ID. */
+    static final Pattern UUID = Pattern.compile("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
     /** The whole line. Player chat always starts with a name or channel tag, so it can't match. */
-    private static final Pattern PROFILE_ID = Pattern.compile(
-        "^Profile ID: ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$");
+    private static final Pattern PROFILE_ID = Pattern.compile("^Profile ID: (" + UUID.pattern() + ")$");
 
     private ProfileChatListener() {}
 

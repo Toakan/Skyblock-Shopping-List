@@ -82,7 +82,8 @@ public class FilePathManager {
         migrateVersionedResources();
         cleanupStaleFiles();
         if (!REMOTE_SOURCES_JSON.exists()) initializeRemoteSourcesConfig();
-        seedResources();
+        // Item names are added to the profile's resources once ProfileManager knows the profile.
+        RecipeManager.getInstance().reload();
         RemoteRecipeFetcher.fetchAsync();
     }
 
@@ -115,6 +116,8 @@ public class FilePathManager {
 
     /** Deletes the current profile's tracked data and the widget settings. Recipes and other profiles are kept. */
     public static synchronized void resetData() {
+        // Queued saves land first, so none of them brings a deleted file back afterwards.
+        JsonFiles.flush();
         List<File> files = new java.util.ArrayList<>();
         for (String name : ProfileManager.PROFILE_FILES) files.add(profileFile(name));
         files.add(WIDGET_CONFIG_JSON);
@@ -128,10 +131,15 @@ public class FilePathManager {
         seedResources();
     }
 
-    /** Adds the default and recipe item names (zero counts) to the current profile's resources. */
+    /**
+     * Adds the default and recipe item names (zero counts) to the current profile's resources. Does nothing
+     * until ProfileManager has picked the profile, so start-up never loads or writes the wrong folder.
+     */
     static void seedResources() {
-        ResourcesManager.getInstance().ensureResourceNames(Arrays.asList(DEFAULT_RESOURCE_NAMES));
-        RecipeManager.getInstance().reload();
+        if (!ProfileManager.isInitialized()) return;
+        List<String> names = new java.util.ArrayList<>(Arrays.asList(DEFAULT_RESOURCE_NAMES));
+        names.addAll(RecipeManager.getInstance().getItemNames());
+        ResourcesManager.getInstance().ensureResourceNames(names);
     }
 
     private static String getModVersionString() {

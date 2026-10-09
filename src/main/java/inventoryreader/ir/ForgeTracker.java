@@ -80,7 +80,8 @@ public final class ForgeTracker {
         if (sameAs(getEntries(), found)) return;
         entries = List.copyOf(found);
         version++;
-        JsonFiles.write(FilePathManager.forgeJson(), found);
+        List<Entry> saved = List.copyOf(found);
+        JsonFiles.writeAsync(FilePathManager.forgeJson(), () -> saved);
     }
 
     /** Same items and counts, finishing within a few seconds of each other (times are read to the second). */
@@ -95,7 +96,7 @@ public final class ForgeTracker {
     }
 
     /** What was in the forge when it was last opened. */
-    public static List<Entry> getEntries() {
+    public static synchronized List<Entry> getEntries() {
         List<Entry> current = entries;
         if (current == null) {
             List<Entry> loaded = JsonFiles.read(FilePathManager.forgeJson(), LIST_TYPE);
@@ -111,7 +112,7 @@ public final class ForgeTracker {
     }
 
     /** Forgets the in-memory copy (after a reset deleted the file). */
-    public static void clear() {
+    public static synchronized void clear() {
         entries = null;
         version++;
     }

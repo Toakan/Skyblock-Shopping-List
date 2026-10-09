@@ -35,7 +35,7 @@ public final class ProfileManager {
     private static volatile boolean ready = false;
     private static Object lastLevel;
     private static long waitingSince;
-    private static boolean initialized = false;
+    private static volatile boolean initialized = false;
 
     private ProfileManager() {}
 
@@ -66,6 +66,11 @@ public final class ProfileManager {
         return dir;
     }
 
+    /** True once the last profile has been picked up (first client tick), so profile files may be used. */
+    public static boolean isInitialized() {
+        return initialized;
+    }
+
     /** True once the current server's profile is known (or assumed), so tracking may book changes to it. */
     public static boolean isReady() {
         return ready;
@@ -76,6 +81,8 @@ public final class ProfileManager {
             // On the first tick rather than at start-up: the logged-in account is known by now.
             initialized = true;
             loadLastProfile();
+            // No profile yet: the old flat folder is in use until the first "Profile ID" line.
+            if (profileId == null) FilePathManager.seedResources();
         }
         // The dev client runs in singleplayer, where Hypixel sends no profile.
         if (FabricLoader.getInstance().isDevelopmentEnvironment()) {
@@ -96,8 +103,10 @@ public final class ProfileManager {
 
     /** Called with the ID from Hypixel's "Profile ID: ..." message. Client thread only. */
     static void onProfileId(String id) {
-        ready = true;
-        if (id.equals(profileId)) return;
+        if (id.equals(profileId)) {
+            ready = true;
+            return;
+        }
         File accountDir = accountDir();
         if (accountDir == null) return;
         File target = new File(accountDir, id);
@@ -106,11 +115,16 @@ public final class ProfileManager {
             InventoryReader.LOGGER.warn("Could not create profile folder {}", target);
             return;
         }
-        // Data from before profiles existed belongs to the first profile seen.
-        if (firstProfile) moveLegacyFiles(target);
+        // Data from before profiles existed belongs to the first profile seen. Saves still queued for it are
+        // written first, so they move along instead of reappearing in the old place.
+        if (firstProfile) {
+            JsonFiles.flush();
+            moveLegacyFiles(target);
+        }
         InventoryReader.debug("SkyBlock profile {} -> {}", profileId, id);
         profileId = id;
         switchTo(target);
+        ready = true;
         try {
             Files.writeString(new File(accountDir, LAST_PROFILE_FILE).toPath(), id, StandardCharsets.UTF_8);
         } catch (IOException e) {
@@ -120,15 +134,22 @@ public final class ProfileManager {
 
     /** Points the data files at {@code folder}, drops every cached copy of profile data and loads that profile's. */
     private static void switchTo(File folder) {
+        // The profile being left keeps its last saves; switching back right away then reads them, not older data.
+        JsonFiles.flush();
         SandboxWidget.getInstance().reloadShoppingList(() -> dir = folder);
+        clearCaches();
+        ResourcesManager.getInstance().reload();
+        FilePathManager.seedResources();
+    }
+
+    /** Drops every in-memory copy of profile data, so the next use reads the current profile's files. */
+    public static void clearCaches() {
         StorageReader.getInstance().clear();
         SackReader.getInstance().clear();
         CoinTracker.clear();
         ForgeTracker.clear();
         ForgeSpeed.clear();
         InventoryReaderClient.clearInventorySnapshot();
-        ResourcesManager.getInstance().reload();
-        FilePathManager.seedResources();
     }
 
     private static boolean hasProfiles(File accountDir) {
@@ -158,6 +179,6 @@ public final class ProfileManager {
     }
 
     static boolean isProfileId(String id) {
-        return id.matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
+        return ProfileChatListener.UUID.matcher(id).matches();
     }
 }

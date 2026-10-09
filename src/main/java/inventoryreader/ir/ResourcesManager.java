@@ -11,8 +11,6 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -26,13 +24,10 @@ public class ResourcesManager {
     /** Recipe trees are acyclic after sanitising; this only stops pathological data from overflowing the stack. */
     private static final int MAX_DEPTH = 64;
 
-    private final ExecutorService writer = Executors.newSingleThreadExecutor(r -> {
-        Thread t = new Thread(r, "IR-ResourcesWriter");
-        t.setDaemon(true);
-        return t;
-    });
     private final AtomicLong version = new AtomicLong();
     private Map<String, Integer> resources;
+    /** The file {@link #resources} was read from: changes are only ever saved back there (see profiles). */
+    private File loadedFrom;
     private Map<String, String> keyByNormalized;
 
     private ResourcesManager() {}
@@ -55,7 +50,8 @@ public class ResourcesManager {
 
     private Map<String, Integer> loaded() {
         if (resources == null) {
-            Map<String, Integer> fromFile = JsonFiles.read(FilePathManager.resourcesJson(), MAP_TYPE);
+            loadedFrom = FilePathManager.resourcesJson();
+            Map<String, Integer> fromFile = JsonFiles.read(loadedFrom, MAP_TYPE);
             resources = new LinkedHashMap<>();
             if (fromFile != null) {
                 fromFile.forEach((k, v) -> {
@@ -82,10 +78,14 @@ public class ResourcesManager {
 
     private void changed() {
         version.incrementAndGet();
-        Map<String, Integer> snapshot = new LinkedHashMap<>(resources);
-        // The file is picked now: a write still queued after a profile switch goes to the old profile.
-        File target = FilePathManager.resourcesJson();
-        writer.execute(() -> JsonFiles.write(target, snapshot));
+        // This map and the file it came from go together, so after a profile switch a late save of the old
+        // profile's counts still lands in the old profile's file. The copy is made on the writer thread.
+        Map<String, Integer> map = resources;
+        JsonFiles.writeAsync(loadedFrom, () -> {
+            synchronized (this) {
+                return new LinkedHashMap<>(map);
+            }
+        });
     }
 
     /** Adds the names as zero-count entries, and drops plain names that duplicate a symbol-prefixed one. */
@@ -188,7 +188,9 @@ public class ResourcesManager {
      */
     public ShoppingResponse getShoppingList(List<ShoppingListEntry> entries) {
         Map<String, Map<String, Integer>> forging = RecipeManager.getInstance().getAllRecipes();
-        Map<String, Integer> highestPossibleResources = getAllResources();
+        // One snapshot for the whole calculation, so a change mid-way can't make "owned" and "available" disagree.
+        Map<String, Integer> snapshot = getAllResources();
+        Map<String, Integer> highestPossibleResources = new LinkedHashMap<>(snapshot);
         Map<String, Integer> currentAvailableResources = new LinkedHashMap<>(highestPossibleResources);
         Map<String, Integer> messages = new LinkedHashMap<>();
 
@@ -226,7 +228,7 @@ public class ResourcesManager {
         // Phase 2: expand what is still missing. A root does not draw on existing stock of itself: the
         // player asked for this many more. Phase 1 counted items craftable from materials as stock; owned
         // tells them apart from items actually held.
-        Map<String, Integer> owned = getAllResources();
+        Map<String, Integer> owned = new LinkedHashMap<>(snapshot);
         for (int i = 0; i < entries.size(); i++) {
             if (fromStock[i] > 0) owned.merge(entries.get(i).recipe, -fromStock[i], Integer::sum);
         }

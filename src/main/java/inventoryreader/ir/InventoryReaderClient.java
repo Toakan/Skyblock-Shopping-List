@@ -2,6 +2,7 @@ package inventoryreader.ir;
 
 import com.google.gson.reflect.TypeToken;
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.minecraft.client.KeyMapping;
@@ -75,6 +76,8 @@ public class InventoryReaderClient implements ClientModInitializer {
         SackChatListener.register();
         ProfileManager.register();
         ProfileChatListener.register();
+        // Saves run on a background thread; make sure the last ones reach the disk before the game closes.
+        ClientLifecycleEvents.CLIENT_STOPPING.register(client -> JsonFiles.flush());
         CoinTracker.register();
         ReminderManager.initialize();
         WelcomeManager.initialize();
@@ -117,7 +120,7 @@ public class InventoryReaderClient implements ClientModInitializer {
         lastInventory = current;
         Map<String, Map<String, Integer>> data = new HashMap<>();
         data.put(INVENTORY_KEY, current);
-        JsonFiles.write(FilePathManager.inventoryJson(), data);
+        JsonFiles.writeAsync(FilePathManager.inventoryJson(), () -> data);
         ResourcesManager.getInstance().saveData(changes);
     }
 }
