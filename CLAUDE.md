@@ -12,6 +12,11 @@ Fabric client mod (mod id `skyblock-shopping-list`, Java package `inventoryreade
 - MAJOR only for breaking changes such as a Minecraft version port.
 One bump per change. Docs-only commits (readme, this file) don't need a bump.
 
+## Docs
+When a change adds or changes something a player would notice, update `readme.md` (detailed) and, if it is
+worth advertising, `modrinth.md` (short, synced to the Modrinth description) in the same commit. Internal
+changes and small fixes don't need a docs note.
+
 ## Hypixel rules
 The mod must stay read-only and client-side (see the "Hypixel rules" section in `readme.md`): never send
 packets, chat or commands, never cancel or modify events, never automate clicks or item movement.
