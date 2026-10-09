@@ -601,12 +601,10 @@ public class SandboxViewer extends Screen {
                 final String currentName = name;
                 clickableElements.add(new ClickableElement(x, itemY, width - 16, lineHeight - 2, () -> selectRecipe(currentName)));
 
-                String displayName = name;
-                int maxWidth = width - 30;
-                if (font.width(displayName) > maxWidth) {
-                    displayName = font.plainSubstrByWidth(displayName, maxWidth - font.width("...")) + "...";
-                }
-                context.text(font, displayName, x + 8, itemY + (lineHeight - font.lineHeight) / 2, isSelected ? WHITE : TEXT_SECONDARY, false);
+                int color = isSelected ? WHITE : TEXT_SECONDARY;
+                Component displayName = SandboxWidget.fitName(font,
+                    t -> Component.literal(t).setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(color & 0xFFFFFF)), name, width - 30);
+                context.text(font, displayName, x + 8, itemY + (lineHeight - font.lineHeight) / 2, 0xFFFFFFFF, false);
             }
             visibleIndex++;
         }

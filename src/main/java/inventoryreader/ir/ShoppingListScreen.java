@@ -243,13 +243,13 @@ public class ShoppingListScreen extends Screen {
                 boolean isSelected = inList.contains(recipe);
                 if (isSelected) {
                     context.fill(LIST_X, yPos, listRight, yPos + itemHeight, 0x99608C35);
-                    context.text(font, font.plainSubstrByWidth(recipe, listRight - LIST_X - 20), LIST_X + 10, yPos + 5, 0xFFFFB728, false);
+                    context.text(font, fitPlain(recipe, listRight - LIST_X - 20, 0xFFFFB728), LIST_X + 10, yPos + 5, 0xFFFFFFFF, false);
                 } else {
                     boolean isHovered = mouseX >= LIST_X && mouseX <= listRight && mouseY >= yPos && mouseY <= yPos + itemHeight;
                     if (isHovered) {
                         context.fill(LIST_X, yPos, listRight, yPos + itemHeight, 0x553E6428);
                     }
-                    context.text(font, font.plainSubstrByWidth(recipe, listRight - LIST_X - 20), LIST_X + 10, yPos + 5, 0xFFE0E0E0, false);
+                    context.text(font, fitPlain(recipe, listRight - LIST_X - 20, 0xFFE0E0E0), LIST_X + 10, yPos + 5, 0xFFFFFFFF, false);
                 }
                 yPos += itemHeight;
             }
@@ -285,7 +285,7 @@ public class ShoppingListScreen extends Screen {
         if (!tops().isEmpty()) {
             int treeY = treeViewY + 10 - treeScrollOffset;
             for (RecipeManager.RecipeNode top : tops()) {
-                treeY = renderRecipeTree(context, top, treeViewX + 10, treeY, 0, SandboxWidget.LIST_KEY);
+                treeY = renderRecipeTree(context, top, treeViewX + 10, treeY, 0, SandboxWidget.LIST_KEY, mouseX, mouseY);
             }
             int totalHeight = forestHeight();
             if (totalHeight > treeViewHeight) {
@@ -311,6 +311,12 @@ public class ShoppingListScreen extends Screen {
         context.disableScissor();
     }
 
+    /** {@code text} in the default font, cut with "..." to fit {@code width}. */
+    private Component fitPlain(String text, int width, int color) {
+        Style style = Style.EMPTY.withColor(color & 0xFFFFFF);
+        return SandboxWidget.fitName(font, t -> Component.literal(t).setStyle(style), text, width);
+    }
+
     private void renderListPanel(GuiGraphicsExtractor context) {
         List<ShoppingListEntry> list = widget.getShoppingList();
         String header = "Shopping list (" + list.size() + "/" + widget.getMaxRecipes() + ")";
@@ -324,108 +330,71 @@ public class ShoppingListScreen extends Screen {
         for (int i = 0; i < rows; i++) {
             int y = PANEL_TOP + i * PANEL_ROW;
             context.fill(treeViewX, y - 2, treeViewX + treeViewWidth, y + 20, i % 2 == 0 ? 0xFC271910 : 0xFC2E1F14);
-            String name = font.plainSubstrByWidth(list.get(i).recipe, listNameWidth);
-            context.text(font, name, treeViewX + 4, y + 5, 0xFFE0E0E0, false);
+            context.text(font, fitPlain(list.get(i).recipe, listNameWidth, 0xFFE0E0E0), treeViewX + 4, y + 5, 0xFFFFFFFF, false);
         }
         if (list.size() > rows) {
             context.text(font, "+" + (list.size() - rows) + " more", treeViewX + 4, PANEL_TOP + rows * PANEL_ROW, 0xFFAAAAAA, false);
         }
     }
 
-    private int renderRecipeTree(GuiGraphicsExtractor context, RecipeManager.RecipeNode node, int x, int y, int level, String pathKey) {
+    /**
+     * One row of the preview tree, drawn with the HUD's look (Settings > Appearance: colours, font, row boxes,
+     * tree lines, bold names, forge times). Rows keep this screen's fixed 16 px height so clicks line up.
+     */
+    private int renderRecipeTree(GuiGraphicsExtractor context, RecipeManager.RecipeNode node, int x, int y, int level,
+                                 String pathKey, int mouseX, int mouseY) {
         if (node == null) return y;
-        Minecraft client = Minecraft.getInstance();
+        HudStyle style = HudStyle.get();
         int indent = level * RECIPE_LEVEL_INDENT;
         boolean hasEnough = node.amount <= 0 && node.toCraft <= 0 && !node.cooking;
         boolean showRemaining = widget.isShowRemaining();
         String nodeKey = SandboxWidget.makePathKey(pathKey, node.name);
         boolean isExpanded = widget.isNodeExpanded(nodeKey);
         boolean hasChildren = node.ingredients != null && !node.ingredients.isEmpty();
-        int bgColor = 0x99271910;
-
-        int mouseX = (int)(client.mouseHandler.xpos() / client.getWindow().getGuiScale());
-        int mouseY = (int)(client.mouseHandler.ypos() / client.getWindow().getGuiScale());
-        boolean isHovered = mouseX >= x + indent && mouseX <= x + indent + (treeViewWidth - 20 - indent) &&
-                           mouseY >= y && mouseY <= y + 16;
         int nodeWidth = treeViewWidth - 20 - indent;
-        context.fill(x + indent, y, x + indent + nodeWidth, y + 16, bgColor);
-        if (isHovered) {
-            context.fill(x + indent, y, x + indent + nodeWidth, y + 16, 0x22FFFFFF);
+        int rowX = x + indent;
+
+        if (style.showRowBoxes) {
+            RoundedBox.fill(context, rowX, y, nodeWidth, 16, style.rowRadius, style.rowBackground);
+            int border = SandboxWidget.progressBorderColor(node, showRemaining);
+            for (int i = 0; i < style.rowBorderWidth; i++) {
+                RoundedBox.outline(context, rowX + i, y + i, nodeWidth - 2 * i, 16 - 2 * i, Math.max(0, style.rowRadius - i), border);
+            }
         }
-
-        context.outline(x + indent, y, nodeWidth, 16, SandboxWidget.progressBorderColor(node, showRemaining));
-
+        if (mouseX >= rowX && mouseX <= rowX + nodeWidth && mouseY >= y && mouseY <= y + 16) {
+            context.fill(rowX, y, rowX + nodeWidth, y + 16, 0x22FFFFFF);
+        }
         if (hasChildren) {
-            String expandIcon = isExpanded ? "▼" : "▶";
-            context.text(
-                client.font,
-                expandIcon,
-                x + indent + 5,
-                y + 4,
-                0xFFFFFFFF,
-                false
-            );
+            context.text(font, style.text(isExpanded ? "▼" : "▶", style.itemText, false), rowX + 5, y + 4, 0xFFFFFFFF, style.textShadow);
         }
 
-        int nameX = x + indent + (hasChildren ? 25 : 10);
+        int statusColor = SandboxWidget.progressColor(node, showRemaining);
+        int nameColor = level == 0 ? style.rootText : hasEnough ? style.itemText : statusColor;
+        boolean bold = level == 0 && style.boldRootNames;
+        Component amount = style.text(SandboxWidget.amountText(node) + " ", statusColor, false);
+        int amountX = rowX + (hasChildren ? 25 : 10);
+        context.text(font, amount, amountX, y + 4, 0xFFFFFFFF, style.textShadow);
 
-        int textColor;
-        boolean isBold = (level == 0);
-        if (level == 0) {
-            textColor = GOLD;
-        } else {
-            textColor = hasEnough ? 0xFFFFFFFF : SandboxWidget.progressColor(node, showRemaining);
-        }
-
-        String amountText = SandboxWidget.amountText(node);
-        int amountColor = SandboxWidget.progressColor(node, showRemaining);
-
-        context.text(
-            client.font,
-            amountText,
-            nameX,
-            y + 4,
-            amountColor,
-            false
-        );
-
-        Style nameStyle = Style.EMPTY.withColor(textColor).withBold(isBold);
-        Component itemName = Component.literal(node.name).setStyle(nameStyle);
-        int itemNameX = nameX + client.font.width(amountText + " ");
+        // Long names are cut with "..." so the forge time (if any) always fits.
         String forge = SandboxWidget.forgeText(node, level);
-        if (!forge.isEmpty()) {
-            // The forge time always shows; a long name is cut short to make room.
-            int room = x + indent + nodeWidth - 4 - itemNameX - client.font.width(forge);
-            itemName = SandboxWidget.fitName(client.font, text -> Component.literal(text).setStyle(nameStyle), node.name, room);
-        }
-
-        context.text(
-            client.font,
-            itemName,
-            itemNameX,
-            y + 4,
-            0xFFFFFFFF,
-            false
-        );
-        if (!forge.isEmpty()) {
-            context.text(client.font, Component.literal(forge).setStyle(Style.EMPTY.withColor(textColor)),
-                itemNameX + client.font.width(itemName), y + 4, 0xFFFFFFFF, false);
-        }
+        Component tag = forge.isEmpty() ? Component.empty() : style.text(forge, nameColor, false);
+        int nameX = amountX + font.width(amount);
+        int room = rowX + nodeWidth - 4 - nameX - font.width(tag);
+        Component name = SandboxWidget.fitName(font, style, node.name, nameColor, bold, room);
+        context.text(font, name, nameX, y + 4, 0xFFFFFFFF, style.textShadow);
+        context.text(font, tag, nameX + font.width(name), y + 4, 0xFFFFFFFF, style.textShadow);
 
         y += 16;
 
-    if (hasChildren && isExpanded && node.ingredients.size() > 0) {
-            int lineColor = 0xFF777777;
-            for (int i = 0; i < node.ingredients.size(); i++) {
-                RecipeManager.RecipeNode child = node.ingredients.get(i);
-                int lineStartX = x + indent + 6;
-                int vertLineY = y;
-                int childIndentX = x + indent + RECIPE_LEVEL_INDENT;
-
-                context.fill(lineStartX, vertLineY, lineStartX + 1, vertLineY + 8, lineColor);
-                context.fill(lineStartX, vertLineY + 8, childIndentX, vertLineY + 9, lineColor);
-
-                y = renderRecipeTree(context, child, x, y, level + 1, nodeKey);
+        if (hasChildren && isExpanded) {
+            for (RecipeManager.RecipeNode child : node.ingredients) {
+                if (style.showTreeLines) {
+                    int lineStartX = rowX + 6;
+                    int childIndentX = x + indent + RECIPE_LEVEL_INDENT;
+                    context.fill(lineStartX, y, lineStartX + 1, y + 8, style.treeLines);
+                    context.fill(lineStartX, y + 8, childIndentX, y + 9, style.treeLines);
+                }
+                y = renderRecipeTree(context, child, x, y, level + 1, nodeKey, mouseX, mouseY);
             }
         }
         return y;
