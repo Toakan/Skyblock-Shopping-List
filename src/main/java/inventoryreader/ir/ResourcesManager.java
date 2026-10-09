@@ -221,26 +221,20 @@ public class ResourcesManager {
         int[] fromStock = new int[entries.size()];
         // How many of each entry can be crafted right now from what is held (shown as "can craft", not as held).
         int[] craftedNow = new int[entries.size()];
-        // What each root row shows as required: the amount, or more if an Add more entry has lost stock since.
         int[] required = new int[entries.size()];
         for (int i = 0; i < entries.size(); i++) {
             ShoppingListEntry entry = entries.get(i);
-            int need = entry.amount;
-            if (!entry.isHaveTotal()) {
-                // Add more is done at startCount + amount held (as SandboxWidget checks it), so copies made since
-                // the entry was added count; held copies are still not taken from stock.
-                need = Math.max(0, entry.startCount + entry.amount - counts.getOrDefault(entry.recipe, 0));
-            }
+            // Have total: done once this many are held. Add more: once startCount + amount are held (as
+            // SandboxWidget checks it), so copies made since the entry was added count.
+            int target = (entry.isHaveTotal() ? 0 : entry.startCount) + entry.amount;
+            // Held copies towards the target are kept for this entry, so later entries can't use them as well.
+            int held = Math.max(0, currentAvailableResources.getOrDefault(entry.recipe, 0));
+            fromStock[i] = Math.min(held, target);
+            int need = target - fromStock[i];
+            currentAvailableResources.put(entry.recipe, held - fromStock[i]);
+            highestPossibleResources.merge(entry.recipe, -fromStock[i], Integer::sum);
+            // What the root row shows as required: the amount, or more if an Add more entry has lost stock since.
             required[i] = Math.max(entry.amount, need);
-            if (entry.isHaveTotal()) {
-                // Have total: held copies of the item itself count towards the amount and are kept from later
-                // entries. Add more: the amount is how many more to make, so held copies don't count.
-                int held = Math.max(0, currentAvailableResources.getOrDefault(entry.recipe, 0));
-                fromStock[i] = Math.min(held, need);
-                need -= fromStock[i];
-                currentAvailableResources.put(entry.recipe, held - fromStock[i]);
-                highestPossibleResources.merge(entry.recipe, -fromStock[i], Integer::sum);
-            }
             int old = highestPossibleResources.getOrDefault(entry.recipe, 0);
             if (need > 0) {
                 buildRecipe(entry.recipe, need, forging, highestPossibleResources, currentAvailableResources, messages, 0);
