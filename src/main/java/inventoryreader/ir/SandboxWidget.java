@@ -16,6 +16,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class SandboxWidget {
     private static final Identifier SANDBOX_WIDGET_LAYER = Identifier.fromNamespaceAndPath(InventoryReader.MOD_ID, "sandbox_widget");
@@ -84,8 +85,12 @@ public class SandboxWidget {
     private boolean baselineSet = false;
     private final ResourcesManager resourcesManager;
     private final ScheduledExecutorService scheduler;
-    /** Resource version the current tree was computed from; -1 forces a recompute. */
-    private volatile long computedVersion = -1;
+    /** Update thread only: resource version the current tree was computed from. */
+    private long computedVersion = -1;
+    /** Bumped by every {@link #requestRefresh()}; the update thread recomputes when it moved since it last looked. */
+    private final AtomicLong refreshRequests = new AtomicLong();
+    /** Update thread only: {@link #refreshRequests} as of the last recompute. */
+    private long handledRequests = -1;
     /** Render thread only: row size and panel width of the HUD being drawn. */
     private int currentNodeLineHeight = 16;
     private int currentRowGap = 0;
@@ -225,7 +230,9 @@ public class SandboxWidget {
         for (ShoppingListEntry e : shoppingList) copy.add(e.copy());
         return copy;
     }
+    /** Every list change: an update worked out for the list before it is thrown away, then a fresh one is queued. */
     private void listChanged() {
+        listGeneration++;
         requestRefresh();
         saveConfiguration();
         saveShoppingList();
@@ -422,7 +429,7 @@ public class SandboxWidget {
     }
     /** Marks the tree stale; the update thread recomputes it within a second. */
     private void requestRefresh() {
-        computedVersion = -1;
+        refreshRequests.incrementAndGet();
         scheduler.execute(this::refreshIfStale);
     }
 
@@ -432,8 +439,12 @@ public class SandboxWidget {
             ForgeSpeed.refreshMayorIfDue();
             long version = resourcesManager.getVersion();
             long recipes = RecipeManager.getInstance().getVersion();
-            if (version != computedVersion || ForgeSpeed.getVersion() != forgeSpeedVersion || recipes != recipeVersion) {
+            // Read before recomputing: a request made while this runs is still seen as new next time.
+            long requests = refreshRequests.get();
+            if (version != computedVersion || requests != handledRequests || ForgeSpeed.getVersion() != forgeSpeedVersion
+                    || recipes != recipeVersion) {
                 computedVersion = version;
+                handledRequests = requests;
                 forgeSpeedVersion = ForgeSpeed.getVersion();
                 recipeVersion = recipes;
                 updateRecipeData();
