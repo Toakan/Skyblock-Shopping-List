@@ -30,9 +30,9 @@ public final class SkyblockDetector {
         useModApi = FabricLoader.getInstance().isModLoaded(MOD_API_ID);
         if (useModApi) {
             HypixelLocationListener.register();
-            InventoryReader.LOGGER.info("Using the Hypixel Mod API for SkyBlock detection");
+            InventoryReader.debug("Using the Hypixel Mod API for SkyBlock detection");
         } else {
-            InventoryReader.LOGGER.info("Hypixel Mod API not installed; detecting SkyBlock from the scoreboard");
+            InventoryReader.debug("Hypixel Mod API not installed; detecting SkyBlock from the scoreboard");
         }
         ClientTickEvents.START_CLIENT_TICK.register(SkyblockDetector::tick);
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> set(false, null));
@@ -73,7 +73,7 @@ public final class SkyblockDetector {
         island = mode;
         if (skyblock != onSkyblock) {
             onSkyblock = skyblock;
-            InventoryReader.LOGGER.info(skyblock ? "Entered SkyBlock{}" : "Left SkyBlock{}", mode != null ? " (" + mode + ")" : "");
+            InventoryReader.debug(skyblock ? "Entered SkyBlock{}" : "Left SkyBlock{}", mode != null ? " (" + mode + ")" : "");
         }
     }
 }

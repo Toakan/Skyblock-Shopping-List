@@ -121,7 +121,7 @@ public final class RemoteRecipeFetcher {
                     .GET();
             if (!etag.isEmpty()) b.header("If-None-Match", etag);
             HttpResponse<String> resp = HTTP.send(b.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-            if (resp.statusCode() == 304) { LOGGER.info("Remote recipes not modified (ETag)"); return true; }
+            if (resp.statusCode() == 304) { inventoryreader.ir.InventoryReader.debug("Remote recipes not modified (ETag)"); return true; }
             if (resp.statusCode() / 100 != 2) { LOGGER.warn("Remote fetch HTTP {}", resp.statusCode()); return false; }
 
             String body = resp.body();
@@ -163,7 +163,7 @@ public final class RemoteRecipeFetcher {
                     metaKey = "mtime::" + f.getAbsolutePath();
                     String prev = meta.getOrDefault(metaKey, "");
                     String cur = Long.toString(f.lastModified());
-                    if (cacheCurrent && !prev.isEmpty() && prev.equals(cur)) { LOGGER.info("NEU ZIP file unchanged (mtime cache)"); return true; }
+                    if (cacheCurrent && !prev.isEmpty() && prev.equals(cur)) { inventoryreader.ir.InventoryReader.debug("NEU ZIP file unchanged (mtime cache)"); return true; }
                     inputStream = new java.io.FileInputStream(f);
                     metaValToWrite = cur;
                 } else {
@@ -177,7 +177,7 @@ public final class RemoteRecipeFetcher {
                     HttpResponse<java.io.InputStream> resp = HTTP.send(b.build(), HttpResponse.BodyHandlers.ofInputStream());
                     if (resp.statusCode() / 100 != 2) {
                         resp.body().close();
-                        if (resp.statusCode() == 304) { LOGGER.info("NEU ZIP not modified (ETag)"); return true; }
+                        if (resp.statusCode() == 304) { inventoryreader.ir.InventoryReader.debug("NEU ZIP not modified (ETag)"); return true; }
                         LOGGER.warn("NEU ZIP fetch HTTP {}", resp.statusCode());
                         return false;
                     }
@@ -191,7 +191,7 @@ public final class RemoteRecipeFetcher {
                 metaKey = "mtime::" + f.getAbsolutePath();
                 String prev = meta.getOrDefault(metaKey, "");
                 String cur = Long.toString(f.lastModified());
-                if (cacheCurrent && !prev.isEmpty() && prev.equals(cur)) { LOGGER.info("NEU ZIP file unchanged (mtime cache)"); return true; }
+                if (cacheCurrent && !prev.isEmpty() && prev.equals(cur)) { inventoryreader.ir.InventoryReader.debug("NEU ZIP file unchanged (mtime cache)"); return true; }
                 inputStream = new java.io.FileInputStream(f);
                 metaValToWrite = cur;
             }
@@ -201,7 +201,7 @@ public final class RemoteRecipeFetcher {
             try (InputStream in = inputStream) {
                 extractZipStrippingRoot(in, repoExtracted);
             }
-            LOGGER.info("NEU ZIP extracted to {}", repoExtracted);
+            inventoryreader.ir.InventoryReader.debug("NEU ZIP extracted to {}", repoExtracted);
 
             NEURepository neuRepo = NEURepository.of(repoExtracted);
             try {
@@ -275,7 +275,7 @@ public final class RemoteRecipeFetcher {
             writeSnapshot(recipeNameById, FilePathManager.ITEM_NAMES_JSON, "item_names.json.tmp");
             inventoryreader.ir.ItemIds.reload();
 
-            LOGGER.info("NEU repo parsed (library): {} crafting (incl. {} pet upgrades), {} forge, {} shop recipes", craftingWire.size(), katCount, forgeWire.size(), shopWire.size());
+            inventoryreader.ir.InventoryReader.debug("NEU repo parsed (library): {} crafting (incl. {} pet upgrades), {} forge, {} shop recipes", craftingWire.size(), katCount, forgeWire.size(), shopWire.size());
             inventoryreader.ir.RecipeManager.getInstance().reload();
 
             if (metaValToWrite != null && !metaValToWrite.isEmpty()) {

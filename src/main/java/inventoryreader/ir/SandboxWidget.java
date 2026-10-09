@@ -248,6 +248,7 @@ public class SandboxWidget {
         config.notifications = notifications;
         config.autoRemove = autoRemove;
         config.staleSackWarning = staleSackWarning;
+        config.debugLogging = InventoryReader.debugLogging;
         config.maxRecipes = maxRecipes;
         JsonFiles.write(FilePathManager.WIDGET_CONFIG_JSON, config);
     }
@@ -272,6 +273,7 @@ public class SandboxWidget {
         if (config.notifications != null) this.notifications = config.notifications;
         if (config.autoRemove != null) this.autoRemove = config.autoRemove;
         if (config.staleSackWarning != null) this.staleSackWarning = config.staleSackWarning;
+        InventoryReader.debugLogging = Boolean.TRUE.equals(config.debugLogging);
         if (config.maxRecipes != null) this.maxRecipes = clampMaxRecipes(config.maxRecipes);
         if (config.widgetWidth > 0) this.widgetWidth = config.widgetWidth;
         if (config.widgetHeight > 0) this.widgetHeight = config.widgetHeight;
@@ -313,6 +315,7 @@ public class SandboxWidget {
         notifications = true;
         autoRemove = true;
         staleSackWarning = true;
+        InventoryReader.debugLogging = false;
         maxRecipes = 3;
         messages.clear();
         saveConfiguration();
@@ -345,6 +348,7 @@ public class SandboxWidget {
         /** Read only: the list-wide Have total / Add more switch from 4.20.6, now set per entry. */
         Boolean haveTotal;
         Boolean staleSackWarning;
+        Boolean debugLogging;
         Integer maxRecipes;
     }
     /** Marks the tree stale; the update thread recomputes it within a second. */
@@ -1198,6 +1202,11 @@ public class SandboxWidget {
     public boolean isStaleSackWarning() { return staleSackWarning; }
     public void setStaleSackWarning(boolean staleSackWarning) {
         this.staleSackWarning = staleSackWarning;
+        saveConfiguration();
+    }
+    public boolean isDebugLogging() { return InventoryReader.debugLogging; }
+    public void setDebugLogging(boolean debugLogging) {
+        InventoryReader.debugLogging = debugLogging;
         saveConfiguration();
     }
     public int getMaxRecipes() { return maxRecipes; }

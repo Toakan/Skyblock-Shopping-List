@@ -69,9 +69,9 @@ public final class ForgeTracker {
             }
             // Glass panes and buttons have no "Currently making" line.
             if (making == null) continue;
-            if (remaining == null && !loggedReadyLore) {
+            if (remaining == null && !loggedReadyLore && InventoryReader.debugLogging) {
                 loggedReadyLore = true;
-                InventoryReader.LOGGER.info("Forge slot without a time, treated as ready: {}",
+                InventoryReader.debug("Forge slot without a time, treated as ready: {}",
                     lore.lines().stream().map(Component::getString).toList());
             }
             String name = ItemNames.clean(ItemIds.nameOf(stack));

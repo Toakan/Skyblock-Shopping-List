@@ -42,7 +42,7 @@ public final class IrCommandManager {
                 })
                 .then(literal("reset")
                     .executes(context -> {
-                        InventoryReader.LOGGER.info("Executing complete mod reset");
+                        InventoryReader.debug("Executing complete mod reset");
                         FilePathManager.resetData();
                         StorageReader.getInstance().clear();
                         SackReader.getInstance().clear();

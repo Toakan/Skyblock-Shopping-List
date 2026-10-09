@@ -68,7 +68,7 @@ public final class CoinTracker {
             }
         }
         // Logged so a changed menu layout can be diagnosed from latest.log.
-        InventoryReader.LOGGER.info("No bank balance found in menu \"{}\"", title);
+        InventoryReader.debug("No bank balance found in menu \"{}\"", title);
     }
 
     /** Forgets the bank balance (after a reset deleted coins.json). */

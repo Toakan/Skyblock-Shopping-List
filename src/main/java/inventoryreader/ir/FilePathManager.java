@@ -98,7 +98,7 @@ public class FilePathManager {
                 // Only empty folders are removed; anything unexpected is left where it was.
                 legacyData.delete();
                 legacy.delete();
-                InventoryReader.LOGGER.info("Moved {} to {}", legacy.getName(), MOD_DIR);
+                InventoryReader.debug("Moved {} to {}", legacy.getName(), MOD_DIR);
             } catch (IOException e) {
                 InventoryReader.LOGGER.warn("Could not move {} to {}; some data may need moving by hand", legacy, MOD_DIR, e);
             }
@@ -143,7 +143,7 @@ public class FilePathManager {
             } catch (IOException e) {
                 InventoryReader.LOGGER.warn("Could not write version file", e);
             }
-            InventoryReader.LOGGER.info("Version changed {} -> {}, regenerating recipe files", stored.isEmpty() ? "none" : stored, version);
+            InventoryReader.debug("Version changed {} -> {}, regenerating recipe files", stored.isEmpty() ? "none" : stored, version);
         }
         RecipeFileGenerator.initializeRecipeFiles();
     }
@@ -155,7 +155,7 @@ public class FilePathManager {
         Arrays.sort(versioned, (a, b) -> Long.compare(b.lastModified(), a.lastModified()));
         try {
             Files.copy(versioned[0].toPath(), RESOURCES_JSON.toPath(), StandardCopyOption.REPLACE_EXISTING);
-            InventoryReader.LOGGER.info("Migrated {} -> resources.json", versioned[0].getName());
+            InventoryReader.debug("Migrated {} -> resources.json", versioned[0].getName());
             for (File f : versioned) f.delete();
         } catch (IOException e) {
             InventoryReader.LOGGER.warn("Failed to migrate versioned resources: {}", e.getMessage());

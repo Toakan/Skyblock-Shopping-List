@@ -19,6 +19,11 @@ import java.util.regex.Pattern;
  */
 public final class SackChatListener {
     /** "+1,234 Enchanted Coal (Mining Sack)": optional sign, count, item name, optional sack name. */
+    /**
+     * The whole message, "[Sacks] +12 items, -3 items. (Last 30s.)". Player chat always starts with the
+     * sender's name or a channel prefix, so a player typing "[Sacks] ..." can't match.
+     */
+    private static final Pattern SACKS_MESSAGE = Pattern.compile("^\\[Sacks] [+-][\\d,]+ items?.*\\(Last \\d+s\\.\\)$");
     private static final Pattern ITEM_LINE = Pattern.compile("^\\s*([+-]?)([\\d,]+)\\s+(.+?)(?:\\s+\\([^()]*\\))?\\s*$");
 
     private SackChatListener() {}
@@ -35,8 +40,8 @@ public final class SackChatListener {
     }
 
     private static void onGameMessage(Component message) {
-        String text = message.getString();
-        if (!text.contains("[Sacks]")) return;
+        String text = message.getString().strip();
+        if (!SACKS_MESSAGE.matcher(text).matches()) return;
 
         // A set of texts: several parts of the message can carry their own copy of the same hover list.
         Set<String> hoverTexts = new LinkedHashSet<>();
@@ -60,10 +65,10 @@ public final class SackChatListener {
 
         if (deltas.isEmpty()) {
             // Logged so a changed message format can be diagnosed from latest.log.
-            InventoryReader.LOGGER.info("Unrecognised [Sacks] message: {} | hover: {}", text, hoverTexts);
+            InventoryReader.debug("Unrecognised [Sacks] message: {} | hover: {}", text, hoverTexts);
             return;
         }
-        InventoryReader.LOGGER.info("[Sacks] read: {}", deltas);
+        InventoryReader.debug("[Sacks] read: {}", deltas);
         SackReader.getInstance().applyChatDeltas(deltas);
     }
 

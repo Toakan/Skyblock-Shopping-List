@@ -67,9 +67,9 @@ public final class ForgeSpeed {
             ItemLore lore = stack.get(DataComponents.LORE);
             if (lore == null) return;
             List<String> lines = lore.lines().stream().map(Component::getString).toList();
-            if (!loggedQuickForge) {
+            if (!loggedQuickForge && InventoryReader.debugLogging) {
                 loggedQuickForge = true;
-                InventoryReader.LOGGER.info("Quick Forge lore: {}", lines);
+                InventoryReader.debug("Quick Forge lore: {}", lines);
             }
             // The lore wraps mid-sentence ("...to forge," / "by 30%."), so match across the joined lines.
             Matcher m = QUICK_FORGE.matcher(String.join(" ", lines));
@@ -134,7 +134,7 @@ public final class ForgeSpeed {
         String description = perk.has("description") ? ItemNames.clean(perk.get("description").getAsString()) : "";
         Matcher m = PERCENT.matcher(description);
         double bonus = m.find() ? parse(m.group(1)) : MOLTEN_FORGE_DEFAULT;
-        InventoryReader.LOGGER.info("Molten Forge active: -{}% forge time", bonus);
+        InventoryReader.debug("Molten Forge active: -{}% forge time", bonus);
         return bonus > 0 ? bonus : MOLTEN_FORGE_DEFAULT;
     }
 

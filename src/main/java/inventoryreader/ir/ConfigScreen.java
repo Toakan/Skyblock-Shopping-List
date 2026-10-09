@@ -102,6 +102,17 @@ public final class ConfigScreen {
                         new KeyBindsScreen(screen, Minecraft.getInstance().options)))
                     .build())
                 .build())
+            .category(ConfigCategory.createBuilder()
+                .name(Component.literal("Advanced"))
+                .option(Option.<Boolean>createBuilder()
+                    .name(Component.literal("Debug logging"))
+                    .description(OptionDescription.of(Component.literal(
+                        "Write what the mod reads (sack messages, Forge and HOTM menus, recipe downloads) to "
+                            + "latest.log, to help track down a problem. Warnings and errors are always logged.")))
+                    .binding(false, widget::isDebugLogging, widget::setDebugLogging)
+                    .controller(opt -> BooleanControllerBuilder.create(opt).onOffFormatter().coloured(true))
+                    .build())
+                .build())
             // Widget setters save the widget config themselves; Appearance values are written here.
             .save(HudStyle::save)
             .build()
