@@ -42,6 +42,8 @@ public final class HudStyle {
     public int forgingHeader = 0xFFFFFF55;
     public int forgingText = 0xFFFF9D00;
 
+    /** Which rows show the forge time still ahead, e.g. [25hrs]. */
+    public enum ForgeTimes { OFF, TOP_LEVEL, ALL }
     /** How the HUD size reacts to the window: with its height, with GUI Scale, or not at all. */
     public enum Sizing { WINDOW, GUI_SCALE, FIXED }
 
@@ -84,6 +86,7 @@ public final class HudStyle {
     public boolean shortNumbers = true;
     public boolean showCraftable = true;
     public boolean showForging = true;
+    public ForgeTimes forgeTimes = ForgeTimes.ALL;
     public Placement craftablePlacement = Placement.MAIN_PANEL;
     public Placement forgingPlacement = Placement.MAIN_PANEL;
 
@@ -180,6 +183,7 @@ public final class HudStyle {
         if (forgingPlacement == null) forgingPlacement = Placement.MAIN_PANEL;
         if (font == null || Identifier.tryParse(font) == null) font = DEFAULT_FONT;
         if (amountFormat == null) amountFormat = AmountFormat.REMAINING;
+        if (forgeTimes == null) forgeTimes = ForgeTimes.ALL;
         // Files from before HUD sizing: Follow GUI Scale ON keeps following it, OFF gets the new default.
         if (followGuiScale != null) {
             if (Boolean.TRUE.equals(followGuiScale)) sizing = Sizing.GUI_SCALE;

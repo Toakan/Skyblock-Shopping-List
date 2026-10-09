@@ -4,6 +4,7 @@ import com.mojang.blaze3d.platform.Window;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.toasts.SystemToast;
 import net.minecraft.network.chat.Component;
@@ -53,6 +54,8 @@ public class SandboxWidget {
     /** Update thread only: forge version and minute the forging lines were built for. */
     private long forgingVersion = -1;
     private long forgingMinute = -1;
+    /** Update thread only: Quick Forge / mayor bonus version the forge times were worked out with. */
+    private long forgeSpeedVersion = -1;
     /** Update thread only: a recipe has everything but something in its tree is still cooking in the Forge. */
     private boolean waitingOnForge = false;
     private volatile boolean showTotal = true;
@@ -353,9 +356,11 @@ public class SandboxWidget {
     /** Runs on the update thread. Recomputes only when resources or the selection changed. */
     private void refreshIfStale() {
         try {
+            ForgeSpeed.refreshMayorIfDue();
             long version = resourcesManager.getVersion();
-            if (version != computedVersion) {
+            if (version != computedVersion || ForgeSpeed.getVersion() != forgeSpeedVersion) {
                 computedVersion = version;
+                forgeSpeedVersion = ForgeSpeed.getVersion();
                 updateRecipeData();
             }
             // Forge countdowns move every minute even when nothing else changes.
@@ -447,6 +452,10 @@ public class SandboxWidget {
             }
         }
 
+        Map<String, Long> cookingEnds = cookingEnds();
+        double forgeMultiplier = ForgeSpeed.multiplier();
+        for (RecipeManager.RecipeNode tree : response.trees) setForgeTimes(tree, cookingEnds, forgeMultiplier);
+
         List<RecipeManager.RecipeNode> tops = new ArrayList<>();
         RecipeManager.RecipeNode total = totalMode == TotalMode.INGREDIENTS ? response.ingredientTotal : response.total;
         if (showTotal && !total.ingredients.isEmpty()) {
@@ -465,6 +474,43 @@ public class SandboxWidget {
         for (RecipeManager.RecipeNode tree : response.trees) collectNames(tree, itemNames);
         listItemNames = itemNames;
         updateForgingLines();
+    }
+
+    /** When the last Forge slot cooking each item (by normalised name) is done, for items still cooking. */
+    private static Map<String, Long> cookingEnds() {
+        long now = System.currentTimeMillis();
+        Map<String, Long> out = new HashMap<>();
+        for (ForgeTracker.Entry entry : ForgeTracker.getEntries()) {
+            if (entry.endsAt > now) out.merge(ItemNames.normalize(entry.name), entry.endsAt, Math::max);
+        }
+        return out;
+    }
+
+    /**
+     * Fills in each step's forge time (longest chain, forge slots assumed to run side by side): its own forge
+     * time, if any are still to make, after the slowest ingredient. Items cooking now count down from their
+     * real finish time; items not started yet wait their full time, cut by Quick Forge and the mayor bonus.
+     */
+    private static void setForgeTimes(RecipeManager.RecipeNode node, Map<String, Long> cookingEnds, double multiplier) {
+        long childMs = 0;
+        long childEndsAt = 0;
+        if (node.ingredients != null) {
+            for (RecipeManager.RecipeNode child : node.ingredients) {
+                setForgeTimes(child, cookingEnds, multiplier);
+                childMs = Math.max(childMs, child.forgeMs);
+                childEndsAt = Math.max(childEndsAt, child.forgeEndsAt);
+            }
+        }
+        long cookingEnd = cookingEnds.getOrDefault(ItemNames.normalize(node.name), 0L);
+        if (node.amount + node.toCraft <= 0) {
+            // Nothing left to start: only a copy still cooking is waited on.
+            node.forgeMs = 0;
+            node.forgeEndsAt = cookingEnd;
+            return;
+        }
+        long own = Math.round(RecipeManager.getInstance().getForgeSeconds(node.name) * 1000L * multiplier);
+        node.forgeMs = childMs + own;
+        node.forgeEndsAt = Math.max(cookingEnd, childEndsAt > 0 ? childEndsAt + own : 0);
     }
 
     /** How many of each Forge item (by normalised name) are still cooking. */
@@ -1043,12 +1089,25 @@ public class SandboxWidget {
         int nameColor = level == 0 ? style.rootText : hasEnough ? style.itemText : statusColor;
         Component mark = style.showMarks ? style.text(hasEnough || node.amount <= 0 ? "✔ " : "✖ ", statusColor, false) : Component.empty();
         Component amount = style.text(amountText(node) + " ", statusColor, false);
-        Component name = style.text(node.name, nameColor, level == 0 && style.boldRootNames);
+        boolean bold = level == 0 && style.boldRootNames;
+        Component name = style.text(node.name, nameColor, bold);
+        String forge = forgeText(node, level);
+        Component tag = forge.isEmpty() ? Component.empty() : style.text(forge, nameColor, false);
         int markWidth = client.font.width(mark);
         int amountWidth = client.font.width(amount);
-        int totalTextWidth = markWidth + amountWidth + client.font.width(name);
+        int tagWidth = client.font.width(tag);
         int maxTextWidth = Math.max(10, nodeWidth - iconOffset);
-        float textScale = Math.min(rowScale, (float) maxTextWidth / Math.max(1, totalTextWidth));
+        float textScale;
+        if (forge.isEmpty()) {
+            int totalTextWidth = markWidth + amountWidth + client.font.width(name);
+            textScale = Math.min(rowScale, (float) maxTextWidth / Math.max(1, totalTextWidth));
+        } else {
+            // The forge time always shows; a long name is cut short to make room instead of shrinking the row.
+            textScale = rowScale;
+            int room = Math.round(maxTextWidth / rowScale) - markWidth - amountWidth - tagWidth;
+            name = fitName(client.font, style, node.name, nameColor, bold, room);
+        }
+        int nameWidth = client.font.width(name);
 
         context.pose().pushMatrix();
         context.pose().translate(x + indent + iconOffset, textY(y, nodeHeight, textScale));
@@ -1056,6 +1115,7 @@ public class SandboxWidget {
         context.text(client.font, mark, 0, 0, 0xFFFFFFFF, style.textShadow);
         context.text(client.font, amount, markWidth, 0, 0xFFFFFFFF, style.textShadow);
         context.text(client.font, name, markWidth + amountWidth, 0, 0xFFFFFFFF, style.textShadow);
+        context.text(client.font, tag, markWidth + amountWidth + nameWidth, 0, 0xFFFFFFFF, style.textShadow);
         context.pose().popMatrix();
         y += nodeHeight + currentRowGap;
 
@@ -1150,6 +1210,38 @@ public class SandboxWidget {
             case HAVE_NEED -> number(Math.max(0L, (long) node.required - node.amount - node.toCraft)) + "/"
                 + number(node.required);
         };
+    }
+
+    /**
+     * Forge time still ahead for a row, per Settings > Appearance > Forge times: "[25hrs]", "[45m]" or
+     * "[<1m]"; empty when there is none or the setting hides it for this row (level 0 = the top rows).
+     */
+    public static String forgeText(RecipeManager.RecipeNode node, int level) {
+        HudStyle.ForgeTimes mode = HudStyle.get().forgeTimes;
+        if (mode == HudStyle.ForgeTimes.OFF || (mode == HudStyle.ForgeTimes.TOP_LEVEL && level > 0)) return "";
+        long left = node.forgeLeft(System.currentTimeMillis());
+        if (left <= 0) return "";
+        long minutes = left / 60_000;
+        if (minutes < 1) return "[<1m]";
+        if (minutes < 60) return "[" + minutes + "m]";
+        return "[" + (minutes / 60) + "hrs]";
+    }
+
+    /**
+     * {@code name} followed by a space if it fits in {@code room} font pixels, otherwise cut short and ended
+     * with "..." (so a forge time drawn straight after reads "Mithril Dri...[25hrs]").
+     */
+    static Component fitName(Font font, HudStyle style, String name, int color, boolean bold, int room) {
+        Component full = style.text(name + " ", color, bold);
+        if (font.width(full) <= room) return full;
+        int end = name.length();
+        Component cut = style.text("...", color, bold);
+        while (end > 0) {
+            cut = style.text(name.substring(0, end).stripTrailing() + "...", color, bold);
+            if (font.width(cut) <= room) break;
+            end--;
+        }
+        return cut;
     }
 
     /** An amount as the style wants it: "512", "5,120", or with Short numbers on "5.1k", "500m", "1.5b". */

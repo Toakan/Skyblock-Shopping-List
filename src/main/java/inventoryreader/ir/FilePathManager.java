@@ -35,6 +35,8 @@ public class FilePathManager {
     public static final File COINS_JSON = new File(DATA_DIR, "coins.json");
     /** What was cooking in the Dwarven Forge when it was last opened. */
     public static final File FORGE_JSON = new File(DATA_DIR, "forge.json");
+    /** Quick Forge % from the HOTM menu and the mayor forge bonus, for forge-time estimates. */
+    public static final File FORGE_SPEED_JSON = new File(DATA_DIR, "forge_speed.json");
     public static final File WIDGET_CONFIG_JSON = new File(DATA_DIR, "widget_config.json");
     /** HUD colours, sizes, font and parts (Settings > Appearance). */
     public static final File HUD_STYLE_JSON = new File(DATA_DIR, "hud_style.json");
@@ -44,6 +46,8 @@ public class FilePathManager {
     public static final File GEMSTONE_RECIPES_JSON = new File(DATA_DIR, "gemstone_recipes.json");
     public static final File REMOTE_RECIPES_JSON = new File(DATA_DIR, "recipes_remote.json");
     public static final File REMOTE_FORGE_JSON = new File(DATA_DIR, "recipes_remote_forge.json");
+    /** Base forge time in seconds per forge item, written by the recipe fetch. */
+    public static final File FORGE_TIMES_JSON = new File(DATA_DIR, "forge_times.json");
     /** NPC shop purchases (coins + items) for items with no crafting or forge recipe. */
     public static final File REMOTE_SHOP_JSON = new File(DATA_DIR, "recipes_remote_shop.json");
     /** SkyBlock item ID to the name recipes use, written by the recipe fetch. */
@@ -104,7 +108,7 @@ public class FilePathManager {
 
     /** Deletes all tracked item data and widget settings. Recipes are kept. */
     public static synchronized void resetData() {
-        for (File f : new File[]{CONTAINER_JSON, INVENTORY_JSON, RESOURCES_JSON, SACKS_JSON, SACKS_META_JSON, COINS_JSON, FORGE_JSON, WIDGET_CONFIG_JSON, HUD_STYLE_JSON}) {
+        for (File f : new File[]{CONTAINER_JSON, INVENTORY_JSON, RESOURCES_JSON, SACKS_JSON, SACKS_META_JSON, COINS_JSON, FORGE_JSON, FORGE_SPEED_JSON, WIDGET_CONFIG_JSON, HUD_STYLE_JSON}) {
             if (f.exists() && !f.delete()) {
                 InventoryReader.LOGGER.warn("Could not delete {}", f.getName());
             }

@@ -47,6 +47,9 @@ public final class StorageViewerMod {
             if (ForgeTracker.isForgeMenu(title)) {
                 ForgeTracker.readForge(menu);
             }
+            if (ForgeSpeed.isHotmMenu(title)) {
+                ForgeSpeed.readHotm(menu);
+            }
             if (title.contains("Sack")) {
                 SackReader.getInstance().readSack(menu, title);
             }
@@ -56,6 +59,10 @@ public final class StorageViewerMod {
             StorageReader.getInstance().saveContainerContents(menu, title);
             if (ForgeTracker.isForgeMenu(title)) {
                 ForgeTracker.readForge(menu);
+            }
+            // The perk can be levelled or switched with the menu open.
+            if (ForgeSpeed.isHotmMenu(title)) {
+                ForgeSpeed.readHotm(menu);
             }
         }
     }

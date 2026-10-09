@@ -16,6 +16,8 @@ public class RecipeManager {
     private static final RecipeManager INSTANCE = new RecipeManager();
     private volatile Map<String, Map<String, Integer>> recipes = Collections.emptyMap();
     private volatile List<String> recipeNames = Collections.emptyList();
+    /** Base forge time in seconds per forge item (before Quick Forge or mayor bonuses). */
+    private volatile Map<String, Integer> forgeSeconds = Collections.emptyMap();
 
     /** Recipe trees are acyclic after sanitising; this only stops pathological data from overflowing the stack. */
     private static final int MAX_DEPTH = 64;
@@ -62,6 +64,9 @@ public class RecipeManager {
 
             recipes = Collections.unmodifiableMap(sanitized);
             recipeNames = Collections.unmodifiableList(newNames);
+            Map<String, Integer> times = JsonFiles.read(FilePathManager.FORGE_TIMES_JSON,
+                new com.google.gson.reflect.TypeToken<Map<String, Integer>>(){}.getType());
+            forgeSeconds = times == null ? Collections.emptyMap() : Collections.unmodifiableMap(new HashMap<>(times));
         } catch (IOException | JsonParseException e) {
             InventoryReader.LOGGER.error("Failed to load recipes", e);
         }
@@ -90,6 +95,12 @@ public class RecipeManager {
             java.lang.reflect.Type t = new com.google.gson.reflect.TypeToken<Map<String, Map<String, Integer>>>(){}.getType();
             return new Gson().fromJson(recipesNode, t);
         }
+    }
+
+    /** Base forge time of one craft in seconds, or 0 when the item is not made in the Forge. */
+    public int getForgeSeconds(String name) {
+        Integer seconds = forgeSeconds.get(name);
+        return seconds == null ? 0 : seconds;
     }
 
     public List<String> getRecipeNames() {
@@ -229,7 +240,18 @@ public class RecipeManager {
          * materials you have.
          */
         public int toCraft;
+        /**
+         * Shopping-list trees only: forge time still ahead for this step. {@code forgeMs} is the wait through
+         * steps not started yet; {@code forgeEndsAt} (epoch ms, 0 = none) is when the chain through items
+         * cooking in the Forge now ends. The time left is the larger of the two, see {@link #forgeLeft(long)}.
+         */
+        public long forgeMs;
+        public long forgeEndsAt;
         public List<RecipeNode> ingredients;
+
+        public long forgeLeft(long now) {
+            return Math.max(forgeMs, forgeEndsAt - now);
+        }
 
         public RecipeNode(String name, int amount, List<RecipeNode> ingredients) {
             this(name, amount, amount, ingredients);

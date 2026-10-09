@@ -227,6 +227,20 @@ public final class ConfigScreen {
                     s -> s.showForging, (s, v) -> s.showForging = v))
                 .option(placement("Forging panel", d.forgingPlacement,
                     s -> s.forgingPlacement, (s, v) -> s.forgingPlacement = v))
+                .option(styled(Option.<HudStyle.ForgeTimes>createBuilder()
+                    .name(Component.literal("Forge times"))
+                    .description(describe(
+                        "Shows how long the Forge still needs after a row's name, e.g. [25hrs]: its own forge time "
+                            + "after the slowest forge step it waits on (Forge slots side by side). Items cooking "
+                            + "now count down. Includes Quick Forge (open Heart of the Mountain once) and Cole's "
+                            + "Molten Forge. Long names are cut short so the time always shows."))
+                    .controller(opt -> EnumControllerBuilder.create(opt).enumClass(HudStyle.ForgeTimes.class)
+                        .formatValue(v -> Component.literal(switch (v) {
+                            case OFF -> "Off";
+                            case TOP_LEVEL -> "Top level only";
+                            case ALL -> "Every row";
+                        }))),
+                    d.forgeTimes, s -> s.forgeTimes, (s, v) -> s.forgeTimes = v))
                 .option(toggle("Tick and cross marks", "Show ✔ or ✖ in front of each row.", d.showMarks,
                     s -> s.showMarks, (s, v) -> s.showMarks = v))
                 .option(toggle("Row boxes", "Draw a background and coloured border behind each row.", d.showRowBoxes,

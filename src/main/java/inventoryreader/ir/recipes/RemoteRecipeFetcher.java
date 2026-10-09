@@ -49,7 +49,7 @@ public final class RemoteRecipeFetcher {
      * Bump when the way recipes are extracted from the repo changes, so cached snapshots are rebuilt
      * even if the remote reports "not modified".
      */
-    private static final String PARSER_VERSION = "6";
+    private static final String PARSER_VERSION = "7";
     /** NEU's pseudo item for coin costs in shop recipes. */
     private static final String COIN_ID = "SKYBLOCK_COIN";
     public static final String COINS_NAME = "Coins";
@@ -225,12 +225,18 @@ public final class RemoteRecipeFetcher {
             Map<String, Map<String, Integer>> forgeByInternal    = new LinkedHashMap<>();
             Map<String, Map<String, Integer>> shopByInternal     = new LinkedHashMap<>();
             Map<String, Map<String, Integer>> katByInternal      = new LinkedHashMap<>();
+            Map<String, Integer> forgeSecondsByInternal = new LinkedHashMap<>();
             for (NEUItem item : neuRepo.getItems().getItems().values()) {
                 for (NEURecipe recipe : item.getRecipes()) {
                     if (recipe instanceof NEUCraftingRecipe cr) {
                         collectRecipeIngredients(craftingByInternal, cr.getAllOutputs(), cr.getAllInputs());
                     } else if (recipe instanceof NEUForgeRecipe fr) {
+                        boolean first = fr.getOutputStack() != null && !forgeByInternal.containsKey(fr.getOutputStack().getItemId());
                         collectRecipeIngredients(forgeByInternal, fr.getAllOutputs(), fr.getAllInputs());
+                        // Same first-recipe-wins rule as the ingredients, so time and ingredients match.
+                        if (first && fr.getDuration() > 0 && forgeByInternal.containsKey(fr.getOutputStack().getItemId())) {
+                            forgeSecondsByInternal.put(fr.getOutputStack().getItemId(), fr.getDuration());
+                        }
                     } else if (recipe instanceof NEUNpcShopRecipe shop) {
                         collectRecipeIngredients(shopByInternal, shop.getAllOutputs(), shop.getAllInputs());
                     } else if (recipe instanceof NEUKatUpgradeRecipe kat) {
@@ -262,6 +268,10 @@ public final class RemoteRecipeFetcher {
             if (!craftingWire.isEmpty()) writeRemoteSnapshot(craftingWire);
             if (!forgeWire.isEmpty())    writeForgeSnapshot(forgeWire);
             writeSnapshot(shopWire, FilePathManager.REMOTE_SHOP_JSON, "recipes_remote_shop.json.tmp");
+            // Base forge time per forge item, under the name its recipe uses (resolved after any renames above).
+            Map<String, Integer> forgeSeconds = new LinkedHashMap<>();
+            forgeSecondsByInternal.forEach((id, seconds) -> forgeSeconds.put(recipeNameById.getOrDefault(id, id), seconds));
+            writeSnapshot(forgeSeconds, FilePathManager.FORGE_TIMES_JSON, "forge_times.json.tmp");
             writeSnapshot(recipeNameById, FilePathManager.ITEM_NAMES_JSON, "item_names.json.tmp");
             inventoryreader.ir.ItemIds.reload();
 

@@ -400,18 +400,31 @@ public class ShoppingListScreen extends Screen {
             false
         );
 
-        Component itemName = Component.literal(node.name)
-            .setStyle(Style.EMPTY.withColor(textColor)
-            .withBold(isBold));
+        Style nameStyle = Style.EMPTY.withColor(textColor).withBold(isBold);
+        Component itemName = Component.literal(node.name).setStyle(nameStyle);
+        int itemNameX = nameX + client.font.width(prefix + amountText + " ");
+        String forge = SandboxWidget.forgeText(node, level);
+        if (!forge.isEmpty()) {
+            // The forge time always shows; a long name is cut short to make room.
+            int room = x + indent + nodeWidth - 4 - itemNameX - client.font.width(forge);
+            itemName = Component.literal(node.name + " ").setStyle(nameStyle);
+            for (int end = node.name.length(); client.font.width(itemName) > room && end > 0; end--) {
+                itemName = Component.literal(node.name.substring(0, end).stripTrailing() + "...").setStyle(nameStyle);
+            }
+        }
 
         context.text(
             client.font,
             itemName,
-            nameX + client.font.width(prefix + amountText + " "),
+            itemNameX,
             y + 4,
             0xFFFFFFFF,
             false
         );
+        if (!forge.isEmpty()) {
+            context.text(client.font, Component.literal(forge).setStyle(Style.EMPTY.withColor(textColor)),
+                itemNameX + client.font.width(itemName), y + 4, 0xFFFFFFFF, false);
+        }
 
         y += 16;
 

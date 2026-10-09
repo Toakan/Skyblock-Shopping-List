@@ -45,6 +45,7 @@ The HUD (`H` to toggle) shows:
 - One tree per recipe.
 - **Craftable**: intermediates you can make right now.
 - **Forging**: items cooking in your Dwarven Forge that the list needs, with time left. Updated when you open The Forge.
+- **Forge times**: rows made in the Forge show how long is still ahead, e.g. `Titanium Drill DR-X455 [25hrs]`: the row's own forge time after the slowest forge step it waits on (Forge slots run side by side). Items cooking now count down from their real finish time. Times include your **Quick Forge** perk (read when you open Heart of the Mountain) and Cole's **Molten Forge** when he is mayor or minister. Appearance > Forge times: Every row, Top level only, or Off. Long names are cut short so the time always shows.
 
 Recipes cover crafting, the Dwarven Forge and NPC shop purchases (for items with no crafting or forge recipe) and Kat pet upgrades, so things like the **Golden Dragon (Legendary)** (500M coins, 50 Enchanted Gold Block and one of each Perfect gem) can go on the list. Pets are listed as "<Pet> (<Rarity>)"; a pet upgrade needs the same pet one rarity lower. Pets you own count once they are in your inventory, a backpack or the ender chest, or after you have opened each page of your Pets menu (`/pets`).
 
@@ -74,6 +75,8 @@ Skyblock Shopping List is designed to stay within the [Hypixel Allowed Modificat
 - It does not automate anything: no clicking, crafting, moving items or opening menus for you.
 - The HUD only shows your own items and recipe arithmetic.
 
+Outside the game connection it downloads recipes from the NEU repository, and at most once an hour while you are on SkyBlock reads Hypixel's public, keyless election data (`api.hypixel.net/v2/resources/skyblock/election`) to know whether Cole's Molten Forge perk is active.
+
 As Hypixel states, every modification is used at your own risk.
 
 ## Where data is stored
@@ -84,10 +87,12 @@ Everything lives in `config/skyblock-shopping-list/` inside your Minecraft folde
 - `hud_style.json`: your Appearance settings
 - `presets/`: your saved HUD presets, one file each (share them by sending the file or a share code); kept by a data reset
 - `forge.json`: what was cooking in the Forge when you last opened it
+- `forge_speed.json`: your Quick Forge % and the current mayor forge bonus
 - `widget_config.json`: shopping list, HUD position and size, expanded nodes and settings
 - `forging.json`, `gemstone_recipes.json`: built-in fallback recipes
 - `recipes_remote.json`, `recipes_remote_forge.json`, `recipes_remote_shop.json`: crafting, forge and NPC shop recipes parsed from the NEU repository
 - `item_names.json`: SkyBlock item ID to name table
+- `forge_times.json`: base forge time of each forge item, from the NEU repository
 - `remote_sources.json`, `remote_sources_meta.json`: recipe source list and download cache state
 - `neu-repo-extracted/`: the unpacked NEU repository, only while it is being parsed (deleted afterwards)
 
