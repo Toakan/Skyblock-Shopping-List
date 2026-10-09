@@ -22,6 +22,7 @@ import net.minecraft.client.gui.screens.options.controls.KeyBindsScreen;
 import net.minecraft.network.chat.Component;
 
 import java.awt.Color;
+import java.io.IOException;
 import java.util.List;
 import java.util.Locale;
 import java.util.function.BiConsumer;
@@ -381,7 +382,12 @@ public final class ConfigScreen {
                         + "is taken)." + saveFirst))
                 .action((screen, button) -> {
                     presetName = name.pendingValue();
-                    chosenPreset = HudPresets.save(presetName);
+                    try {
+                        chosenPreset = HudPresets.save(presetName);
+                    } catch (IOException e) {
+                        HudPresets.toast("Preset not saved", "The file couldn't be written; see the log.");
+                        return;
+                    }
                     HudPresets.toast("Preset saved", chosenPreset);
                     reopen.run();
                 })
@@ -403,7 +409,13 @@ public final class ConfigScreen {
                     "Reads a share code from the clipboard, saves it as a preset and switches to it. Your current "
                         + "look is kept as \"" + HudPresets.BACKUP_NAME + "\" first."))
                 .action((screen, button) -> {
-                    String imported = HudPresets.pasteCode();
+                    String imported;
+                    try {
+                        imported = HudPresets.pasteCode();
+                    } catch (IOException e) {
+                        HudPresets.toast("Preset not saved", "The file couldn't be written; see the log.");
+                        return;
+                    }
                     if (imported == null) {
                         HudPresets.toast("No share code", "The clipboard doesn't hold a " + InventoryReader.NAME + " code.");
                         return;

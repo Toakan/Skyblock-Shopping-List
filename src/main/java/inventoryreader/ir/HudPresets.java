@@ -150,10 +150,10 @@ public final class HudPresets {
         return name != null && builtIns().containsKey(name);
     }
 
-    /** Saves the current setup under {@code name}, made unique; returns the name used. */
-    public static String save(String name) {
+    /** Saves the current setup under {@code name}, made unique; returns the name used. Throws when the file can't be written. */
+    public static String save(String name) throws IOException {
         String unique = uniqueName(name, "Preset");
-        write(capture(unique));
+        writeOrThrow(capture(unique));
         return unique;
     }
 
@@ -202,13 +202,14 @@ public final class HudPresets {
 
     /**
      * Reads a share code from the clipboard, saves it as a preset and applies it. Returns the saved name, or null
-     * (with nothing changed) when the clipboard holds no valid code.
+     * (with nothing changed) when the clipboard holds no valid code. Throws, with the look unchanged, when the
+     * preset can't be saved.
      */
-    public static String pasteCode() {
+    public static String pasteCode() throws IOException {
         Preset preset = decode(Minecraft.getInstance().keyboardHandler.getClipboard());
         if (preset == null) return null;
         preset.name = uniqueName(preset.name, "Imported");
-        write(preset);
+        writeOrThrow(preset);
         apply(preset);
         return preset.name;
     }
@@ -256,9 +257,15 @@ public final class HudPresets {
         return presets;
     }
 
-    private static void write(Preset preset) {
-        JsonFiles.write(fileFor(preset.name), preset);
+    /** False when the file could not be written (the error is logged). */
+    private static boolean write(Preset preset) {
+        boolean written = JsonFiles.write(fileFor(preset.name), preset);
         namesChanged();
+        return written;
+    }
+
+    private static void writeOrThrow(Preset preset) throws IOException {
+        if (!write(preset)) throw new IOException("Could not write preset " + preset.name);
     }
 
     /** File name from the preset name: letters, digits, spaces and a few marks only, so names can't leave the folder. */
