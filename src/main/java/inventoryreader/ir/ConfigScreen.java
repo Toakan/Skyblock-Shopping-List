@@ -239,6 +239,10 @@ public final class ConfigScreen {
                     s -> s.showForging, (s, v) -> s.showForging = v))
                 .option(placement("Forging panel", d.forgingPlacement,
                     s -> s.forgingPlacement, (s, v) -> s.forgingPlacement = v))
+                .option(toggle("Recipe locks", "Show a padlock after rows you still need to make whose recipe has to be "
+                    + "unlocked first (a collection, HotM or slayer level). Hover the row in the List tab to see what it "
+                    + "needs. Your own unlocks aren't read, so it shows even when you have them.", d.showRequirements,
+                    s -> s.showRequirements, (s, v) -> s.showRequirements = v))
                 .option(toggle("NPC price section", "Show at the bottom what every raw material on the list costs to "
                     + "buy from NPCs, and what NPCs pay for it. Only coin prices; items no NPC sells or buys are left out "
                     + "(the item count shows how many have a price).", d.showNpcPrice,

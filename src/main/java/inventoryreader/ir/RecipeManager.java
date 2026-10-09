@@ -24,6 +24,8 @@ public class RecipeManager {
     private volatile Map<String, String> types = Collections.emptyMap();
     /** The sack that holds each sack item ("Enchanted Mining Sack"), from the NEU sack list. */
     private volatile Map<String, String> sacks = Collections.emptyMap();
+    /** What unlocks each recipe ("Coal III", "HotM 2"), from NEU's crafttext. */
+    private volatile Map<String, String> requirements = Collections.emptyMap();
     /** Changes every time the recipes are (re)loaded, so the HUD knows to recompute. */
     private volatile long version = 0;
 
@@ -94,6 +96,9 @@ public class RecipeManager {
             Map<String, String> itemSacks = JsonFiles.read(FilePathManager.ITEM_SACKS_JSON,
                 new com.google.gson.reflect.TypeToken<Map<String, String>>(){}.getType());
             sacks = itemSacks == null ? Collections.emptyMap() : Collections.unmodifiableMap(new HashMap<>(itemSacks));
+            Map<String, String> itemRequirements = JsonFiles.read(FilePathManager.ITEM_REQUIREMENTS_JSON,
+                new com.google.gson.reflect.TypeToken<Map<String, String>>(){}.getType());
+            requirements = itemRequirements == null ? Collections.emptyMap() : Collections.unmodifiableMap(new HashMap<>(itemRequirements));
             version++;
         } catch (IOException | JsonParseException e) {
             InventoryReader.LOGGER.error("Failed to load recipes", e);
@@ -152,6 +157,11 @@ public class RecipeManager {
     /** Upper-case item type such as "ACCESSORY" or "DUNGEON HELMET", or "" for plain materials and unknown items. */
     public String getType(String name) {
         return types.getOrDefault(name, "");
+    }
+
+    /** What unlocks the recipe for {@code name} ("Coal III", "HotM 2"), or "" when nothing is needed or known. */
+    public String getRequirement(String name) {
+        return requirements.getOrDefault(name, "");
     }
 
     /** The sack that holds {@code name} ("Enchanted Mining Sack"), or "" when it isn't a sack item. */

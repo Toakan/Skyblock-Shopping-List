@@ -625,11 +625,20 @@ public class ShoppingListScreen extends Screen {
         // Long names are cut with "..." so the forge time (if any) always fits.
         String forge = SandboxWidget.forgeText(node, level);
         Component tag = forge.isEmpty() ? Component.empty() : style.text(forge, nameColor, false);
+        String requirement = SandboxWidget.lockRequirement(node, hasEnough);
+        int lockWidth = requirement.isEmpty() ? 0 : SandboxWidget.LOCK_WIDTH;
         int nameX = amountX + font.width(amount);
-        int room = rowX + nodeWidth - 4 - nameX - font.width(tag);
+        int room = rowX + nodeWidth - 4 - nameX - font.width(tag) - lockWidth;
         Component name = SandboxWidget.fitName(font, style, node.name, nameColor, bold, room);
         context.text(font, name, nameX, y + 4, 0xFFFFFFFF, style.textShadow);
         context.text(font, tag, nameX + font.width(name), y + 4, 0xFFFFFFFF, style.textShadow);
+        if (lockWidth > 0) {
+            SandboxWidget.drawLock(context, nameX + font.width(name) + font.width(tag), y + 4, nameColor);
+            // Only inside the scrolled preview box, so a row scrolled out of view never shows a tooltip.
+            boolean hovered = mouseX >= rowX && mouseX <= rowX + nodeWidth && mouseY >= y && mouseY <= y + 16
+                && mouseY >= treeViewY && mouseY <= treeViewY + treeViewHeight;
+            if (hovered) context.setTooltipForNextFrame(font, Component.literal("Requires: " + requirement), mouseX, mouseY);
+        }
 
         y += 16;
 

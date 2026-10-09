@@ -12,6 +12,7 @@ Built with Ironman accounts in mind, but just as useful on a regular profile for
 - **Per-profile data:** each SkyBlock profile keeps its own counts and shopping list, and switching profile switches them with it.
 - **Craftable:** intermediates you can make right now.
 - **Forging:** items cooking in your Dwarven Forge that the list needs, with time left.
+- **Recipe locks:** a padlock on rows whose recipe needs a collection, HotM or slayer unlock; hover it in the List tab to see what.
 - **NPC price:** a bottom line showing what the whole list costs to buy from NPCs and what NPCs pay for it, with how many items have an NPC price.
 - **Forge times:** forge rows show how long is still ahead, e.g. `Titanium Drill DR-X455 [25hrs]`, taking your Quick Forge perk and Cole's Molten Forge into account.
 - **Recipes beyond the crafting table:** Dwarven Forge, NPC shop purchases and Kat pet upgrades. Even the Golden Dragon (Legendary), with its 500M coins, Enchanted Gold Blocks and Perfect gems, can go on the list.

@@ -42,7 +42,7 @@ public final class RemoteRecipeFetcher {
      * Bump when the way recipes are extracted from the repo changes, so cached snapshots are rebuilt
      * even if the remote reports "not modified".
      */
-    private static final String PARSER_VERSION = "10";
+    private static final String PARSER_VERSION = "11";
     /** NEU's pseudo item for coin costs in shop recipes. */
     private static final String COIN_ID = "SKYBLOCK_COIN";
     public static final String COINS_NAME = "Coins";
@@ -286,6 +286,17 @@ public final class RemoteRecipeFetcher {
             changed |= writeSnapshot(itemTypes, FilePathManager.ITEM_TYPES_JSON, meta);
             changed |= writeSnapshot(itemSacks(repoExtracted, recipeNameById), FilePathManager.ITEM_SACKS_JSON, meta);
             changed |= writeSnapshot(recipeNameById, FilePathManager.ITEM_NAMES_JSON, meta);
+            // What unlocks each recipe the mod uses, e.g. "Requires: Coal III" -> "Coal III".
+            Map<String, String> requirements = new LinkedHashMap<>();
+            for (NEUItem item : neuRepo.getItems().getItems().values()) {
+                String id = item.getSkyblockItemId();
+                String text = stripMC(item.getCrafttext());
+                if (id == null || text == null || text.isBlank()) continue;
+                if (!craftingByInternal.containsKey(id) && !forgeByInternal.containsKey(id)) continue;
+                text = text.replaceFirst("(?i)^\\s*requires:?\\s*", "").trim();
+                if (!text.isEmpty()) requirements.putIfAbsent(recipeNameById.getOrDefault(id, id), text);
+            }
+            changed |= writeSnapshot(requirements, FilePathManager.ITEM_REQUIREMENTS_JSON, meta);
             Map<String, Double> buyPrices = new LinkedHashMap<>();
             buyPriceByInternal.forEach((id, coins) -> buyPrices.put(recipeNameById.getOrDefault(id, id), coins));
             changed |= writeSnapshot(buyPrices, FilePathManager.NPC_BUY_PRICES_JSON, meta);
