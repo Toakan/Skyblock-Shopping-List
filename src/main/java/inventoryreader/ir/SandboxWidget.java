@@ -127,10 +127,23 @@ public class SandboxWidget {
     public boolean isEnabled() {
         return this.enabled;
     }
-    public enum AddResult { ADDED, INCREASED, FULL }
+    public enum AddResult { ADDED, INCREASED, FULL, WAITING }
+    public static final String WAITING_MESSAGE = "Waiting for your SkyBlock profile, try again in a moment";
+
+    /**
+     * False for the few seconds after a server change on SkyBlock, before Hypixel names the profile: the list shown
+     * still belongs to the profile being left, so an edit then would land there. Tells the player why.
+     */
+    private static boolean editable() {
+        if (!SkyblockDetector.isOnSkyblock() || ProfileManager.isReady()) return true;
+        Minecraft client = Minecraft.getInstance();
+        if (client.player != null) client.player.sendOverlayMessage(Component.literal(WAITING_MESSAGE));
+        return false;
+    }
 
     /** Adds a recipe, or raises its amount if it is already on the list. Refused when the list is full. */
     public synchronized AddResult addToList(String recipe, int amount) {
+        if (!editable()) return AddResult.WAITING;
         amount = Math.max(1, amount);
         for (int i = 0; i < shoppingList.size(); i++) {
             ShoppingListEntry e = shoppingList.get(i);
@@ -147,6 +160,7 @@ public class SandboxWidget {
         return AddResult.ADDED;
     }
     public synchronized void setEntryAmount(String recipe, int amount) {
+        if (!editable()) return;
         for (int i = 0; i < shoppingList.size(); i++) {
             ShoppingListEntry e = shoppingList.get(i);
             if (e.recipe.equals(recipe) && e.amount != Math.max(1, amount)) {
@@ -158,6 +172,7 @@ public class SandboxWidget {
     }
     /** Switches one entry between Have total (held copies count) and Add more (make this many more). */
     public synchronized void setEntryHaveTotal(String recipe, boolean haveTotal) {
+        if (!editable()) return;
         for (int i = 0; i < shoppingList.size(); i++) {
             ShoppingListEntry e = shoppingList.get(i);
             if (e.recipe.equals(recipe) && e.isHaveTotal() != haveTotal) {
@@ -174,6 +189,7 @@ public class SandboxWidget {
      * stock first.
      */
     public synchronized void moveEntry(String recipe, int delta) {
+        if (!editable()) return;
         for (int i = 0; i < shoppingList.size(); i++) {
             if (!shoppingList.get(i).recipe.equals(recipe)) continue;
             int target = i + delta;
@@ -186,6 +202,7 @@ public class SandboxWidget {
         }
     }
     public synchronized void removeFromList(String recipe) {
+        if (!editable()) return;
         if (shoppingList.removeIf(e -> e.recipe.equals(recipe))) listChanged();
     }
     /** Auto-remove: takes achieved entries off the list the update was worked out for, if it is still current. */
@@ -194,6 +211,7 @@ public class SandboxWidget {
         if (shoppingList.removeIf(e -> recipes.contains(e.recipe))) listChanged();
     }
     public synchronized void clearList() {
+        if (!editable()) return;
         if (shoppingList.isEmpty()) return;
         shoppingList.clear();
         listChanged();

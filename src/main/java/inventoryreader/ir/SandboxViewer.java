@@ -171,6 +171,7 @@ public class SandboxViewer extends Screen {
             case ADDED -> "Added " + craftAmount + "× " + selectedRecipe + " to the shopping list";
             case INCREASED -> "Added " + craftAmount + " more " + selectedRecipe;
             case FULL -> "Shopping list full (" + widget.getShoppingList().size() + "/" + widget.getMaxRecipes() + ")";
+            case WAITING -> SandboxWidget.WAITING_MESSAGE;
         };
         if (client.player != null) client.player.sendOverlayMessage(Component.literal(message));
     }
