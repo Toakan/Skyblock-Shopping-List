@@ -1,6 +1,6 @@
 Pick the items you want to make, and a HUD shopping list shows what you can already craft and what you still need to gather. Skyblock Shopping List counts the items in your inventory, sacks, backpacks and ender chest, and works out every recipe tree down to its raw materials.
 
-Built with Ironman accounts in mind, but just as useful on a regular profile for keeping track of your stock and planning crafts.
+**Built for Ironman first, works for everyone.** No Bazaar, no Auction House: on Ironman everything is gathered or crafted yourself, so the mod is designed around that, from full recipe trees down to raw materials to NPC coin prices instead of Bazaar prices. Nothing is limited to Ironman, though; on a regular profile it tracks your stock and plans crafts just the same.
 
 **Coming from Inventory Reader?** This mod grew out of [Inventory Reader](https://github.com/Scholiboi/InventoryReader) by Scholiboi. Remove the old jar before installing; your data is moved to `config/skyblock-shopping-list/` automatically on first launch.
 
