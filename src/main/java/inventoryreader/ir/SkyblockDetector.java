@@ -10,13 +10,12 @@ import net.minecraft.client.Minecraft;
  * everywhere else, so lobbies and other servers never change the counts.
  *
  * <p>The official Hypixel Mod API is a required dependency: its location event decides. If it is somehow
- * missing at runtime, every server is treated as SkyBlock rather than never showing anything.
+ * missing at runtime, nothing counts as SkyBlock: tracking, the HUD and keys stay off rather than running on
+ * servers that may not be SkyBlock.
  */
 public final class SkyblockDetector {
     private static final String MOD_API_ID = "hypixel-mod-api";
 
-    /** True when the Mod API is missing: every server counts as SkyBlock. */
-    private static boolean alwaysOn = false;
     private static volatile boolean onSkyblock = false;
 
     private SkyblockDetector() {}
@@ -25,8 +24,7 @@ public final class SkyblockDetector {
         if (FabricLoader.getInstance().isModLoaded(MOD_API_ID)) {
             HypixelLocationListener.register();
         } else {
-            alwaysOn = true;
-            InventoryReader.LOGGER.warn("Hypixel Mod API not found; treating every server as SkyBlock");
+            InventoryReader.LOGGER.warn("Hypixel Mod API not found; SkyBlock detection unavailable, so tracking, HUD and keys stay off");
         }
         ClientTickEvents.START_CLIENT_TICK.register(SkyblockDetector::tick);
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> set(false, null));
@@ -51,7 +49,7 @@ public final class SkyblockDetector {
 
     private static void tick(Minecraft client) {
         // The dev client runs in singleplayer, where the Mod API sends nothing.
-        if (alwaysOn || FabricLoader.getInstance().isDevelopmentEnvironment()) {
+        if (FabricLoader.getInstance().isDevelopmentEnvironment()) {
             onSkyblock = client.level != null;
         }
     }
