@@ -1,0 +1,39 @@
+name: Feature request
+description: Suggest something new or a change to an existing feature.
+title: "Feature request: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The mod is built for Ironman first but works for everyone. It stays read-only and client-side (see
+        "Hypixel rules" in the readme): it never sends packets, chat or commands and never automates clicks
+        or item movement, so requests that need those can't be added.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What should the mod do?
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: What are you trying to plan or track, and what gets in the way today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: How it could work, where it would show (HUD, List tab, a menu...), and where the data could come from.
+    validations:
+      required: false
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes or blockers
+      description: Anything already known, e.g. game text that needs checking in game, or alternatives you considered.
+    validations:
+      required: false
