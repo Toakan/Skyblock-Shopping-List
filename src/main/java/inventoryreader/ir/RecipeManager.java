@@ -159,11 +159,6 @@ public class RecipeManager {
         return sacks.getOrDefault(name, "");
     }
 
-    /** Every sack item, item name to sack name. Read only. */
-    public Map<String, String> getItemSacks() {
-        return sacks;
-    }
-
     /** Whether the recipe for {@code name} has a direct ingredient whose name contains {@code lowerTerm}. */
     public boolean usesIngredient(String name, String lowerTerm) {
         Map<String, Integer> recipe = recipes.get(name);
