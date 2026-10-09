@@ -42,10 +42,10 @@ public final class ConfigScreen {
             .category(ConfigCategory.createBuilder()
                 .name(Component.literal("HUD"))
                 .option(toggle("HUD", "Show the shopping list on screen. Also toggled with H.",
-                    widget::isEnabled, widget::setEnabled))
+                    false, widget::isEnabled, widget::setEnabled))
                 .option(toggle("Total section",
                     "Show a Total at the top of the HUD with every raw material still needed across all recipes.",
-                    widget::isShowTotal, widget::setShowTotal))
+                    true, widget::isShowTotal, widget::setShowTotal))
                 .option(Option.<SandboxWidget.TotalMode>createBuilder()
                     .name(Component.literal("Total lists"))
                     .description(OptionDescription.of(Component.literal(
@@ -82,14 +82,14 @@ public final class ConfigScreen {
             .category(ConfigCategory.createBuilder()
                 .name(Component.literal("Notifications"))
                 .option(toggle("Pop-ups", "Pop-up when a recipe is ready to craft, and when you have made it.",
-                    widget::isNotifications, widget::setNotifications))
+                    true, widget::isNotifications, widget::setNotifications))
                 .option(toggle("Auto-remove",
                     "Take a recipe off the list once you have made the amount you asked for.",
-                    widget::isAutoRemove, widget::setAutoRemove))
+                    true, widget::isAutoRemove, widget::setAutoRemove))
                 .option(toggle("Sack reminder",
                     "Chat warning when your sacks haven't been opened for an hour. Between opens, sack counts "
                         + "follow the [Sacks] chat summaries and can drift.",
-                    widget::isStaleSackWarning, widget::setStaleSackWarning))
+                    true, widget::isStaleSackWarning, widget::setStaleSackWarning))
                 .build())
             .category(ConfigCategory.createBuilder()
                 .name(Component.literal("Controls"))
@@ -506,11 +506,13 @@ public final class ConfigScreen {
             def, get, set);
     }
 
-    private static Option<Boolean> toggle(String name, String description, Supplier<Boolean> getter, Consumer<Boolean> setter) {
+    /** A widget setting; {@code def} is what the reset button sets, the same as the widget's own default. */
+    private static Option<Boolean> toggle(String name, String description, boolean def, Supplier<Boolean> getter,
+                                          Consumer<Boolean> setter) {
         return Option.<Boolean>createBuilder()
             .name(Component.literal(name))
             .description(OptionDescription.of(Component.literal(description)))
-            .binding(true, getter, setter)
+            .binding(def, getter, setter)
             .controller(opt -> BooleanControllerBuilder.create(opt).onOffFormatter().coloured(true))
             .build();
     }
