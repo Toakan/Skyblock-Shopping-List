@@ -17,7 +17,6 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.List;
-import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -28,7 +27,7 @@ import java.util.regex.Pattern;
  * Hypixel's public election resource, at most once an hour). The two stack additively.
  */
 public final class ForgeSpeed {
-    private static final Pattern QUICK_FORGE = Pattern.compile("forge by ([\\d.]+)%");
+    private static final Pattern QUICK_FORGE = Pattern.compile("forge,?\\s+by ([\\d.]+)%");
     private static final Pattern PERCENT = Pattern.compile("([\\d.]+)%");
     private static final String ELECTION_URL = "https://api.hypixel.net/v2/resources/skyblock/election";
     private static final String MOLTEN_FORGE = "Molten Forge";
@@ -72,15 +71,11 @@ public final class ForgeSpeed {
                 loggedQuickForge = true;
                 InventoryReader.LOGGER.info("Quick Forge lore: {}", lines);
             }
-            double percent = 0;
-            boolean disabled = false;
-            for (String line : lines) {
-                Matcher m = QUICK_FORGE.matcher(line);
-                if (m.find()) percent = parse(m.group(1));
-                if (line.toUpperCase(Locale.ROOT).contains("DISABLED")) disabled = true;
-            }
-            // A perk switched off in HOTM still shows its value but does nothing.
-            if (disabled) percent = 0;
+            // The lore wraps mid-sentence ("...to forge," / "by 30%."), so match across the joined lines.
+            Matcher m = QUICK_FORGE.matcher(String.join(" ", lines));
+            double percent = m.find() ? parse(m.group(1)) : 0;
+            // The state is a line of its own, "ENABLED" or "DISABLED"; a switched-off perk does nothing.
+            if (lines.stream().anyMatch(line -> line.trim().equalsIgnoreCase("DISABLED"))) percent = 0;
             Data d = get();
             if (d.quickForge != percent) {
                 d.quickForge = percent;
