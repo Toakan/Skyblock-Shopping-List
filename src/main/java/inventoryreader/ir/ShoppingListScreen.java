@@ -27,6 +27,9 @@ public class ShoppingListScreen extends Screen {
     /** Recipe rows that fit between the search box and the bottom buttons; set in init(). */
     private int MAX_RECIPES_SHOWN = 10;
     private static final int LIST_X = 20;
+    /** Top of the first recipe row; rows are {@link #ROW_HEIGHT} tall. Drawing and clicks both use these. */
+    private static final int LIST_TOP = 85;
+    private static final int ROW_HEIGHT = 20;
     /** Left column (search + recipe list) right edge; set in init() from the screen width. */
     private int listRight = 270;
     private String searchText = "";
@@ -75,7 +78,7 @@ public class ShoppingListScreen extends Screen {
         int listWidth = Math.max(150, Math.min(250, (width - 60) / 2));
         listRight = LIST_X + listWidth;
         treeViewX = listRight + 20;
-        MAX_RECIPES_SHOWN = Math.max(3, (height - 40 - 85 - 15) / 20);
+        MAX_RECIPES_SHOWN = Math.max(3, (height - 40 - LIST_TOP - 15) / ROW_HEIGHT);
         searchField = new EditBox(font, LIST_X, 55, listWidth - 54, 20, Component.literal(""));
         searchField.setMaxLength(50);
         searchField.setHint(Component.literal("Search recipes..."));
@@ -222,8 +225,8 @@ public class ShoppingListScreen extends Screen {
         context.text(font,
             Component.literal("Preview").setStyle(Style.EMPTY.withColor(ChatFormatting.GOLD).withBold(true)),
             treeViewX, treeViewY - 13, GOLD, false);
-        int yPos = 85;
-        int itemHeight = 20;
+        int yPos = LIST_TOP;
+        int itemHeight = ROW_HEIGHT;
         int endIndex = Math.min(scrollOffset + MAX_RECIPES_SHOWN, filteredRecipes.size());
         java.util.Set<String> inList = builtRowSet;
 
@@ -408,7 +411,7 @@ public class ShoppingListScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
-        if (mouseX >= LIST_X && mouseX <= listRight && mouseY >= 80) {
+        if (mouseX >= LIST_X && mouseX <= listRight && mouseY >= LIST_TOP - 5) {
             // Wheel down (negative) moves the list down, matching the tree view and vanilla lists.
             if (verticalAmount > 0 && scrollOffset > 0) {
                 scrollOffset--;
@@ -437,8 +440,8 @@ public class ShoppingListScreen extends Screen {
     public boolean mouseClicked(MouseButtonEvent ctx, boolean doubleClick) {
         double mouseX = ctx.x();
         double mouseY = ctx.y();
-        if (mouseX >= LIST_X && mouseX <= listRight && mouseY >= 80 && mouseY <= 85 + MAX_RECIPES_SHOWN * 20) {
-            int recipeIndex = (int) ((mouseY - 80) / 20);
+        if (mouseX >= LIST_X && mouseX <= listRight && mouseY >= LIST_TOP && mouseY < LIST_TOP + MAX_RECIPES_SHOWN * ROW_HEIGHT) {
+            int recipeIndex = (int) ((mouseY - LIST_TOP) / ROW_HEIGHT);
             int actualIndex = scrollOffset + recipeIndex;
             if (actualIndex >= 0 && actualIndex < filteredRecipes.size() && recipeIndex < MAX_RECIPES_SHOWN) {
                 String recipe = filteredRecipes.get(actualIndex);
