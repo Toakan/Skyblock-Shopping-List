@@ -53,8 +53,7 @@ public final class CoinTracker {
 
     /** Called when a menu with "Bank" in its title is opened. */
     public static void readBank(AbstractContainerMenu menu, String title) {
-        for (int i = 0; i < menu.slots.size() - 36; i++) {
-            ItemStack stack = menu.slots.get(i).getItem();
+        for (ItemStack stack : MenuSlots.containerStacks(menu)) {
             ItemLore lore = stack.get(DataComponents.LORE);
             if (lore == null) continue;
             for (Component line : lore.lines()) {

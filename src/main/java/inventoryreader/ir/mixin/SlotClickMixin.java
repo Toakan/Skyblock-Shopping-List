@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * Re-reads backpack and ender chest contents after the player moves items in them. Observes the click
+ * Re-reads tracked storage menus (backpacks, ender chest, ...) after the player moves items in them. Observes the click
  * only: it never cancels or changes it.
  */
 @Mixin(AbstractContainerMenu.class)
@@ -27,7 +27,8 @@ public abstract class SlotClickMixin {
         Screen screen = client.gui.screen();
         if (screen == null) return;
         String title = screen.getTitle().getString();
-        if (title.contains("Backpack") || title.contains("Ender Chest")) {
+        // Same menus as the regular re-read; this just updates right after a click instead of up to 10 ticks later.
+        if (StorageReader.isTrackedContainer(title)) {
             StorageReader.getInstance().saveContainerContents((AbstractContainerMenu) (Object) this, title);
         }
     }

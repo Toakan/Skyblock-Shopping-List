@@ -47,7 +47,7 @@ public class ShoppingListScreen extends Screen {
     private int treeViewHeight = 300;
     private int treeScrollOffset = 0;
     private static final int RECIPE_LEVEL_INDENT = 10;
-    private static final int GOLD = 0xFFFFB728;
+    private static final int GOLD = MenuTabs.GOLD;
 
     public ShoppingListScreen() {
         super(Component.literal(InventoryReader.NAME));

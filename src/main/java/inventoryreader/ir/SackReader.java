@@ -9,7 +9,6 @@ import java.util.regex.Pattern;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ItemLore;
 
@@ -77,11 +76,7 @@ public class SackReader {
         setNeedsReminder(false);
         Map<String, Integer> current = new LinkedHashMap<>();
         boolean gemstoneSack = title.contains("Gemstone");
-        List<Slot> slots = handler.slots;
-        // The last 36 slots are the player's own inventory.
-        for (int i = 0; i < slots.size() - 36; i++) {
-            ItemStack stack = slots.get(i).getItem();
-            if (stack.isEmpty()) continue;
+        for (ItemStack stack : MenuSlots.containerStacks(handler)) {
             ItemLore lore = stack.get(DataComponents.LORE);
             if (lore == null) continue;
             if (gemstoneSack) {
@@ -125,7 +120,7 @@ public class SackReader {
         for (Component line : lines) {
             Matcher m = STORED.matcher(line.getString());
             if (m.find()) {
-                Integer count = parseCount(m.group(1));
+                Integer count = Counts.parse(m.group(1));
                 if (count != null) out.put(itemName, count);
                 return;
             }
@@ -139,17 +134,9 @@ public class SackReader {
         for (Component line : lines) {
             Matcher m = GEMSTONE_LINE.matcher(line.getString());
             if (m.find() && GEMSTONE_RARITIES.contains(m.group(1))) {
-                Integer count = parseCount(m.group(2));
+                Integer count = Counts.parse(m.group(2));
                 if (count != null) out.put(m.group(1) + " " + gem, count);
             }
-        }
-    }
-
-    private static Integer parseCount(String s) {
-        try {
-            return Integer.parseInt(s.replace(",", "").trim());
-        } catch (NumberFormatException e) {
-            return null;
         }
     }
 }

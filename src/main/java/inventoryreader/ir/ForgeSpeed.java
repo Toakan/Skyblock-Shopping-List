@@ -7,12 +7,10 @@ import com.google.gson.JsonParser;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ItemLore;
 
 import java.net.URI;
-import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
@@ -34,10 +32,6 @@ public final class ForgeSpeed {
     /** Molten Forge's cut if its description can't be read. */
     private static final double MOLTEN_FORGE_DEFAULT = 25;
     private static final long MAYOR_REFRESH_MS = 60 * 60 * 1000L;
-    private static final HttpClient HTTP = HttpClient.newBuilder()
-        .connectTimeout(Duration.ofSeconds(6))
-        .followRedirects(HttpClient.Redirect.NORMAL)
-        .build();
     private static final AtomicBoolean FETCHING = new AtomicBoolean(false);
 
     /** Saved to forge_speed.json. */
@@ -59,11 +53,8 @@ public final class ForgeSpeed {
 
     /** Reads the Quick Forge perk from the open Heart of the Mountain menu, if it is on this page. */
     public static void readHotm(AbstractContainerMenu menu) {
-        List<Slot> slots = menu.slots;
-        // The last 36 slots are the player's own inventory.
-        for (int i = 0; i < slots.size() - 36; i++) {
-            ItemStack stack = slots.get(i).getItem();
-            if (stack.isEmpty() || !ItemNames.clean(stack.getHoverName().getString()).equals("Quick Forge")) continue;
+        for (ItemStack stack : MenuSlots.containerStacks(menu)) {
+            if (!ItemNames.clean(stack.getHoverName().getString()).equals("Quick Forge")) continue;
             ItemLore lore = stack.get(DataComponents.LORE);
             if (lore == null) return;
             List<String> lines = lore.lines().stream().map(Component::getString).toList();
@@ -91,7 +82,7 @@ public final class ForgeSpeed {
         if (System.currentTimeMillis() - get().mayorCheckedAt < MAYOR_REFRESH_MS || !SkyblockDetector.isOnSkyblock()) return;
         if (!FETCHING.compareAndSet(false, true)) return;
         HttpRequest request = HttpRequest.newBuilder(URI.create(ELECTION_URL)).timeout(Duration.ofSeconds(10)).GET().build();
-        HTTP.sendAsync(request, HttpResponse.BodyHandlers.ofString()).whenComplete((response, error) -> {
+        Http.CLIENT.sendAsync(request, HttpResponse.BodyHandlers.ofString()).whenComplete((response, error) -> {
             try {
                 // Failures are retried at the next hourly check; the last known bonus stays in use.
                 Double bonus = null;

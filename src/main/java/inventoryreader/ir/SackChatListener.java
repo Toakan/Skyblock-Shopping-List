@@ -56,7 +56,7 @@ public final class SackChatListener {
                 else if (line.contains("Added")) sectionSign = 1;
                 Matcher m = ITEM_LINE.matcher(line);
                 if (!m.matches()) continue;
-                Integer count = parseCount(m.group(2));
+                Integer count = Counts.parse(m.group(2));
                 if (count == null || count == 0) continue;
                 int sign = m.group(1).isEmpty() ? sectionSign : (m.group(1).equals("-") ? -1 : 1);
                 deltas.merge(ItemNames.clean(m.group(3)), sign * count, Integer::sum);
@@ -82,11 +82,4 @@ public final class SackChatListener {
         }
     }
 
-    private static Integer parseCount(String s) {
-        try {
-            return Integer.parseInt(s.replace(",", ""));
-        } catch (NumberFormatException e) {
-            return null;
-        }
-    }
 }

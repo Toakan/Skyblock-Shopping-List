@@ -4,7 +4,6 @@ import com.google.gson.reflect.TypeToken;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ItemLore;
 
@@ -51,11 +50,7 @@ public final class ForgeTracker {
     public static void readForge(AbstractContainerMenu menu) {
         long now = System.currentTimeMillis();
         List<Entry> found = new ArrayList<>();
-        List<Slot> slots = menu.slots;
-        // The last 36 slots are the player's own inventory.
-        for (int i = 0; i < slots.size() - 36; i++) {
-            ItemStack stack = slots.get(i).getItem();
-            if (stack.isEmpty()) continue;
+        for (ItemStack stack : MenuSlots.containerStacks(menu)) {
             ItemLore lore = stack.get(DataComponents.LORE);
             if (lore == null) continue;
             String making = null;

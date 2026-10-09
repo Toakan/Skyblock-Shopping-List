@@ -108,14 +108,7 @@ public class InventoryReaderClient implements ClientModInitializer {
         }
         if (current.equals(lastInventory)) return;
 
-        Map<String, Integer> changes = new HashMap<>();
-        current.forEach((name, count) -> {
-            int delta = count - lastInventory.getOrDefault(name, 0);
-            if (delta != 0) changes.put(name, delta);
-        });
-        lastInventory.forEach((name, count) -> {
-            if (!current.containsKey(name) && count != 0) changes.put(name, -count);
-        });
+        Map<String, Integer> changes = Counts.diff(lastInventory, current);
 
         lastInventory = current;
         Map<String, Map<String, Integer>> data = new HashMap<>();

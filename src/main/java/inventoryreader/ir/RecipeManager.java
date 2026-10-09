@@ -21,7 +21,7 @@ public class RecipeManager {
     private volatile Map<String, Integer> forgeSeconds = Collections.emptyMap();
 
     /** Recipe trees are acyclic after sanitising; this only stops pathological data from overflowing the stack. */
-    private static final int MAX_DEPTH = 64;
+    static final int MAX_DEPTH = 64;
 
     private RecipeManager() {}
 

@@ -16,10 +16,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
-import java.io.FileReader;
 import java.io.InputStream;
 import java.net.URI;
-import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
@@ -39,10 +37,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class RemoteRecipeFetcher {
     private static final Logger LOGGER = LoggerFactory.getLogger("IR-RemoteRecipeFetcher");
     private static final Gson GSON = new Gson();
-    private static final HttpClient HTTP = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(6))
-            .followRedirects(HttpClient.Redirect.NORMAL)
-            .build();
     public static final String DEFAULT_NEU_REPO_URL = "https://codeload.github.com/NotEnoughUpdates/NotEnoughUpdates-REPO/zip/refs/heads/master";
     /**
      * Bump when the way recipes are extracted from the repo changes, so cached snapshots are rebuilt
@@ -119,7 +113,7 @@ public final class RemoteRecipeFetcher {
                     .timeout(Duration.ofSeconds(15))
                     .GET();
             if (!etag.isEmpty()) b.header("If-None-Match", etag);
-            HttpResponse<String> resp = HTTP.send(b.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            HttpResponse<String> resp = inventoryreader.ir.Http.CLIENT.send(b.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             if (resp.statusCode() == 304) { inventoryreader.ir.InventoryReader.debug("Remote recipes not modified (ETag)"); return true; }
             if (resp.statusCode() / 100 != 2) { LOGGER.warn("Remote fetch HTTP {}", resp.statusCode()); return false; }
 
@@ -174,7 +168,7 @@ public final class RemoteRecipeFetcher {
                             .timeout(Duration.ofSeconds(30))
                             .GET();
                     if (!etag.isEmpty()) b.header("If-None-Match", etag);
-                    HttpResponse<java.io.InputStream> resp = HTTP.send(b.build(), HttpResponse.BodyHandlers.ofInputStream());
+                    HttpResponse<java.io.InputStream> resp = inventoryreader.ir.Http.CLIENT.send(b.build(), HttpResponse.BodyHandlers.ofInputStream());
                     if (resp.statusCode() / 100 != 2) {
                         resp.body().close();
                         if (resp.statusCode() == 304) { inventoryreader.ir.InventoryReader.debug("NEU ZIP not modified (ETag)"); return true; }
@@ -407,9 +401,8 @@ public final class RemoteRecipeFetcher {
     }
 
     private static List<Map<String, String>> readSources(File f) {
-        try (FileReader fr = new FileReader(f, StandardCharsets.UTF_8)) {
-            java.lang.reflect.Type t = new TypeToken<Map<String, Object>>(){}.getType();
-            Map<String, Object> root = GSON.fromJson(fr, t);
+        try {
+            Map<String, Object> root = inventoryreader.ir.JsonFiles.read(f, new TypeToken<Map<String, Object>>(){}.getType());
             Object arr = root == null ? null : root.get("sources");
             List<Map<String, String>> out = new ArrayList<>();
             if (arr instanceof List<?>) {
@@ -433,14 +426,8 @@ public final class RemoteRecipeFetcher {
     }
 
     private static Map<String, String> readMeta(File f) {
-        if (!f.exists()) return new LinkedHashMap<>();
-        try (FileReader fr = new FileReader(f, StandardCharsets.UTF_8)) {
-            java.lang.reflect.Type t = new TypeToken<Map<String, String>>(){}.getType();
-            Map<String, String> m = GSON.fromJson(fr, t);
-            return m == null ? new LinkedHashMap<>() : m;
-        } catch (Exception e) {
-            return new LinkedHashMap<>();
-        }
+        Map<String, String> m = inventoryreader.ir.JsonFiles.read(f, new TypeToken<Map<String, String>>(){}.getType());
+        return m == null ? new LinkedHashMap<>() : new LinkedHashMap<>(m);
     }
 
     private static void writeMeta(File f, Map<String, String> meta) {

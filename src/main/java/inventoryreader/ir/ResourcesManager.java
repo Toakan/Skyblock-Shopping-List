@@ -21,8 +21,6 @@ import java.util.concurrent.atomic.AtomicLong;
 public class ResourcesManager {
     private static final ResourcesManager INSTANCE = new ResourcesManager();
     private static final Type MAP_TYPE = new TypeToken<Map<String, Integer>>() {}.getType();
-    /** Recipe trees are acyclic after sanitising; this only stops pathological data from overflowing the stack. */
-    private static final int MAX_DEPTH = 64;
 
     private final AtomicLong version = new AtomicLong();
     private Map<String, Integer> resources;
@@ -334,7 +332,7 @@ public class ResourcesManager {
                             Map<String, Integer> highestPossibleResources, Map<String, Integer> currentAvailableResources,
                             Map<String, Integer> messages, int depth) {
         Map<String, Integer> recipe = forging.get(currentItem);
-        if (recipe == null || depth > MAX_DEPTH) return;
+        if (recipe == null || depth > RecipeManager.MAX_DEPTH) return;
         Map<String, Integer> madeResources = new LinkedHashMap<>();
         for (Map.Entry<String, Integer> entry : recipe.entrySet()) {
             String item = entry.getKey();
@@ -458,7 +456,7 @@ public class ResourcesManager {
         Map<String, Integer> recipe = forging.get(currentName);
         RecipeManager.RecipeNode node;
         // Held items (nothing missing, nothing to craft) have no steps left, so they are not expanded.
-        if (recipe == null || depth > MAX_DEPTH || missing + fromStock - fromHeld <= 0) {
+        if (recipe == null || depth > RecipeManager.MAX_DEPTH || missing + fromStock - fromHeld <= 0) {
             node = new RecipeManager.RecipeNode(currentName, missing, needed, Collections.emptyList());
         } else {
             List<RecipeManager.RecipeNode> ingredients = new ArrayList<>();

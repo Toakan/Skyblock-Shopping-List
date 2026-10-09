@@ -21,7 +21,7 @@ public class SandboxViewer extends Screen {
     private static final int SELECTED_BG = 0xFF5F7FA0;
     private static final int BORDER_COLOR = 0xFF555555;
     private static final int TITLE_BG = 0xFF2A4153;
-    private static final int GOLD = 0xFFFFB728;
+    private static final int GOLD = MenuTabs.GOLD;
     private static final int WHITE = 0xFFFFFFFF;
     private static final int TEXT_SECONDARY = 0xFFDDDDDD;
     private static final int SUCCESS_GREEN = 0xFF6EFF6E;
@@ -114,7 +114,8 @@ public class SandboxViewer extends Screen {
     public void extractBackground(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {}
 
 
-    private void initRecipeViewer() {
+    /** The recipe search box and the craft-amount box, shared by the Recipes and Forge tabs. */
+    private void addRecipeSearchAndAmount() {
         searchBox = new EditBox(this.font, 30, 56, 180, 18, Component.literal(""));
         searchBox.setHint(Component.literal("Search recipes..."));
         searchBox.setResponder(this::onRecipeSearchChanged);
@@ -124,6 +125,10 @@ public class SandboxViewer extends Screen {
         amountField.setValue(String.valueOf(craftAmount));
         amountField.setResponder(this::onAmountChanged);
         this.addRenderableWidget(amountField);
+    }
+
+    private void initRecipeViewer() {
+        addRecipeSearchAndAmount();
 
         this.addRenderableWidget(Button.builder(Component.literal("Add to list"), button -> addSelectedToList())
             .bounds(this.width - 110, 56, 100, 18).build());
@@ -138,15 +143,7 @@ public class SandboxViewer extends Screen {
             checkRecipeRequirements();
         }
 
-        searchBox = new EditBox(this.font, 30, 56, 180, 18, Component.literal(""));
-        searchBox.setHint(Component.literal("Search recipes..."));
-        searchBox.setResponder(this::onRecipeSearchChanged);
-        this.addRenderableWidget(searchBox);
-
-        amountField = new EditBox(this.font, 215, 56, 35, 18, Component.literal("1"));
-        amountField.setValue(String.valueOf(craftAmount));
-        amountField.setResponder(this::onAmountChanged);
-        this.addRenderableWidget(amountField);
+        addRecipeSearchAndAmount();
 
         this.addRenderableWidget(Button.builder(
             Component.literal(SandboxWidget.getInstance().isEnabled() ? "HUD: ON" : "HUD: OFF"),
@@ -636,87 +633,11 @@ public class SandboxViewer extends Screen {
         recipeCombinedAreaWidth = width;
         recipeCombinedAreaHeight = y + height - rightColumnY - 10;
 
-        context.fill(recipeCombinedAreaX, recipeCombinedAreaY, recipeCombinedAreaX + recipeCombinedAreaWidth, recipeCombinedAreaY + recipeCombinedAreaHeight, PANEL_BG);
-        context.outline(recipeCombinedAreaX, recipeCombinedAreaY, recipeCombinedAreaWidth, recipeCombinedAreaHeight, BORDER_COLOR);
-
-        int contentY = recipeCombinedAreaY + 10;
-        int headerH = 20;
-        int contentHeightMaterials;
-        {
-            int tmpY = contentY;
-            tmpY += headerH + 6;
-            int cardWidth = 180;
-            int cardsPerRow = Math.max(1, (width - 20) / cardWidth);
-            int materialRows = 0;
-            if (simpleRecipe != null && !simpleRecipe.isEmpty()) {
-                int materialCount = simpleRecipe.size();
-                materialRows = (materialCount + cardsPerRow - 1) / cardsPerRow;
-            }
-            tmpY += (simpleRecipe == null || simpleRecipe.isEmpty()) ? 24 : materialRows * 34 + 4;
-            contentHeightMaterials = tmpY - contentY;
-        }
-        int contentHeightTree;
-        {
-            int tmpY = contentY + contentHeightMaterials + 10;
-            tmpY += headerH + 6;
-            int dryEndY = renderRecipeTree(null, expandedRecipeTree, "", x + 15, tmpY + 4);
-            contentHeightTree = (dryEndY - tmpY) + 4;
-        }
-
-        int totalContentHeight = contentHeightMaterials + 10 + headerH + 6 + contentHeightTree;
-        recipeCombinedMaxScroll = Math.max(0, totalContentHeight - recipeCombinedAreaHeight + 10);
-        recipeCombinedScrollOffset = Math.max(0, Math.min(recipeCombinedScrollOffset, recipeCombinedMaxScroll));
-
-        context.enableScissor(recipeCombinedAreaX, recipeCombinedAreaY, recipeCombinedAreaX + recipeCombinedAreaWidth, recipeCombinedAreaY + recipeCombinedAreaHeight);
-        int drawY = contentY - recipeCombinedScrollOffset;
-
-        context.fill(x, drawY, x + width, drawY + headerH, ITEM_BG_ALT);
-        context.text(font, "Required Materials", x + 10, drawY + 6, GOLD, false);
-        drawY += headerH + 6;
-        int cardWidth = 180;
-        int cardsPerRow = Math.max(1, (width - 20) / cardWidth);
-        int cardSpacing = 10;
-        if (simpleRecipe != null && !simpleRecipe.isEmpty()) {
-            int materialIndex = 0;
-            for (Map.Entry<String, Integer> entry : simpleRecipe.entrySet()) {
-                int col = materialIndex % cardsPerRow;
-                int row = materialIndex / cardsPerRow;
-                int itemX = x + col * (cardWidth + cardSpacing);
-                int itemY = drawY + row * 34;
-                if (itemY + 30 >= recipeCombinedAreaY && itemY <= recipeCombinedAreaY + recipeCombinedAreaHeight) {
-                    context.fill(itemX, itemY, itemX + cardWidth, itemY + 28, ITEM_BG);
-                    context.outline(itemX, itemY, cardWidth, 28, BORDER_COLOR);
-                    context.text(font, entry.getKey(), itemX + 8, itemY + 10, WHITE, false);
-                    String qtyText = entry.getValue() + "×";
-                    context.text(font, qtyText, itemX + cardWidth - font.width(qtyText) - 8, itemY + 10, GOLD, false);
-                }
-                materialIndex++;
-            }
-            int materialRows = (simpleRecipe.size() + cardsPerRow - 1) / cardsPerRow;
-            drawY += materialRows * 34 + 4;
-        } else {
-            context.text(font, "No materials required", x + 10, drawY + 5, TEXT_SECONDARY, false);
-            drawY += 24;
-        }
-
-    drawY += 10;
-        context.fill(x, drawY, x + width, drawY + headerH, ITEM_BG_ALT);
-        context.text(font, "Crafting Tree (Click to expand)", x + 10, drawY + 6, GOLD, false);
-        drawY += headerH + 6;
-        drawY = renderRecipeTree(context, expandedRecipeTree, "", x + 15, drawY);
-
-        context.disableScissor();
-
-        if (recipeCombinedMaxScroll > 0) {
-            int sbWidth = 6;
-            int sbX = recipeCombinedAreaX + recipeCombinedAreaWidth - sbWidth - 4;
-            int sbY = recipeCombinedAreaY + 2;
-            int sbHeight = recipeCombinedAreaHeight - 4;
-            context.fill(sbX, sbY, sbX + sbWidth, sbY + sbHeight, ITEM_BG_ALT);
-            int thumbHeight = Math.max(10, (int)(sbHeight * (recipeCombinedAreaHeight / (float)(totalContentHeight + 1))));
-            int thumbY = sbY + (int)((recipeCombinedScrollOffset / (float)recipeCombinedMaxScroll) * (sbHeight - thumbHeight));
-            context.fill(sbX, thumbY, sbX + sbWidth, thumbY + thumbHeight, BORDER_COLOR);
-        }
+        int[] scroll = renderMaterialsAndTree(context, x, width, recipeCombinedAreaX, recipeCombinedAreaY,
+            recipeCombinedAreaWidth, recipeCombinedAreaHeight, recipeCombinedScrollOffset, expandedRecipeTree,
+            "Crafting Tree (Click to expand)");
+        recipeCombinedMaxScroll = scroll[0];
+        recipeCombinedScrollOffset = scroll[1];
     }
 
     private void renderForgeDetails(GuiGraphicsExtractor context, int x, int y, int width, int height) {
@@ -759,54 +680,49 @@ public class SandboxViewer extends Screen {
         forgeCombinedAreaWidth = width;
         forgeCombinedAreaHeight = y + height - rightColumnY - 10;
 
-        context.fill(forgeCombinedAreaX, forgeCombinedAreaY, forgeCombinedAreaX + forgeCombinedAreaWidth, forgeCombinedAreaY + forgeCombinedAreaHeight, PANEL_BG);
-        context.outline(forgeCombinedAreaX, forgeCombinedAreaY, forgeCombinedAreaWidth, forgeCombinedAreaHeight, BORDER_COLOR);
+        int[] scroll = renderMaterialsAndTree(context, x, width, forgeCombinedAreaX, forgeCombinedAreaY,
+            forgeCombinedAreaWidth, forgeCombinedAreaHeight, forgeCombinedScrollOffset,
+            remainingResult != null ? remainingResult.full_recipe : null, "Required Recipe Tree (Click to Expand)");
+        forgeCombinedMaxScroll = scroll[0];
+        forgeCombinedScrollOffset = scroll[1];
+    }
 
-        int contentY = forgeCombinedAreaY + 10;
+    /**
+     * The scrollable area of the Recipes and Forge tabs: "Required Materials" cards, then the recipe tree, with a
+     * scrollbar. Returns {max scroll, scroll offset clamped to it}.
+     */
+    private int[] renderMaterialsAndTree(GuiGraphicsExtractor context, int x, int width, int areaX, int areaY,
+                                         int areaWidth, int areaHeight, int scrollOffset, Object tree, String treeTitle) {
+        context.fill(areaX, areaY, areaX + areaWidth, areaY + areaHeight, PANEL_BG);
+        context.outline(areaX, areaY, areaWidth, areaHeight, BORDER_COLOR);
+
+        int contentY = areaY + 10;
         int headerH = 20;
-        int contentHeightMaterials;
-        {
-            int tmpY = contentY;
-            tmpY += headerH + 6;
-            int cardWidth = 180;
-            int cardsPerRow = Math.max(1, (width - 20) / cardWidth);
-            int materialRows = 0;
-            if (simpleRecipe != null && !simpleRecipe.isEmpty()) {
-                int materialCount = simpleRecipe.size();
-                materialRows = (materialCount + cardsPerRow - 1) / cardsPerRow;
-            }
-            tmpY += ((simpleRecipe == null || simpleRecipe.isEmpty()) ? 24 : materialRows * 34 + 4);
-            contentHeightMaterials = tmpY - contentY;
-        }
-
-        int contentHeightTree;
-        {
-            int tmpY = contentY + contentHeightMaterials + 10;
-            tmpY += headerH + 6;
-            int dryEndY = renderRecipeTree(null, remainingResult != null ? remainingResult.full_recipe : null, "", x + 15, tmpY + 4);
-            contentHeightTree = (dryEndY - tmpY) + 4;
-        }
+        int cardWidth = 180;
+        int cardSpacing = 10;
+        int cardsPerRow = Math.max(1, (width - 20) / cardWidth);
+        boolean noMaterials = simpleRecipe == null || simpleRecipe.isEmpty();
+        int materialRows = noMaterials ? 0 : (simpleRecipe.size() + cardsPerRow - 1) / cardsPerRow;
+        int contentHeightMaterials = headerH + 6 + (noMaterials ? 24 : materialRows * 34 + 4);
+        int treeTop = contentY + contentHeightMaterials + 10 + headerH + 6;
+        int contentHeightTree = (renderRecipeTree(null, tree, "", x + 15, treeTop + 4) - treeTop) + 4;
 
         int totalContentHeight = contentHeightMaterials + 10 + headerH + 6 + contentHeightTree;
-        forgeCombinedMaxScroll = Math.max(0, totalContentHeight - forgeCombinedAreaHeight + 10);
-        forgeCombinedScrollOffset = Math.max(0, Math.min(forgeCombinedScrollOffset, forgeCombinedMaxScroll));
+        int maxScroll = Math.max(0, totalContentHeight - areaHeight + 10);
+        int offset = Math.max(0, Math.min(scrollOffset, maxScroll));
 
-        context.enableScissor(forgeCombinedAreaX, forgeCombinedAreaY, forgeCombinedAreaX + forgeCombinedAreaWidth, forgeCombinedAreaY + forgeCombinedAreaHeight);
-        int drawY = contentY - forgeCombinedScrollOffset;
+        context.enableScissor(areaX, areaY, areaX + areaWidth, areaY + areaHeight);
+        int drawY = contentY - offset;
 
         context.fill(x, drawY, x + width, drawY + headerH, ITEM_BG_ALT);
         context.text(font, "Required Materials", x + 10, drawY + 6, GOLD, false);
         drawY += headerH + 6;
-        int cardWidth = 180;
-        int cardsPerRow = Math.max(1, (width - 20) / cardWidth);
-        if (simpleRecipe != null && !simpleRecipe.isEmpty()) {
+        if (!noMaterials) {
             int materialIndex = 0;
             for (Map.Entry<String, Integer> entry : simpleRecipe.entrySet()) {
-                int col = materialIndex % cardsPerRow;
-                int row = materialIndex / cardsPerRow;
-                int itemX = x + col * (cardWidth + 10);
-                int itemY = drawY + row * 34;
-                if (itemY + 30 >= forgeCombinedAreaY && itemY <= forgeCombinedAreaY + forgeCombinedAreaHeight) {
+                int itemX = x + (materialIndex % cardsPerRow) * (cardWidth + cardSpacing);
+                int itemY = drawY + (materialIndex / cardsPerRow) * 34;
+                if (itemY + 30 >= areaY && itemY <= areaY + areaHeight) {
                     context.fill(itemX, itemY, itemX + cardWidth, itemY + 28, ITEM_BG);
                     context.outline(itemX, itemY, cardWidth, 28, BORDER_COLOR);
                     context.text(font, entry.getKey(), itemX + 8, itemY + 10, WHITE, false);
@@ -815,31 +731,31 @@ public class SandboxViewer extends Screen {
                 }
                 materialIndex++;
             }
-            int materialRows = (simpleRecipe.size() + cardsPerRow - 1) / cardsPerRow;
             drawY += materialRows * 34 + 4;
         } else {
             context.text(font, "No materials required", x + 10, drawY + 5, TEXT_SECONDARY, false);
             drawY += 24;
         }
 
-    drawY += 10;
+        drawY += 10;
         context.fill(x, drawY, x + width, drawY + headerH, ITEM_BG_ALT);
-        context.text(font, "Required Recipe Tree (Click to Expand)", x + 10, drawY + 6, GOLD, false);
+        context.text(font, treeTitle, x + 10, drawY + 6, GOLD, false);
         drawY += headerH + 6;
-        drawY = renderRecipeTree(context, remainingResult != null ? remainingResult.full_recipe : null, "", x + 15, drawY);
+        renderRecipeTree(context, tree, "", x + 15, drawY);
 
         context.disableScissor();
 
-        if (forgeCombinedMaxScroll > 0) {
+        if (maxScroll > 0) {
             int sbWidth = 6;
-            int sbX = forgeCombinedAreaX + forgeCombinedAreaWidth - sbWidth - 4;
-            int sbY = forgeCombinedAreaY + 2;
-            int sbHeight = forgeCombinedAreaHeight - 4;
+            int sbX = areaX + areaWidth - sbWidth - 4;
+            int sbY = areaY + 2;
+            int sbHeight = areaHeight - 4;
             context.fill(sbX, sbY, sbX + sbWidth, sbY + sbHeight, ITEM_BG_ALT);
-            int thumbHeight = Math.max(10, (int)(sbHeight * (forgeCombinedAreaHeight / (float)(totalContentHeight + 1))));
-            int thumbY = sbY + (int)((forgeCombinedScrollOffset / (float)forgeCombinedMaxScroll) * (sbHeight - thumbHeight));
+            int thumbHeight = Math.max(10, (int) (sbHeight * (areaHeight / (float) (totalContentHeight + 1))));
+            int thumbY = sbY + (int) ((offset / (float) maxScroll) * (sbHeight - thumbHeight));
             context.fill(sbX, thumbY, sbX + sbWidth, thumbY + thumbHeight, BORDER_COLOR);
         }
+        return new int[] {maxScroll, offset};
     }
 
     private int renderRecipeTree(GuiGraphicsExtractor context, Object nodeObj, String path, int x, int y) {

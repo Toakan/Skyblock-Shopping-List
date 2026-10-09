@@ -15,7 +15,7 @@ import net.minecraft.network.chat.Component;
  * plus Craftable / Forging when they have their own). Opened by B and from Settings.
  */
 public class HudPositionScreen extends Screen {
-    private static final int GOLD = 0xFFFFB728;
+    private static final int GOLD = MenuTabs.GOLD;
     private static final int HANDLE = 10;
     /** How close (GUI pixels) the mouse must be to an edge to grab it. */
     private static final int EDGE_GRAB = 3;
@@ -75,8 +75,8 @@ public class HudPositionScreen extends Screen {
         context.fill(0, 0, width, height, 0xFF0E0E0E);
         for (int x = 0; x < width; x += 50) context.fill(x, 0, x + 1, height, 0x22FFFFFF);
         for (int y = 0; y < height; y += 50) context.fill(0, y, width, y + 1, 0x22FFFFFF);
-        context.fill(0, 0, width, 22, 0xFF17293A);
-        context.outline(0, 0, width, 22, 0xFF223344);
+        context.fill(0, 0, width, 22, MenuTabs.HEADER_BG);
+        context.outline(0, 0, width, 22, MenuTabs.HEADER_BORDER);
         context.text(font, "Move HUD", 8, 7, GOLD, false);
         // Hint and position in the title bar, shortened to whatever fits left of the buttons.
         SandboxWidget.PanelRect mainRect = rects.get(SandboxWidget.Panel.MAIN);
