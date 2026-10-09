@@ -28,7 +28,7 @@ public final class IrCommandManager {
                 .executes(context -> {
                     context.getSource().sendFeedback(Component.literal(InventoryReader.NAME + " commands (/ssl, or /ir):")
                         .setStyle(Style.EMPTY.withColor(ChatFormatting.GOLD)));
-                    context.getSource().sendFeedback(Component.literal("- /ssl reset: Reset all mod data")
+                    context.getSource().sendFeedback(Component.literal("- /ssl reset: Reset this profile's tracked data and the HUD settings (saved lists and presets are kept)")
                         .setStyle(Style.EMPTY.withColor(ChatFormatting.WHITE)));
                     context.getSource().sendFeedback(Component.literal("- /ssl done: Acknowledge reminder")
                         .setStyle(Style.EMPTY.withColor(ChatFormatting.WHITE)));

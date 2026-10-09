@@ -3,7 +3,7 @@
 	"id": "skyblock-shopping-list",
 	"version": "${version}",
 	"name": "Skyblock Shopping List",
-	"description": "Hypixel SkyBlock shopping-list HUD. Tracks the items in your inventory, sacks and storage, and shows what you still need for a chosen recipe. Read-only and client-side.",
+	"description": "Hypixel SkyBlock shopping-list HUD. Tracks the items in your inventory, sacks and storage, and shows what you still need for the recipes you pick. Read-only and client-side.",
 	"authors": [
 		"Tad"
 	],

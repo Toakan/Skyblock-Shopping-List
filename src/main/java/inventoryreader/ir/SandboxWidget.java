@@ -219,6 +219,23 @@ public class SandboxWidget {
         toasts.forEach(Runnable::run);
         if (shoppingList.removeIf(e -> recipes.contains(e.recipe))) listChanged();
     }
+    /**
+     * Replaces the list with a saved one (List tab > Saved lists). Add more entries count from what is held now.
+     * Returns how many entries were left off because the list holds fewer recipes, or -1 if nothing changed.
+     */
+    public synchronized int replaceList(List<ShoppingListEntry> entries) {
+        if (!editable()) return -1;
+        shoppingList.clear();
+        for (ShoppingListEntry e : entries) {
+            if (shoppingList.size() >= maxRecipes) break;
+            if (shoppingList.stream().anyMatch(s -> s.recipe.equals(e.recipe))) continue;
+            shoppingList.add(new ShoppingListEntry(e.recipe, Math.max(1, e.amount),
+                resourcesManager.getResourceByName(e.recipe), e.isHaveTotal()));
+            expandedNodes.putIfAbsent(makePathKey(LIST_KEY, e.recipe), true);
+        }
+        listChanged();
+        return Math.max(0, entries.size() - shoppingList.size());
+    }
     public synchronized void clearList() {
         if (!editable()) return;
         if (shoppingList.isEmpty()) return;
