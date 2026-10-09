@@ -57,11 +57,11 @@ public class RecipeManager {
 
             Map<String, Map<String, Integer>> sanitized = sanitizeRecipes(working);
 
-            List<String> newNames = new ArrayList<>(sanitized.keySet());
-
             Set<String> allNames = new LinkedHashSet<>(sanitized.keySet());
             for (Map<String, Integer> m : sanitized.values()) allNames.addAll(m.keySet());
             itemNames = Collections.unmodifiableSet(allNames);
+            // Ingredient-only items (shop currencies such as Agatha's Coupon) can be added to the list too.
+            List<String> newNames = new ArrayList<>(allNames);
 
             recipes = Collections.unmodifiableMap(sanitized);
             recipeNames = Collections.unmodifiableList(newNames);
