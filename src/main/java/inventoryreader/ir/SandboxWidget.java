@@ -487,30 +487,36 @@ public class SandboxWidget {
     }
 
     /**
-     * Fills in each step's forge time (longest chain, forge slots assumed to run side by side): its own forge
-     * time, if any are still to make, after the slowest ingredient. Items cooking now count down from their
-     * real finish time; items not started yet wait their full time, cut by Quick Forge and the mayor bonus.
+     * Fills in each step's forge time: every forge craft still to make under it, one after another (own time ×
+     * how many are still to make, plus all its ingredients' times). Items cooking now add the time they have
+     * left; crafts not started add their full time, cut by Quick Forge and the mayor bonus.
      */
     private static void setForgeTimes(RecipeManager.RecipeNode node, Map<String, Long> cookingEnds, double multiplier) {
-        long childMs = 0;
-        long childEndsAt = 0;
-        if (node.ingredients != null) {
-            for (RecipeManager.RecipeNode child : node.ingredients) {
-                setForgeTimes(child, cookingEnds, multiplier);
-                childMs = Math.max(childMs, child.forgeMs);
-                childEndsAt = Math.max(childEndsAt, child.forgeEndsAt);
+        // Item -> finish time, so an item cooking once is counted once even if several steps need it.
+        Map<String, Long> cooking = new HashMap<>();
+        collectForgeTimes(node, cookingEnds, multiplier, cooking);
+    }
+
+    private static long collectForgeTimes(RecipeManager.RecipeNode node, Map<String, Long> cookingEnds, double multiplier,
+                                          Map<String, Long> cooking) {
+        Map<String, Long> own = new HashMap<>();
+        String key = ItemNames.normalize(node.name);
+        Long cookingEnd = cookingEnds.get(key);
+        if (cookingEnd != null) own.put(key, cookingEnd);
+        long ms = 0;
+        int toMake = node.amount + node.toCraft;
+        if (toMake > 0) {
+            ms = Math.round(RecipeManager.getInstance().getForgeSeconds(node.name) * 1000L * multiplier) * toMake;
+            if (node.ingredients != null) {
+                for (RecipeManager.RecipeNode child : node.ingredients) {
+                    ms += collectForgeTimes(child, cookingEnds, multiplier, own);
+                }
             }
         }
-        long cookingEnd = cookingEnds.getOrDefault(ItemNames.normalize(node.name), 0L);
-        if (node.amount + node.toCraft <= 0) {
-            // Nothing left to start: only a copy still cooking is waited on.
-            node.forgeMs = 0;
-            node.forgeEndsAt = cookingEnd;
-            return;
-        }
-        long own = Math.round(RecipeManager.getInstance().getForgeSeconds(node.name) * 1000L * multiplier);
-        node.forgeMs = childMs + own;
-        node.forgeEndsAt = Math.max(cookingEnd, childEndsAt > 0 ? childEndsAt + own : 0);
+        node.forgeMs = ms;
+        node.forgeCookingEnds = own.values().stream().mapToLong(Long::longValue).toArray();
+        cooking.putAll(own);
+        return ms;
     }
 
     /** How many of each Forge item (by normalised name) are still cooking. */

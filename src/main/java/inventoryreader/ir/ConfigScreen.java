@@ -230,9 +230,9 @@ public final class ConfigScreen {
                 .option(styled(Option.<HudStyle.ForgeTimes>createBuilder()
                     .name(Component.literal("Forge times"))
                     .description(describe(
-                        "Shows how long the Forge still needs after a row's name, e.g. [25hrs]: its own forge time "
-                            + "after the slowest forge step it waits on (Forge slots side by side). Items cooking "
-                            + "now count down. Includes Quick Forge (open Heart of the Mountain once) and Cole's "
+                        "Shows how long the Forge still needs after a row's name, e.g. [25hrs]: every forge craft "
+                            + "still to make for that row, one after another (time × how many, plus its "
+                            + "ingredients). Items cooking now add the time they have left. Includes Quick Forge (open Heart of the Mountain once) and Cole's "
                             + "Molten Forge. Long names are cut short so the time always shows."))
                     .controller(opt -> EnumControllerBuilder.create(opt).enumClass(HudStyle.ForgeTimes.class)
                         .formatValue(v -> Component.literal(switch (v) {

@@ -241,16 +241,18 @@ public class RecipeManager {
          */
         public int toCraft;
         /**
-         * Shopping-list trees only: forge time still ahead for this step. {@code forgeMs} is the wait through
-         * steps not started yet; {@code forgeEndsAt} (epoch ms, 0 = none) is when the chain through items
-         * cooking in the Forge now ends. The time left is the larger of the two, see {@link #forgeLeft(long)}.
+         * Shopping-list trees only: forge time still ahead for this step and everything under it, every craft
+         * one after another. {@code forgeMs} covers crafts not started yet; {@code forgeCookingEnds} holds when
+         * each item cooking in the Forge now (that this step needs) is done, see {@link #forgeLeft(long)}.
          */
         public long forgeMs;
-        public long forgeEndsAt;
+        public long[] forgeCookingEnds = new long[0];
         public List<RecipeNode> ingredients;
 
         public long forgeLeft(long now) {
-            return Math.max(forgeMs, forgeEndsAt - now);
+            long left = forgeMs;
+            for (long end : forgeCookingEnds) left += Math.max(0, end - now);
+            return left;
         }
 
         public RecipeNode(String name, int amount, List<RecipeNode> ingredients) {
