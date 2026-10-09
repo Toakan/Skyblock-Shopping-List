@@ -28,7 +28,6 @@ public class HudPositionScreen extends Screen {
         boolean left() { return this == TOP_LEFT || this == BOTTOM_LEFT || this == LEFT; }
         boolean top() { return this == TOP_LEFT || this == TOP_RIGHT || this == TOP; }
         boolean horizontal() { return this == LEFT || this == RIGHT; }
-        boolean vertical() { return this == TOP || this == BOTTOM; }
     }
 
     private final Screen parent;

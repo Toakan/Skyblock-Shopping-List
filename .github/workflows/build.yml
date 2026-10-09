@@ -16,7 +16,8 @@ on:
       - 'gradle.properties'
       - 'settings.gradle'
   schedule:
-    - cron: '50 7 * * 3'
+    - cron: '27 17 * * *'
+  workflow_call:
   workflow_dispatch:
 
 # Only reads the repository; artifact uploads don't use the token.
