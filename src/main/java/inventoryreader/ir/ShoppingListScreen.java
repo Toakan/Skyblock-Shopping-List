@@ -52,6 +52,15 @@ public class ShoppingListScreen extends Screen {
     private int treeScrollOffset = 0;
     private static final int RECIPE_LEVEL_INDENT = 10;
     private static final int GOLD = MenuTabs.GOLD;
+    /** Saved lists column, right of the preview; 0 wide (hidden) when the screen has no room for it. */
+    private int savedX;
+    private int savedWidth;
+    private static final int SAVED_TOP = 80;
+    private int savedRowsShown;
+    private int savedScroll = 0;
+    private String saveName = "";
+    /** Saved list whose × was clicked once; a second click deletes it. */
+    private String pendingDelete;
 
     public ShoppingListScreen() {
         super(Component.literal(InventoryReader.NAME));
@@ -167,6 +176,79 @@ public class ShoppingListScreen extends Screen {
             widget.clearList();
             rebuildWidgets();
         }).bounds(width / 2 - 60, height - 30, 120, 20).build());
+        initSavedLists(list);
+    }
+
+    /** Saved lists column: a name box and Save, then one row per saved list (click to load it, × to delete). */
+    private void initSavedLists(List<ShoppingListEntry> list) {
+        savedX = treeViewX + treeViewWidth + 20;
+        savedWidth = Math.min(200, width - savedX - 20);
+        if (savedWidth < 120) {
+            savedWidth = 0;
+            return;
+        }
+        EditBox nameBox = new EditBox(font, savedX, 55, savedWidth - 44, 20, Component.literal("List name"));
+        nameBox.setMaxLength(SavedLists.NAME_LIMIT);
+        nameBox.setHint(Component.literal("List name..."));
+        nameBox.setValue(saveName);
+        Button save = Button.builder(Component.literal("Save"), button -> {
+            String name = saveName.trim();
+            // Read now: amounts typed since the rows were built are in the list but not in {@code list}.
+            List<ShoppingListEntry> current = widget.getShoppingList();
+            if (name.isEmpty() || current.isEmpty()) return;
+            SavedLists.save(name, current);
+            pendingDelete = null;
+            rebuildWidgets();
+        }).bounds(savedX + savedWidth - 40, 55, 40, 20)
+          .tooltip(Tooltip.create(Component.literal("Save the shopping list under this name. A saved list with the same name is replaced.")))
+          .build();
+        save.active = !saveName.isBlank() && !list.isEmpty();
+        nameBox.setResponder(text -> {
+            saveName = text;
+            save.active = !text.isBlank() && !list.isEmpty();
+        });
+        addRenderableWidget(nameBox);
+        addRenderableWidget(save);
+
+        List<String> names = SavedLists.names();
+        savedRowsShown = Math.max(1, (height - 40 - SAVED_TOP) / PANEL_ROW);
+        savedScroll = Math.max(0, Math.min(savedScroll, names.size() - savedRowsShown));
+        int end = Math.min(names.size(), savedScroll + savedRowsShown);
+        for (int i = savedScroll; i < end; i++) {
+            String name = names.get(i);
+            int y = SAVED_TOP + (i - savedScroll) * PANEL_ROW;
+            addRenderableWidget(Button.builder(fitPlain(name, savedWidth - 34, 0xFFFFFFFF), button -> loadSaved(name))
+                .bounds(savedX, y, savedWidth - 24, 18)
+                .tooltip(Tooltip.create(Component.literal("Load \"" + name + "\": replaces the shopping list.")))
+                .build());
+            boolean armed = name.equals(pendingDelete);
+            addRenderableWidget(Button.builder(Component.literal(armed ? "?" : "×"), button -> {
+                if (name.equals(pendingDelete)) {
+                    SavedLists.delete(name);
+                    pendingDelete = null;
+                } else {
+                    pendingDelete = name;
+                }
+                rebuildWidgets();
+            }).bounds(savedX + savedWidth - 20, y, 20, 18)
+              .tooltip(Tooltip.create(Component.literal(armed ? "Click again to delete \"" + name + "\"." : "Delete this saved list.")))
+              .build());
+        }
+    }
+
+    private void loadSaved(String name) {
+        List<ShoppingListEntry> entries = SavedLists.get(name);
+        if (entries == null) return;
+        int dropped = widget.replaceList(entries);
+        pendingDelete = null;
+        saveName = name;
+        Minecraft client = Minecraft.getInstance();
+        if (dropped > 0 && client.player != null) {
+            client.player.sendOverlayMessage(Component.literal("Loaded \"" + name + "\" without its last " + dropped
+                + " recipe(s): the list holds " + widget.getMaxRecipes() + " (Settings)")
+                .setStyle(Style.EMPTY.withColor(ChatFormatting.RED)));
+        }
+        rebuildWidgets();
     }
 
     @Override
@@ -223,6 +305,7 @@ public class ShoppingListScreen extends Screen {
             20, 47, GOLD, false);
         context.text(font, "×", listRight - 50, 61, 0xFFCCCCCC, false);
         renderListPanel(context);
+        renderSavedLists(context);
         context.text(font,
             Component.literal("Preview").setStyle(Style.EMPTY.withColor(ChatFormatting.GOLD).withBold(true)),
             treeViewX, treeViewY - 13, GOLD, false);
@@ -347,6 +430,23 @@ public class ShoppingListScreen extends Screen {
         }
     }
 
+    private void renderSavedLists(GuiGraphicsExtractor context) {
+        if (savedWidth == 0) return;
+        context.text(font, Component.literal("Saved lists").setStyle(Style.EMPTY.withColor(ChatFormatting.GOLD).withBold(true)),
+            savedX, 47, GOLD, false);
+        int count = SavedLists.names().size();
+        if (count == 0) {
+            context.text(font, fitPlain("Name the list and click Save", savedWidth, 0xFFAAAAAA), savedX, SAVED_TOP + 5, 0xFFFFFFFF, false);
+            return;
+        }
+        if (savedScroll > 0) {
+            context.text(font, "▲", savedX + savedWidth / 2 - font.width("▲") / 2, SAVED_TOP - 4, GOLD, false);
+        }
+        if (savedScroll + savedRowsShown < count) {
+            context.text(font, "▼", savedX + savedWidth / 2 - font.width("▼") / 2, SAVED_TOP + savedRowsShown * PANEL_ROW, GOLD, false);
+        }
+    }
+
     /**
      * One row of the preview tree, drawn with the HUD's look (Settings > Appearance: colours, font, row boxes,
      * tree lines, bold names, forge times). Rows keep this screen's fixed 16 px height so clicks line up.
@@ -421,6 +521,15 @@ public class ShoppingListScreen extends Screen {
                 scrollOffset++;
                 return true;
             }
+        }
+        if (savedWidth > 0 && mouseX >= savedX && mouseX <= savedX + savedWidth && mouseY >= SAVED_TOP && verticalAmount != 0) {
+            int max = Math.max(0, SavedLists.names().size() - savedRowsShown);
+            int next = Math.max(0, Math.min(max, savedScroll + (verticalAmount < 0 ? 1 : -1)));
+            if (next != savedScroll) {
+                savedScroll = next;
+                rebuildWidgets();
+            }
+            return true;
         }
         if (mouseX >= treeViewX && mouseX <= treeViewX + treeViewWidth &&
             mouseY >= treeViewY && mouseY <= treeViewY + treeViewHeight) {

@@ -49,6 +49,8 @@ public class FilePathManager {
     public static final File HUD_STYLE_JSON = new File(DATA_DIR, "hud_style.json");
     /** Saved HUD presets, one JSON file each. Not part of the data reset: they are the player's own work. */
     public static final File PRESETS_DIR = new File(DATA_DIR, "presets");
+    /** Named shopping lists to swap in (List tab > Saved lists). Not part of the data reset, like presets. */
+    public static final File SAVED_LISTS_JSON = new File(DATA_DIR, "saved_lists.json");
     public static final File FORGING_JSON = new File(DATA_DIR, "forging.json");
     public static final File GEMSTONE_RECIPES_JSON = new File(DATA_DIR, "gemstone_recipes.json");
     public static final File REMOTE_RECIPES_JSON = new File(DATA_DIR, "recipes_remote.json");
