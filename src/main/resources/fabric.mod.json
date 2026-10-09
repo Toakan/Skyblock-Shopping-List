@@ -15,7 +15,7 @@
 		"sources": "https://github.com/Toakan/Skyblock-Shopping-List",
 		"issues": "https://github.com/Toakan/Skyblock-Shopping-List/issues"
 	},
-	"license": "CC-BY-SA-4.0",
+	"license": "GPL-3.0-only",
 	"icon": "assets/skyblock-shopping-list/icon.png",
 	"environment": "client",
 	"entrypoints": {

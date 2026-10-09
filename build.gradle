@@ -64,6 +64,9 @@ jar {
 	from("LICENSE") {
 		rename { "${it}_${project.base.archivesName.get()}"}
 	}
+	from("NOTICE") {
+		rename { "${it}_${project.base.archivesName.get()}"}
+	}
 }
 
 // configure the maven publication

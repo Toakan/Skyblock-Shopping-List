@@ -60,4 +60,4 @@ Minecraft 26.2 or 26.3 (one jar for both), Java 25, Fabric Loader 0.19.5+, Fabri
 - Pets that only drop have no recipe.
 
 ## License and credits
-CC-BY-SA-4.0. Originally based on [Inventory Reader](https://github.com/Scholiboi/InventoryReader) by Scholiboi, whose inventory reading, recipe trees and HUD this mod was built on. Recipe and item data comes from [NotEnoughUpdates-REPO](https://github.com/NotEnoughUpdates/NotEnoughUpdates-REPO). Source code: [Toakan/Skyblock-Shopping-List](https://github.com/Toakan/Skyblock-Shopping-List).
+GPL-3.0-only, with extra terms: keep the credits, mark modified versions, and give them their own name. Originally based on [Inventory Reader](https://github.com/Scholiboi/InventoryReader) by Scholiboi, whose inventory reading, recipe trees and HUD this mod was built on. Recipe and item data comes from [NotEnoughUpdates-REPO](https://github.com/NotEnoughUpdates/NotEnoughUpdates-REPO). Source code: [Toakan/Skyblock-Shopping-List](https://github.com/Toakan/Skyblock-Shopping-List).

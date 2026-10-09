@@ -128,6 +128,7 @@ The jar is written to `build/libs/`. `./gradlew runClient` starts a development 
 - Recipes cover what the NEU repository lists as crafting, forge, NPC shop and Kat upgrade recipes. Pets that only drop have no recipe.
 
 ## License and attribution
-- Code: CC-BY-SA-4.0 (see `LICENSE`), the same licence as the original.
-- Originally based on [Inventory Reader](https://github.com/Scholiboi/InventoryReader) by Scholiboi. Its core ideas and code (reading items from your inventory, sacks and storage, working out recipe trees, the HUD and the recipe viewer) are what this mod was built on. Thanks to Scholiboi for the original project.
+- Code: GPL-3.0-only (see `LICENSE`) with additional terms under GPLv3 section 7 (see `NOTICE`): keep the credits to both authors, mark modified versions as changed, and give a modified version its own name, mod id and icon.
+- Originally based on [Inventory Reader](https://github.com/Scholiboi/InventoryReader) by Scholiboi. Its core ideas and code (reading items from your inventory, sacks and storage, working out recipe trees, the HUD and the recipe viewer) are what this mod was built on. Thanks to Scholiboi for the original project. Inventory Reader is licensed CC-BY-SA-4.0; its modified code is used here under GPLv3, which Creative Commons lists as compatible with CC-BY-SA-4.0.
+- Versions up to 4.26.1 were released under CC-BY-SA-4.0.
 - Recipe and item data comes from NotEnoughUpdates-REPO; follow its license when reusing that data.
