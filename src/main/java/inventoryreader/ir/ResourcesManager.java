@@ -118,6 +118,18 @@ public class ResourcesManager {
         return keyByNormalized.get(ItemNames.normalize(cleaned));
     }
 
+    /**
+     * The count of {@code name} in {@code snapshot}, under whichever spelling it is tracked as (like
+     * {@link #getResourceByName}, but read from the snapshot so one calculation sees one state).
+     */
+    private int heldIn(Map<String, Integer> snapshot, String name) {
+        String key;
+        synchronized (this) {
+            key = resolve(name);
+        }
+        return key == null ? 0 : snapshot.getOrDefault(key, 0);
+    }
+
     /** Applies count changes (item name to delta). */
     public synchronized void saveData(Map<String, Integer> deltas) {
         if (deltas == null || deltas.isEmpty()) return;
@@ -176,8 +188,10 @@ public class ResourcesManager {
 
     /** Shopping list for a single recipe. */
     public RemainingResponse getRemainingIngredients(String name, int amt) {
-        // Add more, counted from what is held now: exactly amt to make.
-        ShoppingResponse response = getShoppingList(List.of(new ShoppingListEntry(name, amt, getResourceByName(name), false)));
+        // Add more, counted from what is held now (in the same snapshot the calculation uses): exactly amt to make.
+        Map<String, Integer> snapshot = getAllResources();
+        ShoppingListEntry entry = new ShoppingListEntry(name, amt, heldIn(snapshot, name), false);
+        ShoppingResponse response = getShoppingList(List.of(entry), snapshot);
         return new RemainingResponse(name, response.trees.get(0), response.craftable);
     }
 
@@ -186,9 +200,13 @@ public class ResourcesManager {
      * order and each one only gets what earlier entries left over, so nothing is counted twice.
      */
     public ShoppingResponse getShoppingList(List<ShoppingListEntry> entries) {
-        Map<String, Map<String, Integer>> forging = RecipeManager.getInstance().getAllRecipes();
         // One snapshot for the whole calculation, so a change mid-way can't make "owned" and "available" disagree.
-        Map<String, Integer> snapshot = getAllResources();
+        return getShoppingList(entries, getAllResources());
+    }
+
+    /** As above, worked out from {@code snapshot} (item counts, never changed here). */
+    private ShoppingResponse getShoppingList(List<ShoppingListEntry> entries, Map<String, Integer> snapshot) {
+        Map<String, Map<String, Integer>> forging = RecipeManager.getInstance().getAllRecipes();
         Map<String, Integer> highestPossibleResources = new LinkedHashMap<>(snapshot);
         Map<String, Integer> currentAvailableResources = new LinkedHashMap<>(highestPossibleResources);
         Map<String, Integer> messages = new LinkedHashMap<>();
@@ -211,7 +229,7 @@ public class ResourcesManager {
             if (!entry.isHaveTotal()) {
                 // Add more is done at startCount + amount held (as SandboxWidget checks it), so copies made since
                 // the entry was added count; held copies are still not taken from stock.
-                need = Math.max(0, entry.startCount + entry.amount - getResourceByName(entry.recipe));
+                need = Math.max(0, entry.startCount + entry.amount - heldIn(snapshot, entry.recipe));
             }
             required[i] = Math.max(entry.amount, need);
             if (entry.isHaveTotal()) {
