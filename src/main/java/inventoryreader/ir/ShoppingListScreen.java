@@ -29,11 +29,18 @@ public class ShoppingListScreen extends Screen {
     private int MAX_RECIPES_SHOWN = 10;
     private static final int LIST_X = 20;
     /** Top of the first recipe row; rows are {@link #ROW_HEIGHT} tall. Drawing and clicks both use these. */
-    private static final int LIST_TOP = 85;
+    private static final int LIST_TOP = 107;
+    /** Filter buttons row, between the search box and the recipe list. */
+    private static final int FILTER_Y = 79;
     private static final int ROW_HEIGHT = 20;
     /** Left column (search + recipe list) right edge; set in init() from the screen width. */
     private int listRight = 270;
     private String searchText = "";
+    /** Search filters; kept across init() like the search text, not saved. */
+    private boolean matchUses = false;
+    private TypeFilter typeFilter = TypeFilter.ALL;
+    private RarityFilter rarityFilter = RarityFilter.ALL;
+    private OwnedFilter ownedFilter = OwnedFilter.ALL;
     /** How many of a recipe one click adds. */
     private int addAmount = 1;
     /** Recipe names the shopping-list rows were built for; rows are rebuilt when the list changes. */
@@ -91,10 +98,11 @@ public class ShoppingListScreen extends Screen {
         MAX_RECIPES_SHOWN = Math.max(3, (height - 40 - LIST_TOP - 15) / ROW_HEIGHT);
         searchField = new EditBox(font, LIST_X, 55, listWidth - 54, 20, Component.literal(""));
         searchField.setMaxLength(50);
-        searchField.setHint(Component.literal("Search recipes..."));
+        searchField.setHint(searchHint());
         searchField.setValue(searchText);
         searchField.setResponder(this::updateFilteredRecipes);
         addRenderableWidget(searchField);
+        initFilterRow(listWidth);
 
         // How many to add when a recipe is clicked.
         EditBox amountBox = new EditBox(font, listRight - 40, 55, 40, 20, Component.literal("Amount"));
@@ -275,17 +283,130 @@ public class ShoppingListScreen extends Screen {
     public void extractBackground(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
     }
 
+    private Component searchHint() {
+        return Component.literal(matchUses ? "Search ingredients..." : "Search recipes...");
+    }
+
+    /** Four cycle buttons: match by name or ingredient, type group, rarity, owned. Each click re-filters. */
+    private void initFilterRow(int listWidth) {
+        int gap = 2;
+        int w = (listWidth - 3 * gap) / 4;
+        int x = LIST_X;
+        addRenderableWidget(Button.builder(Component.literal(matchUses ? "Uses" : "Name"), button -> {
+            matchUses = !matchUses;
+            button.setMessage(Component.literal(matchUses ? "Uses" : "Name"));
+            searchField.setHint(searchHint());
+            updateFilteredRecipes(searchText);
+        }).bounds(x, FILTER_Y, w, 18)
+          .tooltip(Tooltip.create(Component.literal("Name: search item names.\nUses: search ingredients, e.g. coal finds Torch.")))
+          .build());
+        x += w + gap;
+        addRenderableWidget(Button.builder(Component.literal(typeFilter.label), button -> {
+            typeFilter = TypeFilter.values()[(typeFilter.ordinal() + 1) % TypeFilter.values().length];
+            button.setMessage(Component.literal(typeFilter.label));
+            updateFilteredRecipes(searchText);
+        }).bounds(x, FILTER_Y, w, 18)
+          .tooltip(Tooltip.create(Component.literal("Item type: Armor, Accessory, Pet, Weapon, Tool, Equipment or Other.")))
+          .build());
+        x += w + gap;
+        addRenderableWidget(Button.builder(Component.literal(rarityFilter.label), button -> {
+            rarityFilter = RarityFilter.values()[(rarityFilter.ordinal() + 1) % RarityFilter.values().length];
+            button.setMessage(Component.literal(rarityFilter.label));
+            updateFilteredRecipes(searchText);
+        }).bounds(x, FILTER_Y, w, 18)
+          .tooltip(Tooltip.create(Component.literal("Rarity: Common to Divine, or Special.")))
+          .build());
+        x += w + gap;
+        addRenderableWidget(Button.builder(Component.literal(ownedFilter.label), button -> {
+            ownedFilter = OwnedFilter.values()[(ownedFilter.ordinal() + 1) % OwnedFilter.values().length];
+            button.setMessage(Component.literal(ownedFilter.label));
+            updateFilteredRecipes(searchText);
+        }).bounds(x, FILTER_Y, listRight - x, 18)
+          .tooltip(Tooltip.create(Component.literal("Owned: items you have at least one of (inventory, sacks, storage).\nMissing: items you have none of.")))
+          .build());
+    }
+
     private void updateFilteredRecipes(String searchTerm) {
         searchText = searchTerm == null ? "" : searchTerm;
-        if (searchTerm == null || searchTerm.isEmpty()) {
-            this.filteredRecipes = new ArrayList<>(recipeManager.getRecipeNames());
-        } else {
-            String lowerSearchTerm = searchTerm.toLowerCase(Locale.ROOT);
-            this.filteredRecipes = recipeManager.getRecipeNames().stream()
-                .filter(name -> name.toLowerCase(Locale.ROOT).contains(lowerSearchTerm))
-                .collect(Collectors.toList());
-        }
+        String term = searchText.toLowerCase(Locale.ROOT);
+        ResourcesManager resources = ResourcesManager.getInstance();
+        this.filteredRecipes = recipeManager.getRecipeNames().stream()
+            .filter(name -> term.isEmpty()
+                || (matchUses ? recipeManager.usesIngredient(name, term) : name.toLowerCase(Locale.ROOT).contains(term)))
+            .filter(name -> typeFilter.matches(recipeManager.getType(name)))
+            .filter(name -> rarityFilter.matches(recipeManager.getRarity(name)))
+            .filter(name -> ownedFilter == OwnedFilter.ALL
+                || (resources.getResourceByName(name) > 0) == (ownedFilter == OwnedFilter.OWNED))
+            .collect(Collectors.toList());
         scrollOffset = 0;
+    }
+
+    /** Groups of NEU item types ("HELMET" also covers "DUNGEON HELMET"); Other is any type in no group. */
+    private enum TypeFilter {
+        ALL("Type"),
+        ARMOR("Armor", "HELMET", "CHESTPLATE", "LEGGINGS", "BOOTS"),
+        ACCESSORY("Acc.", "ACCESSORY", "HATCESSORY"),
+        PET("Pet", "PET"),
+        WEAPON("Weapon", "SWORD", "LONGSWORD", "BOW", "WAND"),
+        TOOL("Tool", "PICKAXE", "AXE", "DRILL", "SHOVEL", "HOE", "FARMING TOOL", "FISHING ROD"),
+        EQUIPMENT("Equip", "NECKLACE", "CLOAK", "BELT", "GLOVES", "BRACELET"),
+        OTHER("Other");
+
+        final String label;
+        final List<String> types;
+
+        TypeFilter(String label, String... types) {
+            this.label = label;
+            this.types = List.of(types);
+        }
+
+        boolean has(String type) {
+            for (String t : types) {
+                if (type.equals(t) || type.endsWith(" " + t)) return true;
+            }
+            return false;
+        }
+
+        boolean matches(String type) {
+            return switch (this) {
+                case ALL -> true;
+                case OTHER -> {
+                    if (type.isEmpty()) yield false;
+                    for (TypeFilter group : values()) if (group.has(type)) yield false;
+                    yield true;
+                }
+                default -> has(type);
+            };
+        }
+    }
+
+    private enum RarityFilter {
+        ALL("Rarity", ""), COMMON("Com", "COMMON"), UNCOMMON("Unc", "UNCOMMON"), RARE("Rare", "RARE"),
+        EPIC("Epic", "EPIC"), LEGENDARY("Leg", "LEGENDARY"), MYTHIC("Myth", "MYTHIC"), DIVINE("Div", "DIVINE"),
+        SPECIAL("Spec", "SPECIAL");
+
+        final String label;
+        final String rarity;
+
+        RarityFilter(String label, String rarity) {
+            this.label = label;
+            this.rarity = rarity;
+        }
+
+        /** Special also covers Very Special. */
+        boolean matches(String r) {
+            return this == ALL || r.equals(rarity) || r.endsWith(" " + rarity);
+        }
+    }
+
+    private enum OwnedFilter {
+        ALL("Owned?"), OWNED("Owned"), MISSING("Missing");
+
+        final String label;
+
+        OwnedFilter(String label) {
+            this.label = label;
+        }
     }
 
     @Override

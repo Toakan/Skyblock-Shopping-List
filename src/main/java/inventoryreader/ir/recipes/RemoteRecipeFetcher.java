@@ -42,7 +42,7 @@ public final class RemoteRecipeFetcher {
      * Bump when the way recipes are extracted from the repo changes, so cached snapshots are rebuilt
      * even if the remote reports "not modified".
      */
-    private static final String PARSER_VERSION = "7";
+    private static final String PARSER_VERSION = "8";
     /** NEU's pseudo item for coin costs in shop recipes. */
     private static final String COIN_ID = "SKYBLOCK_COIN";
     public static final String COINS_NAME = "Coins";
@@ -214,6 +214,13 @@ public final class RemoteRecipeFetcher {
                 }
             }
             internalToDisplay.put(COIN_ID, COINS_NAME);
+            // Rarity and type from the last lore line ("LEGENDARY ACCESSORY"), for the List tab filters.
+            Map<String, String> typeByInternal = new LinkedHashMap<>();
+            for (NEUItem item : neuRepo.getItems().getItems().values()) {
+                String id = item.getSkyblockItemId();
+                String rarityType = rarityType(item.getLore());
+                if (id != null && !id.isBlank() && rarityType != null) typeByInternal.putIfAbsent(id, rarityType);
+            }
 
             Map<String, Map<String, Integer>> craftingByInternal = new LinkedHashMap<>();
             Map<String, Map<String, Integer>> forgeByInternal    = new LinkedHashMap<>();
@@ -269,6 +276,9 @@ public final class RemoteRecipeFetcher {
             Map<String, Integer> forgeSeconds = new LinkedHashMap<>();
             forgeSecondsByInternal.forEach((id, seconds) -> forgeSeconds.put(recipeNameById.getOrDefault(id, id), seconds));
             changed |= writeSnapshot(forgeSeconds, FilePathManager.FORGE_TIMES_JSON, meta);
+            Map<String, String> itemTypes = new LinkedHashMap<>();
+            typeByInternal.forEach((id, rarityType) -> itemTypes.putIfAbsent(recipeNameById.getOrDefault(id, id), rarityType));
+            changed |= writeSnapshot(itemTypes, FilePathManager.ITEM_TYPES_JSON, meta);
             changed |= writeSnapshot(recipeNameById, FilePathManager.ITEM_NAMES_JSON, meta);
 
             inventoryreader.ir.InventoryReader.debug("NEU repo parsed (library): {} crafting (incl. {} pet upgrades), {} forge, {} shop recipes", craftingWire.size(), katCount, forgeWire.size(), shopWire.size());
@@ -462,6 +472,32 @@ public final class RemoteRecipeFetcher {
         } catch (IllegalArgumentException e) {
             return false;
         }
+    }
+
+    private static final List<String> RARITIES = List.of("VERY SPECIAL", "UNCOMMON", "COMMON", "RARE", "EPIC",
+        "LEGENDARY", "MYTHIC", "DIVINE", "SPECIAL", "ULTIMATE", "SUPREME", "ADMIN");
+
+    /**
+     * "RARITY|TYPE" from an item's last lore line ("EPIC DUNGEON HELMET" -> "EPIC|DUNGEON HELMET", "COMMON" ->
+     * "COMMON|"), or null when that line doesn't start with a rarity. Recombobulated items wrap the line in an
+     * obfuscated "a", which is dropped.
+     */
+    private static String rarityType(List<String> lore) {
+        if (lore == null) return null;
+        String last = null;
+        for (String line : lore) {
+            String clean = stripMC(line);
+            if (clean != null && !clean.isBlank()) last = clean.trim();
+        }
+        if (last == null) return null;
+        if (last.startsWith("a ")) last = last.substring(2);
+        if (last.endsWith(" a")) last = last.substring(0, last.length() - 2);
+        for (String rarity : RARITIES) {
+            if (last.equals(rarity) || last.startsWith(rarity + " ")) {
+                return rarity + "|" + last.substring(rarity.length()).trim();
+            }
+        }
+        return null;
     }
 
     private static String stripMC(String s) {

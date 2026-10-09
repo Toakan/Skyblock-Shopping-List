@@ -19,6 +19,9 @@ public class RecipeManager {
     private volatile Set<String> itemNames = Collections.emptySet();
     /** Base forge time in seconds per forge item (before Quick Forge or mayor bonuses). */
     private volatile Map<String, Integer> forgeSeconds = Collections.emptyMap();
+    /** Upper-case rarity ("LEGENDARY") and type ("DUNGEON HELMET", may be empty) per item, from the NEU lore. */
+    private volatile Map<String, String> rarities = Collections.emptyMap();
+    private volatile Map<String, String> types = Collections.emptyMap();
     /** Changes every time the recipes are (re)loaded, so the HUD knows to recompute. */
     private volatile long version = 0;
 
@@ -72,6 +75,20 @@ public class RecipeManager {
             Map<String, Integer> times = JsonFiles.read(FilePathManager.FORGE_TIMES_JSON,
                 new com.google.gson.reflect.TypeToken<Map<String, Integer>>(){}.getType());
             forgeSeconds = times == null ? Collections.emptyMap() : Collections.unmodifiableMap(new HashMap<>(times));
+            Map<String, String> rarityTypes = JsonFiles.read(FilePathManager.ITEM_TYPES_JSON,
+                new com.google.gson.reflect.TypeToken<Map<String, String>>(){}.getType());
+            Map<String, String> newRarities = new HashMap<>();
+            Map<String, String> newTypes = new HashMap<>();
+            if (rarityTypes != null) {
+                rarityTypes.forEach((name, value) -> {
+                    int bar = value == null ? -1 : value.indexOf('|');
+                    if (bar < 0) return;
+                    newRarities.put(name, value.substring(0, bar));
+                    newTypes.put(name, value.substring(bar + 1));
+                });
+            }
+            rarities = Collections.unmodifiableMap(newRarities);
+            types = Collections.unmodifiableMap(newTypes);
             version++;
         } catch (IOException | JsonParseException e) {
             InventoryReader.LOGGER.error("Failed to load recipes", e);
@@ -119,6 +136,26 @@ public class RecipeManager {
     public int getForgeSeconds(String name) {
         Integer seconds = forgeSeconds.get(name);
         return seconds == null ? 0 : seconds;
+    }
+
+    /** Upper-case rarity such as "LEGENDARY", or "" when unknown (no NEU data for the item). */
+    public String getRarity(String name) {
+        return rarities.getOrDefault(name, "");
+    }
+
+    /** Upper-case item type such as "ACCESSORY" or "DUNGEON HELMET", or "" for plain materials and unknown items. */
+    public String getType(String name) {
+        return types.getOrDefault(name, "");
+    }
+
+    /** Whether the recipe for {@code name} has a direct ingredient whose name contains {@code lowerTerm}. */
+    public boolean usesIngredient(String name, String lowerTerm) {
+        Map<String, Integer> recipe = recipes.get(name);
+        if (recipe == null) return false;
+        for (String ingredient : recipe.keySet()) {
+            if (ingredient.toLowerCase(Locale.ROOT).contains(lowerTerm)) return true;
+        }
+        return false;
     }
 
     /** Every item name, A-Z ignoring case. Unmodifiable. */

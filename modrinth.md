@@ -6,6 +6,7 @@ Built with Ironman accounts in mind, but just as useful on a regular profile for
 
 ## Features
 - **Shopping list HUD:** add recipes with an amount and reorder them by priority. A **Total** section lists every raw material still needed (missing items first), followed by one tree per recipe. Your stock is shared between recipes and never counted twice. Each amount is either a total to hold (what you already have counts) or how many more to make.
+- **Recipe filters:** find recipes by ingredient (*coal* finds Torch), item type (armor, accessory, pet...), rarity, or whether you own the item.
 - **Saved lists:** save the current list under a name (Mining, Foraging, Combat...) and load it back with one click when you switch what you're working on.
 - **Per-profile data:** each SkyBlock profile keeps its own counts and shopping list, and switching profile switches them with it.
 - **Craftable:** intermediates you can make right now.
