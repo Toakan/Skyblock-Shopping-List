@@ -93,7 +93,12 @@ public final class ForgeSpeed {
                 // Failures are retried at the next hourly check; the last known bonus stays in use.
                 Double bonus = null;
                 if (error == null && response.statusCode() / 100 == 2) {
-                    bonus = moltenForgeBonus(response.body());
+                    try {
+                        bonus = moltenForgeBonus(response.body());
+                    } catch (RuntimeException e) {
+                        // Unreadable or changed JSON: still counts as a check, or it would be retried every second.
+                        InventoryReader.LOGGER.warn("Mayor check: could not read the election data: {}", e.toString());
+                    }
                 } else {
                     InventoryReader.LOGGER.warn("Mayor check failed: {}", error != null ? error.toString() : "HTTP " + response.statusCode());
                 }
