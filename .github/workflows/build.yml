@@ -1,7 +1,23 @@
 # Builds the mod on every push and pull request and uploads the jar.
 
 name: build
-on: [pull_request, push]
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'src/**'
+      - 'build.gradle'
+      - 'gradle.properties'
+      - 'settings.gradle'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'build.gradle'
+      - 'gradle.properties'
+      - 'settings.gradle'
+  schedule:
+    - cron: '50 7 * * 3'
+  workflow_dispatch:
 
 # Only reads the repository; artifact uploads don't use the token.
 permissions:
