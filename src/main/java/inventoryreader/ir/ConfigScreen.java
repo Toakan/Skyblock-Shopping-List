@@ -208,7 +208,7 @@ public final class ConfigScreen {
                     .description(describe(
                         "Remaining: what is still left to get (3×).\nHave / need: what you hold of what is needed "
                             + "(83/5,120).\nRequired: the full amount the recipes need (6×).\n\nColours: red = none "
-                            + "yet, orange = some, yellow = can craft from what you have, green = done."))
+                            + "yet, orange = some, yellow = can craft from what you have, blue = cooking in the Forge, green = done."))
                     .controller(opt -> EnumControllerBuilder.create(opt).enumClass(HudStyle.AmountFormat.class)
                         .formatValue(v -> Component.literal(switch (v) {
                             case REMAINING -> "Remaining";
@@ -281,6 +281,7 @@ public final class ConfigScreen {
                 .option(colour("Partly gathered", d.partial, s -> s.partial, (s, v) -> s.partial = v))
                 .option(colour("Missing", d.missing, s -> s.missing, (s, v) -> s.missing = v))
                 .option(colour("Can craft", d.craftable, s -> s.craftable, (s, v) -> s.craftable = v))
+                .option(colour("Cooking", d.cooking, s -> s.cooking, (s, v) -> s.cooking = v))
                 .option(colour("Craftable header", d.sectionHeader, s -> s.sectionHeader, (s, v) -> s.sectionHeader = v))
                 .option(colour("Craftable text", d.sectionText, s -> s.sectionText, (s, v) -> s.sectionText = v))
                 .option(colour("Forging header", d.forgingHeader, s -> s.forgingHeader, (s, v) -> s.forgingHeader = v))

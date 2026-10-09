@@ -37,6 +37,8 @@ public final class HudStyle {
     public int partial = 0xFFFFA040;
     public int missing = 0xFFFF6B6B;
     public int craftable = 0xFFFFE45C;
+    /** Held, but some of it is still cooking in the Forge. */
+    public int cooking = 0xFF5CC8FF;
     public int sectionHeader = 0xFFFFFF55;
     public int sectionText = 0xFFFF9D00;
     public int forgingHeader = 0xFFFFFF55;

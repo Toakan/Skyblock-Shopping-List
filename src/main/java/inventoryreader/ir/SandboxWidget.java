@@ -553,7 +553,11 @@ public class SandboxWidget {
             int used = Math.max(0, node.required - node.amount - node.toCraft);
             int left = finishedLeft.computeIfAbsent(key,
                 k -> Math.max(0, resourcesManager.getResourceByName(node.name) - cookingCount));
-            if (used > left) short_ = true;
+            if (used > left) {
+                short_ = true;
+                // Counted as held, but some of it is still in the Forge: not usable yet.
+                node.cooking = true;
+            }
             finishedLeft.put(key, Math.max(0, left - used));
         }
         if (node.ingredients != null) {
@@ -1067,7 +1071,7 @@ public class SandboxWidget {
         Minecraft client = Minecraft.getInstance();
         int unitIndent = Math.max(2, Math.round(style.indent * currentTreeScale));
         int indent = level * unitIndent;
-        boolean hasEnough = node.amount <= 0 && node.toCraft <= 0;
+        boolean hasEnough = node.amount <= 0 && node.toCraft <= 0 && !node.cooking;
         String nodeKey = makePathKey(pathKey, node.name);
         boolean isExpanded = isExpandedForDraw(nodeKey);
         boolean hasChildren = node.ingredients != null && !node.ingredients.isEmpty();
@@ -1093,7 +1097,7 @@ public class SandboxWidget {
         }
 
         int nameColor = level == 0 ? style.rootText : hasEnough ? style.itemText : statusColor;
-        Component mark = style.showMarks ? style.text(hasEnough || node.amount <= 0 ? "✔ " : "✖ ", statusColor, false) : Component.empty();
+        Component mark = style.showMarks ? style.text(hasEnough || (node.amount <= 0 && !node.cooking) ? "✔ " : "✖ ", statusColor, false) : Component.empty();
         Component amount = style.text(amountText(node) + " ", statusColor, false);
         boolean bold = level == 0 && style.boldRootNames;
         Component name = style.text(node.name, nameColor, bold);
@@ -1275,12 +1279,13 @@ public class SandboxWidget {
     }
 
     /**
-     * Green when held; yellow when the rest can be crafted from materials you have; with remaining mode on,
+     * Green when held; blue when held only by counting copies still cooking in the Forge; yellow when the rest
+     * can be crafted from materials you have; with remaining mode on,
      * orange when partly gathered and red when none yet.
      */
     public static int progressColor(RecipeManager.RecipeNode node, boolean showRemaining) {
         HudStyle style = HudStyle.get();
-        if (node.amount <= 0) return node.toCraft > 0 ? style.craftable : style.done;
+        if (node.amount <= 0) return node.toCraft > 0 ? style.craftable : node.cooking ? style.cooking : style.done;
         if (showRemaining && node.amount < node.required) return style.partial;
         return style.missing;
     }

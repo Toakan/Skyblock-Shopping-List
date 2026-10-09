@@ -337,7 +337,7 @@ public class ShoppingListScreen extends Screen {
         if (node == null) return y;
         Minecraft client = Minecraft.getInstance();
         int indent = level * RECIPE_LEVEL_INDENT;
-        boolean hasEnough = (node.amount <= 0 && node.toCraft <= 0);
+        boolean hasEnough = node.amount <= 0 && node.toCraft <= 0 && !node.cooking;
         boolean showRemaining = widget.isShowRemaining();
         String nodeKey = SandboxWidget.makePathKey(pathKey, node.name);
         boolean isExpanded = widget.isNodeExpanded(nodeKey);

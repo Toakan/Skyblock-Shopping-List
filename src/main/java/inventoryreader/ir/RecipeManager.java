@@ -246,6 +246,8 @@ public class RecipeManager {
          * each item cooking in the Forge now (that this step needs) is done, see {@link #forgeLeft(long)}.
          */
         public long forgeMs;
+        /** Shopping-list trees only: held enough only by counting copies still cooking in the Forge. */
+        public boolean cooking;
         public long[] forgeCookingEnds = new long[0];
         public List<RecipeNode> ingredients;
 
