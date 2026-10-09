@@ -96,6 +96,9 @@ public final class ProfileManager {
 
     /** Called with the ID from Hypixel's "Profile ID: ..." message. Client thread only. */
     static void onProfileId(String id) {
+        // The line can arrive in the same tick as the new level, before tick() has seen it; mark that level as
+        // seen, or the next tick would take it for a new server and stop tracking again.
+        lastLevel = Minecraft.getInstance().level;
         if (id.equals(profileId)) {
             ready = true;
             return;
