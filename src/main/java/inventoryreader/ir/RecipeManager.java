@@ -151,8 +151,9 @@ public class RecipeManager {
         return new RecipeNode(currentName, multiplier, ingredients);
     }
 
+    /** Every recipe, output name to ingredients. Read only: a reload replaces the map rather than changing it, so no copy. */
     public Map<String, Map<String, Integer>> getAllRecipes() {
-        return new LinkedHashMap<>(recipes);
+        return recipes;
     }
 
 
