@@ -6,8 +6,6 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.regex.Pattern;
-import java.util.HashSet;
-import java.util.Set;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.AbstractContainerMenu;
@@ -73,15 +71,19 @@ public class StorageReader {
         boolean wearable = isWearableMenu(title);
         boolean itemsOnly = wearable || title.contains("Accessory Bag");
         // Worn items show in these menus too but are already counted (armor with the inventory, equipment
-        // from the equipment menu); skipping them keeps them from counting twice.
-        Set<String> worn = wearable ? wornNames(title) : Set.of();
+        // from the equipment menu); skipping as many copies as are worn keeps them from counting twice,
+        // while a spare copy of the same item stored here still counts.
+        Map<String, Integer> worn = wearable ? wornCounts(title) : new HashMap<>();
         // The player's own inventory (below the menu) is tracked separately.
         for (ItemStack stack : MenuSlots.containerStacks(handler)) {
             if (petsOnly ? !ItemIds.isPet(stack) : itemsOnly && !ItemIds.hasSkyblockId(stack)) continue;
             if (wearable && ItemIds.isPet(stack)) continue;
             String name = ItemIds.nameOf(stack);
-            if (worn.contains(name)) continue;
-            newData.merge(name, stack.getCount(), Integer::sum);
+            int count = stack.getCount();
+            int wornLeft = worn.getOrDefault(name, 0);
+            int skipped = Math.min(wornLeft, count);
+            if (skipped > 0) worn.put(name, wornLeft - skipped);
+            if (count > skipped) newData.merge(name, count - skipped, Integer::sum);
         }
 
         Map<String, Integer> previous = containers().getOrDefault(title, Map.of());
@@ -95,22 +97,22 @@ public class StorageReader {
         ResourcesManager.getInstance().saveData(changes);
     }
 
-    /** Names of the armor being worn, plus (outside the equipment menu itself) the worn equipment. */
-    private Set<String> wornNames(String title) {
-        Set<String> names = new HashSet<>();
+    /** How many of each item are worn: the armor, plus (outside the equipment menu itself) the worn equipment. */
+    private Map<String, Integer> wornCounts(String title) {
+        Map<String, Integer> counts = new HashMap<>();
         Minecraft client = Minecraft.getInstance();
         if (client.player != null) {
             Inventory inventory = client.player.getInventory();
             for (int i = Inventory.INVENTORY_SIZE; i < Inventory.SLOT_OFFHAND; i++) {
                 ItemStack stack = inventory.getItem(i);
-                if (!stack.isEmpty()) names.add(ItemIds.nameOf(stack));
+                if (!stack.isEmpty()) counts.merge(ItemIds.nameOf(stack), stack.getCount(), Integer::sum);
             }
         }
         if (!title.startsWith(EQUIPMENT_MENU)) {
             containers().forEach((key, items) -> {
-                if (key.startsWith(EQUIPMENT_MENU)) names.addAll(items.keySet());
+                if (key.startsWith(EQUIPMENT_MENU)) items.forEach((name, count) -> counts.merge(name, count, Integer::sum));
             });
         }
-        return names;
+        return counts;
     }
 }
