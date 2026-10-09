@@ -242,14 +242,17 @@ public class SandboxWidget {
         }
     }
     /**
-     * Profile switch: runs {@code switchFolder} (which points the data files at the new profile) and loads that
-     * profile's list, both under this object's lock so a list save can't land in the wrong folder. Pop-ups are
-     * re-baselined so the switch itself doesn't announce anything.
+     * Profile switch: runs {@code switchProfile} (points the data files at the new profile and reloads its counts)
+     * and then loads that profile's list, all under this object's lock so a list save can't land in the wrong
+     * folder. The generation changes before and after, so an update that started before or during the switch is
+     * thrown away; one that starts after sees the new counts and list together. Pop-ups are re-baselined so the
+     * switch itself doesn't announce anything.
      */
-    public synchronized void reloadShoppingList(Runnable switchFolder) {
-        switchFolder.run();
+    public synchronized void reloadShoppingList(Runnable switchProfile) {
         listGeneration++;
+        switchProfile.run();
         loadShoppingList();
+        listGeneration++;
         scheduler.execute(() -> {
             readyEntries.clear();
             achievedEntries.clear();

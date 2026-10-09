@@ -154,6 +154,13 @@ public final class ForgeSpeed {
         return version;
     }
 
+    /** Runs {@code switchFolder} (the profile switch) and forgets the old profile's values, as one step. */
+    static synchronized void switchProfile(Runnable switchFolder) {
+        switchFolder.run();
+        data = null;
+        version++;
+    }
+
     /** Forgets the in-memory copy (after a reset deleted the file). */
     public static synchronized void clear() {
         data = null;

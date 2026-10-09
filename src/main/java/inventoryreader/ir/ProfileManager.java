@@ -125,14 +125,21 @@ public final class ProfileManager {
         }
     }
 
-    /** Points the data files at {@code folder}, drops every cached copy of profile data and loads that profile's. */
+    /**
+     * Points the data files at {@code folder}, drops every cached copy of profile data and loads that profile's.
+     * One step under the shopping list's lock: the new counts are in place before the new list is loaded, so the
+     * HUD update never works out the new list against the old profile's counts.
+     */
     private static void switchTo(File folder) {
         // The profile being left keeps its last saves; switching back right away then reads them, not older data.
         JsonFiles.flush();
-        SandboxWidget.getInstance().reloadShoppingList(() -> dir = folder);
-        clearCaches();
-        ResourcesManager.getInstance().reload();
-        FilePathManager.seedResources();
+        SandboxWidget.getInstance().reloadShoppingList(() -> {
+            // Under ForgeSpeed's own lock, so a mayor-check update can't fall between the two.
+            ForgeSpeed.switchProfile(() -> dir = folder);
+            clearCaches();
+            ResourcesManager.getInstance().reload();
+            FilePathManager.seedResources();
+        });
     }
 
     /** Drops every in-memory copy of profile data, so the next use reads the current profile's files. */
