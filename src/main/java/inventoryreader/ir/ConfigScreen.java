@@ -239,6 +239,10 @@ public final class ConfigScreen {
                     s -> s.showForging, (s, v) -> s.showForging = v))
                 .option(placement("Forging panel", d.forgingPlacement,
                     s -> s.forgingPlacement, (s, v) -> s.forgingPlacement = v))
+                .option(toggle("NPC price section", "Show at the bottom what every raw material on the list costs to "
+                    + "buy from NPCs, and what NPCs pay for it. Only coin prices; items no NPC sells or buys are left out "
+                    + "(the item count shows how many have a price).", d.showNpcPrice,
+                    s -> s.showNpcPrice, (s, v) -> s.showNpcPrice = v))
                 .option(styled(Option.<HudStyle.ForgeTimes>createBuilder()
                     .name(Component.literal("Forge times"))
                     .description(describe(

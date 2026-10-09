@@ -42,10 +42,12 @@ public final class RemoteRecipeFetcher {
      * Bump when the way recipes are extracted from the repo changes, so cached snapshots are rebuilt
      * even if the remote reports "not modified".
      */
-    private static final String PARSER_VERSION = "9";
+    private static final String PARSER_VERSION = "10";
     /** NEU's pseudo item for coin costs in shop recipes. */
     private static final String COIN_ID = "SKYBLOCK_COIN";
     public static final String COINS_NAME = "Coins";
+    /** Hypixel's item list: the only source of NPC sell prices ({@code npc_sell_price}). No API key needed. */
+    private static final String HYPIXEL_ITEMS_URL = "https://api.hypixel.net/v2/resources/skyblock/items";
     private static final String[] PET_RARITIES = {"Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic"};
     private static final String PARSER_VERSION_KEY = "parser-version";
     private static final long MAX_ZIP_ENTRIES = 200_000;
@@ -98,8 +100,9 @@ public final class RemoteRecipeFetcher {
                 default:
                     break;
             }
-            if (done) return;
+            if (done) break;
         }
+        fetchNpcSellPrices();
     }
 
     private static boolean fetchDirectJson(String url) {
@@ -227,6 +230,7 @@ public final class RemoteRecipeFetcher {
             Map<String, Map<String, Integer>> shopByInternal     = new LinkedHashMap<>();
             Map<String, Map<String, Integer>> katByInternal      = new LinkedHashMap<>();
             Map<String, Integer> forgeSecondsByInternal = new LinkedHashMap<>();
+            Map<String, Double> buyPriceByInternal = new LinkedHashMap<>();
             for (NEUItem item : neuRepo.getItems().getItems().values()) {
                 for (NEURecipe recipe : item.getRecipes()) {
                     if (recipe instanceof NEUCraftingRecipe cr) {
@@ -240,6 +244,7 @@ public final class RemoteRecipeFetcher {
                         }
                     } else if (recipe instanceof NEUNpcShopRecipe shop) {
                         collectRecipeIngredients(shopByInternal, shop.getAllOutputs(), shop.getAllInputs());
+                        collectCoinPrice(buyPriceByInternal, shop);
                     } else if (recipe instanceof NEUKatUpgradeRecipe kat) {
                         collectRecipeIngredients(katByInternal, kat.getAllOutputs(), kat.getAllInputs());
                     }
@@ -281,6 +286,9 @@ public final class RemoteRecipeFetcher {
             changed |= writeSnapshot(itemTypes, FilePathManager.ITEM_TYPES_JSON, meta);
             changed |= writeSnapshot(itemSacks(repoExtracted, recipeNameById), FilePathManager.ITEM_SACKS_JSON, meta);
             changed |= writeSnapshot(recipeNameById, FilePathManager.ITEM_NAMES_JSON, meta);
+            Map<String, Double> buyPrices = new LinkedHashMap<>();
+            buyPriceByInternal.forEach((id, coins) -> buyPrices.put(recipeNameById.getOrDefault(id, id), coins));
+            changed |= writeSnapshot(buyPrices, FilePathManager.NPC_BUY_PRICES_JSON, meta);
 
             inventoryreader.ir.InventoryReader.debug("NEU repo parsed (library): {} crafting (incl. {} pet upgrades), {} forge, {} shop recipes", craftingWire.size(), katCount, forgeWire.size(), shopWire.size());
             if (changed) {
@@ -326,6 +334,82 @@ public final class RemoteRecipeFetcher {
         Map<String, Integer> ing = new LinkedHashMap<>();
         totals.forEach((id, amount) -> ing.put(id, (int) Math.max(1, Math.ceil(amount / outputCount))));
         target.put(output.getItemId(), ing);
+    }
+
+    /**
+     * Keeps the cheapest price per item of shop offers that cost only coins (e.g. 8 coins for 2 Coal = 4 each).
+     * Offers that also cost items are left out: the NPC price is about coins only.
+     */
+    private static void collectCoinPrice(Map<String, Double> target, NEUNpcShopRecipe shop) {
+        NEUIngredient output = shop.getResult();
+        if (output == null || NEUIngredient.NEU_SENTINEL_EMPTY.equals(output.getItemId())) return;
+        double coins = 0;
+        if (shop.getCost() == null) return;
+        for (NEUIngredient in : shop.getCost()) {
+            if (in == null || NEUIngredient.NEU_SENTINEL_EMPTY.equals(in.getItemId()) || in.getAmount() <= 0) continue;
+            if (!COIN_ID.equals(in.getItemId())) return;
+            coins += in.getAmount();
+        }
+        if (coins <= 0) return;
+        target.merge(output.getItemId(), coins / Math.max(1, output.getAmount()), Math::min);
+    }
+
+    /** The two fields of Hypixel's item list that are used; Gson skips the rest. */
+    private static class HypixelItems {
+        List<HypixelItem> items;
+    }
+
+    private static class HypixelItem {
+        String id;
+        Double npc_sell_price;
+    }
+
+    /**
+     * Downloads NPC sell prices from Hypixel's item list and saves them by item name. The list is large (about 2 MB
+     * compressed), so it is only downloaded again when Hypixel reports it changed (Last-Modified).
+     */
+    private static void fetchNpcSellPrices() {
+        try {
+            Map<String, String> names = inventoryreader.ir.JsonFiles.read(FilePathManager.ITEM_NAMES_JSON,
+                new TypeToken<Map<String, String>>(){}.getType());
+            if (names == null || names.isEmpty()) return;
+            Map<String, String> meta = readMeta(FilePathManager.REMOTE_META_JSON);
+            String modifiedKey = "last-modified::" + HYPIXEL_ITEMS_URL;
+            String modified = FilePathManager.NPC_SELL_PRICES_JSON.isFile() ? meta.getOrDefault(modifiedKey, "") : "";
+            HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(HYPIXEL_ITEMS_URL))
+                    .timeout(Duration.ofSeconds(30))
+                    .header("Accept-Encoding", "gzip")
+                    .GET();
+            if (!modified.isEmpty()) b.header("If-Modified-Since", modified);
+            HttpResponse<InputStream> resp = inventoryreader.ir.Http.CLIENT.send(b.build(), HttpResponse.BodyHandlers.ofInputStream());
+            if (resp.statusCode() / 100 != 2) {
+                resp.body().close();
+                if (resp.statusCode() == 304) { inventoryreader.ir.InventoryReader.debug("NPC sell prices not modified"); return; }
+                LOGGER.warn("NPC sell price fetch HTTP {}", resp.statusCode());
+                return;
+            }
+            HypixelItems parsed;
+            InputStream body = resp.body();
+            if (resp.headers().firstValue("content-encoding").orElse("").equalsIgnoreCase("gzip")) {
+                body = new java.util.zip.GZIPInputStream(body);
+            }
+            try (java.io.Reader reader = new java.io.InputStreamReader(body, StandardCharsets.UTF_8)) {
+                parsed = GSON.fromJson(reader, HypixelItems.class);
+            }
+            if (parsed == null || parsed.items == null || parsed.items.isEmpty()) { LOGGER.warn("Hypixel item list empty"); return; }
+            Map<String, Double> sellPrices = new LinkedHashMap<>();
+            for (HypixelItem item : parsed.items) {
+                if (item == null || item.id == null || item.npc_sell_price == null || item.npc_sell_price <= 0) continue;
+                sellPrices.put(names.getOrDefault(item.id, item.id), item.npc_sell_price);
+            }
+            boolean changed = writeSnapshot(sellPrices, FilePathManager.NPC_SELL_PRICES_JSON, meta);
+            resp.headers().firstValue("last-modified").ifPresent(v -> meta.put(modifiedKey, v));
+            writeMeta(FilePathManager.REMOTE_META_JSON, meta);
+            inventoryreader.ir.InventoryReader.debug("NPC sell prices: {} items", sellPrices.size());
+            if (changed) inventoryreader.ir.NpcPrices.reload();
+        } catch (Exception e) {
+            LOGGER.warn("NPC sell price fetch failed: {}", e.toString());
+        }
     }
 
     /**

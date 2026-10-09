@@ -180,7 +180,8 @@ public class ShoppingListScreen extends Screen {
         builtRows = list.stream().map(e -> e.recipe).toList();
         builtRowSet = java.util.Set.copyOf(builtRows);
         treeViewY = PANEL_TOP + Math.max(1, rows) * PANEL_ROW + 22;
-        treeViewHeight = Math.max(60, height - 40 - treeViewY);
+        // Room under the preview for the NPC price line.
+        treeViewHeight = Math.max(60, height - 52 - treeViewY);
 
         addRenderableWidget(Button.builder(Component.literal("Clear list"), button -> {
             widget.clearList();
@@ -532,6 +533,11 @@ public class ShoppingListScreen extends Screen {
             context.text(font, "Click recipes on the left", treeViewX + 10, treeViewY + 20, 0xFFAAAAAA, false);
         }
         context.disableScissor();
+        List<String> prices = widget.getNpcPriceLines();
+        if (!prices.isEmpty() && !builtRows.isEmpty()) {
+            context.text(font, fitPlain("NPC price - " + String.join("   ", prices), treeViewWidth, 0xFFFF9D00),
+                treeViewX, treeViewY + treeViewHeight + 4, 0xFFFFFFFF, false);
+        }
     }
 
     /** {@code text} in the default font, cut with "..." to fit {@code width}. */

@@ -54,6 +54,10 @@ public class SandboxWidget {
     private volatile List<String> messages = List.of();
     /** "Forging -" lines: forge slots making something the shopping list needs. */
     private volatile List<String> forgingLines = List.of();
+    /** "NPC price -" lines: coins to buy every raw material at NPCs, and what NPCs pay for them. */
+    private volatile List<String> npcPriceLines = List.of();
+    /** Update thread only: {@link NpcPrices#getVersion()} the price lines were worked out with. */
+    private long npcPriceVersion = -1;
     /**
      * Changes whenever the list is replaced wholesale (profile switch, data reset). An update that started on the
      * old list sees the change and neither publishes its results nor removes entries from the new list.
@@ -311,6 +315,11 @@ public class SandboxWidget {
     public RecipeManager.RecipeNode getDisplayRoot() {
         return recipeTree;
     }
+
+    /** "Buy: ..." and "Sell: ..." for the whole list at NPC prices; empty when nothing has a price. */
+    public List<String> getNpcPriceLines() {
+        return npcPriceLines;
+    }
     public boolean isNodeExpanded(String nodeKey) {
         Boolean result = expandedNodes.getOrDefault(nodeKey, false);
         return result != null ? result : false;
@@ -475,8 +484,9 @@ public class SandboxWidget {
             long requests = refreshRequests.get();
             long scans = SackReader.getInstance().getScanVersion();
             if (version != computedVersion || requests != handledRequests || ForgeSpeed.getVersion() != forgeSpeedVersion
-                    || recipes != recipeVersion || scans != sackScanVersion) {
+                    || recipes != recipeVersion || scans != sackScanVersion || NpcPrices.getVersion() != npcPriceVersion) {
                 computedVersion = version;
+                npcPriceVersion = NpcPrices.getVersion();
                 sackScanVersion = scans;
                 handledRequests = requests;
                 forgeSpeedVersion = ForgeSpeed.getVersion();
@@ -511,6 +521,7 @@ public class SandboxWidget {
             messages = List.of();
             listItemNames = Set.of();
             forgingLines = List.of();
+            npcPriceLines = List.of();
             neededSacks = List.of();
             listSacks = List.of();
             readyEntries.clear();
@@ -606,8 +617,10 @@ public class SandboxWidget {
         Set<String> itemNames = new HashSet<>();
         for (RecipeManager.RecipeNode tree : response.trees) collectNames(tree, itemNames);
         updateNeededSacks(response.trees, toasts);
+        // Every raw material the list needs, held or not: the whole bill at NPC prices.
+        List<String> prices = NpcPrices.summary(response.total.ingredients);
         if (!publish(generation, List.copyOf(newMessages), new RecipeManager.RecipeNode("Shopping list", 0, 0, tops),
-                itemNames, toasts)) {
+                itemNames, prices, toasts)) {
             return;
         }
         updateForgingLines();
@@ -764,9 +777,10 @@ public class SandboxWidget {
      * list; the swap queued a fresh update). Under the lock the swap takes, so the check and the publish are one step.
      */
     private synchronized boolean publish(long generation, List<String> newMessages, RecipeManager.RecipeNode tree,
-                                         Set<String> itemNames, List<Runnable> toasts) {
+                                         Set<String> itemNames, List<String> prices, List<Runnable> toasts) {
         if (generation != listGeneration) return false;
         messages = newMessages;
+        npcPriceLines = prices;
         recipeTree = tree;
         listItemNames = itemNames;
         toasts.forEach(Runnable::run);
@@ -856,6 +870,7 @@ public class SandboxWidget {
     private static final RecipeManager.RecipeNode SAMPLE_TREE = sampleTree();
     private static final List<String> SAMPLE_CRAFTABLE = List.of("1× Refined Diamond");
     private static final List<String> SAMPLE_FORGING = List.of("3× Mithril Plate - 2h 10m");
+    private static final List<String> SAMPLE_NPC_PRICE = List.of("Buy: 1,240 coins (2/3 items)", "Sell: 310 coins (3/3 items)");
 
     /** A small made-up list showing every row state: done, partly gathered, missing and can craft. */
     private static RecipeManager.RecipeNode sampleTree() {
@@ -1196,6 +1211,14 @@ public class SandboxWidget {
             if (panel != Panel.MAIN || !forging.isEmpty()) {
                 sections.add(new Section("Forging", forging, style.forgingScale, style.forgingAlign,
                     style.forgingHeader, style.forgingText));
+            }
+        }
+        // The bill goes last, at the bottom of the main panel.
+        if (style.showNpcPrice && panel == Panel.MAIN) {
+            List<String> prices = previewing ? SAMPLE_NPC_PRICE : npcPriceLines;
+            if (!prices.isEmpty()) {
+                sections.add(new Section("NPC price", prices, style.craftableScale, style.craftableAlign,
+                    style.sectionHeader, style.sectionText));
             }
         }
         return sections;
