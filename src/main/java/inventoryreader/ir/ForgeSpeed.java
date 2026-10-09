@@ -76,10 +76,9 @@ public final class ForgeSpeed {
             double percent = m.find() ? parse(m.group(1)) : 0;
             // The state is a line of its own, "ENABLED" or "DISABLED"; a switched-off perk does nothing.
             if (lines.stream().anyMatch(line -> line.trim().equalsIgnoreCase("DISABLED"))) percent = 0;
-            Data d = get();
-            if (d.quickForge != percent) {
-                d.quickForge = percent;
-                save(d);
+            if (get().quickForge != percent) {
+                double value = percent;
+                update(d -> d.quickForge = value);
             }
             return;
         }
@@ -87,21 +86,25 @@ public final class ForgeSpeed {
 
     /** Starts a background check of the current mayor and minister when the last one is over an hour old. */
     public static void refreshMayorIfDue() {
-        Data d = get();
-        if (System.currentTimeMillis() - d.mayorCheckedAt < MAYOR_REFRESH_MS || !SkyblockDetector.isOnSkyblock()) return;
+        // Only Forge times uses the bonus; with them off there is no reason to ask.
+        if (HudStyle.get().forgeTimes == HudStyle.ForgeTimes.OFF) return;
+        if (System.currentTimeMillis() - get().mayorCheckedAt < MAYOR_REFRESH_MS || !SkyblockDetector.isOnSkyblock()) return;
         if (!FETCHING.compareAndSet(false, true)) return;
         HttpRequest request = HttpRequest.newBuilder(URI.create(ELECTION_URL)).timeout(Duration.ofSeconds(10)).GET().build();
         HTTP.sendAsync(request, HttpResponse.BodyHandlers.ofString()).whenComplete((response, error) -> {
             try {
-                Data current = get();
                 // Failures are retried at the next hourly check; the last known bonus stays in use.
-                current.mayorCheckedAt = System.currentTimeMillis();
+                Double bonus = null;
                 if (error == null && response.statusCode() / 100 == 2) {
-                    current.mayorBonus = moltenForgeBonus(response.body());
+                    bonus = moltenForgeBonus(response.body());
                 } else {
                     InventoryReader.LOGGER.warn("Mayor check failed: {}", error != null ? error.toString() : "HTTP " + response.statusCode());
                 }
-                save(current);
+                Double found = bonus;
+                update(d -> {
+                    d.mayorCheckedAt = System.currentTimeMillis();
+                    if (found != null) d.mayorBonus = found;
+                });
             } catch (RuntimeException e) {
                 InventoryReader.LOGGER.warn("Mayor check failed: {}", e.toString());
             } finally {
@@ -165,10 +168,20 @@ public final class ForgeSpeed {
         return d;
     }
 
-    private static void save(Data d) {
-        data = d;
+    /**
+     * Applies {@code change} to a copy and swaps the copy in, so readers on other threads (the HUD, the mayor
+     * check) never see a half-changed value. Synchronized so two updates can't lose each other's change.
+     */
+    private static synchronized void update(java.util.function.Consumer<Data> change) {
+        Data current = get();
+        Data next = new Data();
+        next.quickForge = current.quickForge;
+        next.mayorBonus = current.mayorBonus;
+        next.mayorCheckedAt = current.mayorCheckedAt;
+        change.accept(next);
+        data = next;
         version++;
-        JsonFiles.write(FilePathManager.FORGE_SPEED_JSON, d);
+        JsonFiles.write(FilePathManager.FORGE_SPEED_JSON, next);
     }
 
     private static double parse(String number) {

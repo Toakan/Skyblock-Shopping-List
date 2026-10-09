@@ -243,8 +243,10 @@ public final class ConfigScreen {
                     .description(describe(
                         "Shows how long the Forge still needs after a row's name, e.g. [25hrs]: every forge craft "
                             + "still to make for that row, one after another (time × how many, plus its "
-                            + "ingredients). Items cooking now add the time they have left. Includes Quick Forge (open Heart of the Mountain once) and Cole's "
-                            + "Molten Forge. Long names are cut short so the time always shows."))
+                            + "ingredients). This is the worst case: forging several at once finishes sooner.\n"
+                            + "Items cooking now add the time they have left. Crafts not started yet get Quick Forge "
+                            + "(open Heart of the Mountain once) and Cole's Molten Forge while he is mayor or "
+                            + "minister. Long names are cut short so the time always shows."))
                     .controller(opt -> EnumControllerBuilder.create(opt).enumClass(HudStyle.ForgeTimes.class)
                         .formatValue(v -> Component.literal(switch (v) {
                             case OFF -> "Off";
