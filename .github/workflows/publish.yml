@@ -52,6 +52,10 @@ jobs:
           name: Artifacts
           path: build/libs/
 
+      - name: read mod version
+        id: ver
+        run: echo "v=$(grep '^mod_version=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')" >> "$GITHUB_OUTPUT"
+      
       - name: publish to modrinth and github
         uses: Kir-Antipov/mc-publish@v3.3
         with:
@@ -64,8 +68,9 @@ jobs:
           files: |
             build/libs/!(*-@(dev|sources|javadoc)).jar
 
-          name: Skyblock Shopping List ${{ github.ref_name }}
-          version-type: release
+          name: Skyblock Shopping List ${{ steps.ver.outputs.v }}
+          version: ${{ steps.ver.outputs.v }}
+          version-type: ${{ github.event.release.prerelease && 'beta' || 'release' }}
           loaders: fabric
           game-versions: |
             26.2
@@ -75,4 +80,4 @@ jobs:
           dependencies: |
             fabric-api(required)
             yacl(required)
-            hypixel-mod-api(optional)
+            hypixel-mod-api(required)
