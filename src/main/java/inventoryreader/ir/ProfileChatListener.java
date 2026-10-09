@@ -19,12 +19,13 @@ public final class ProfileChatListener {
     private ProfileChatListener() {}
 
     public static void register() {
-        ClientReceiveMessageEvents.GAME.register((message, overlay) -> read(message, overlay));
-        // Also watch before other mods may hide the line. Always returns true: this never cancels anything.
+        // Watched before other mods may hide the line. Always returns true: this never cancels anything.
         ClientReceiveMessageEvents.ALLOW_GAME.register((message, overlay) -> {
             read(message, overlay);
             return true;
         });
+        // A listener that ran before this one may already have hidden it; it still arrives here.
+        ClientReceiveMessageEvents.GAME_CANCELED.register(ProfileChatListener::read);
     }
 
     private static void read(Component message, boolean overlay) {

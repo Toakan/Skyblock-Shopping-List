@@ -16,8 +16,8 @@ import java.util.UUID;
  * chat ("Profile ID: <uuid>") each time you join SkyBlock; {@link ProfileChatListener} passes it here.
  *
  * <p>The ID only arrives after the new server has loaded, so after every server change tracking waits for
- * it (see {@link #isReady()}): otherwise the new profile's items would be booked to the old one. If another
- * mod hides the message, tracking carries on with the last profile after {@link #FALLBACK_MS}.
+ * it (see {@link #isReady()}): otherwise the new profile's items would be booked to the old one. Tracking
+ * never resumes without it; the message is read even when another mod hides it.
  */
 public final class ProfileManager {
     /** Files that belong to one profile; everything else (HUD, settings, recipes) is shared. */
@@ -27,14 +27,12 @@ public final class ProfileManager {
     };
     private static final File PROFILES_DIR = new File(FilePathManager.DATA_DIR, "profiles");
     private static final String LAST_PROFILE_FILE = "last_profile.txt";
-    private static final long FALLBACK_MS = 5000;
 
     /** Current profile's folder; the old flat layout (the data folder itself) until a profile is known. */
     private static volatile File dir = FilePathManager.DATA_DIR;
     private static volatile String profileId;
     private static volatile boolean ready = false;
     private static Object lastLevel;
-    private static long waitingSince;
     private static volatile boolean initialized = false;
 
     private ProfileManager() {}
@@ -71,7 +69,7 @@ public final class ProfileManager {
         return initialized;
     }
 
-    /** True once the current server's profile is known (or assumed), so tracking may book changes to it. */
+    /** True once the current server's profile is known, so tracking may book changes to it. */
     public static boolean isReady() {
         return ready;
     }
@@ -93,11 +91,6 @@ public final class ProfileManager {
             // New server (or world): wait for its "Profile ID" line before tracking again.
             lastLevel = client.level;
             ready = false;
-            waitingSince = System.currentTimeMillis();
-        }
-        if (!ready && SkyblockDetector.isOnSkyblock() && System.currentTimeMillis() - waitingSince > FALLBACK_MS) {
-            ready = true;
-            InventoryReader.debug("No Profile ID message; carrying on with profile {}", profileId);
         }
     }
 
