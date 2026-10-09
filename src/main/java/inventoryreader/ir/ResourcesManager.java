@@ -207,14 +207,14 @@ public class ResourcesManager {
     /** As above, worked out from {@code snapshot} (item counts, never changed here). */
     private ShoppingResponse getShoppingList(List<ShoppingListEntry> entries, Map<String, Integer> snapshot) {
         Map<String, Map<String, Integer>> forging = RecipeManager.getInstance().getAllRecipes();
-        Map<String, Integer> highestPossibleResources = new LinkedHashMap<>(snapshot);
-        Map<String, Integer> currentAvailableResources = new LinkedHashMap<>(highestPossibleResources);
+        // Every item in the trees, by the name the recipes use, with the count it is tracked under (which may be
+        // another spelling, e.g. "☘ Fine Jade Gemstone" for "Fine Jade Gemstone").
+        java.util.Set<String> names = new java.util.LinkedHashSet<>();
+        for (ShoppingListEntry entry : entries) collectNames(entry.recipe, forging, names);
+        Map<String, Integer> counts = countsByRecipeName(names, snapshot);
+        Map<String, Integer> highestPossibleResources = new LinkedHashMap<>(counts);
+        Map<String, Integer> currentAvailableResources = new LinkedHashMap<>(counts);
         Map<String, Integer> messages = new LinkedHashMap<>();
-
-        java.util.Set<String> visited = new java.util.HashSet<>();
-        for (ShoppingListEntry entry : entries) {
-            initializeResourceMaps(entry.recipe, forging, highestPossibleResources, currentAvailableResources, visited);
-        }
 
         // Phase 1: craft what can be crafted, entry by entry, and note how many of each are still to make.
         int[] toCraft = new int[entries.size()];
@@ -229,7 +229,7 @@ public class ResourcesManager {
             if (!entry.isHaveTotal()) {
                 // Add more is done at startCount + amount held (as SandboxWidget checks it), so copies made since
                 // the entry was added count; held copies are still not taken from stock.
-                need = Math.max(0, entry.startCount + entry.amount - heldIn(snapshot, entry.recipe));
+                need = Math.max(0, entry.startCount + entry.amount - counts.getOrDefault(entry.recipe, 0));
             }
             required[i] = Math.max(entry.amount, need);
             if (entry.isHaveTotal()) {
@@ -253,7 +253,7 @@ public class ResourcesManager {
         // Phase 2: expand what is still missing. A root does not draw on existing stock of itself: the
         // player asked for this many more. Phase 1 counted items craftable from materials as stock; owned
         // tells them apart from items actually held.
-        Map<String, Integer> owned = new LinkedHashMap<>(snapshot);
+        Map<String, Integer> owned = new LinkedHashMap<>(counts);
         for (int i = 0; i < entries.size(); i++) {
             if (fromStock[i] > 0) owned.merge(entries.get(i).recipe, -fromStock[i], Integer::sum);
         }
@@ -499,24 +499,29 @@ public class ResourcesManager {
         return node;
     }
 
-    private void initializeResourceMaps(String targetItem, Map<String, Map<String, Integer>> forging,
-                                       Map<String, Integer> highestPossibleResources,
-                                       Map<String, Integer> currentAvailableResources,
-                                       java.util.Set<String> visited) {
-        if (!visited.add(targetItem)) {
-            return; // already visited — break the cycle
-        }
-        highestPossibleResources.putIfAbsent(targetItem, 0);
-        currentAvailableResources.putIfAbsent(targetItem, 0);
-
-        Map<String, Integer> recipe = forging.get(targetItem);
+    /** Adds {@code target} and everything in its recipe tree to {@code names}; each item once (stops cycles). */
+    private static void collectNames(String target, Map<String, Map<String, Integer>> forging, java.util.Set<String> names) {
+        if (!names.add(target)) return;
+        Map<String, Integer> recipe = forging.get(target);
         if (recipe != null) {
-            for (String ingredient : recipe.keySet()) {
-                highestPossibleResources.putIfAbsent(ingredient, 0);
-                currentAvailableResources.putIfAbsent(ingredient, 0);
-                initializeResourceMaps(ingredient, forging, highestPossibleResources, currentAvailableResources, visited);
+            for (String ingredient : recipe.keySet()) collectNames(ingredient, forging, names);
+        }
+    }
+
+    /**
+     * Each name's count in {@code snapshot}, under whichever spelling it is tracked as. One lock for all of them.
+     * Two spellings of one item get its count once (the first), so the same stock is never counted twice.
+     */
+    private Map<String, Integer> countsByRecipeName(java.util.Set<String> names, Map<String, Integer> snapshot) {
+        Map<String, Integer> out = new LinkedHashMap<>();
+        java.util.Set<String> usedKeys = new java.util.HashSet<>();
+        synchronized (this) {
+            for (String name : names) {
+                String key = resolve(name);
+                out.put(name, key == null || !usedKeys.add(key) ? 0 : snapshot.getOrDefault(key, 0));
             }
         }
+        return out;
     }
 
     public static class ResourceEntry {
