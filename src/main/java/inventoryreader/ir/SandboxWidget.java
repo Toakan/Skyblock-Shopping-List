@@ -817,8 +817,14 @@ public class SandboxWidget {
     }
 
     public synchronized void setPanelRect(Panel panel, int x, int y, int width, int height, int scale) {
-        PanelRect rect = new PanelRect(x, y, Math.max(minWidth(panel), width), Math.max(minHeight(panel), height),
-            clampPanelScale(scale));
+        int percent = clampPanelScale(scale);
+        // No bigger than the screen (share codes and preset files can hold any size), never under the minimum.
+        Window window = Minecraft.getInstance().getWindow();
+        float factor = scaleFactor() * percent / 100f;
+        int maxWidth = Math.max(minWidth(panel), (int) (window.getGuiScaledWidth() / factor));
+        int maxHeight = Math.max(minHeight(panel), (int) (window.getGuiScaledHeight() / factor));
+        PanelRect rect = new PanelRect(x, y, Math.min(maxWidth, Math.max(minWidth(panel), width)),
+            Math.min(maxHeight, Math.max(minHeight(panel), height)), percent);
         setRef(rect);
         switch (panel) {
             case MAIN -> {
