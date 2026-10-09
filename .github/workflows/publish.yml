@@ -1,0 +1,78 @@
+# Publishes the mod to Modrinth (and attaches the jar to the GitHub release)
+# whenever a GitHub release is published.
+#
+# Runs as three chained jobs: check the tag -> build (reusing build.yml) -> publish.
+#
+# Setup:
+#   1. Add `workflow_call:` to the `on:` block in build.yml so it can be reused here.
+#   2. Create the project on Modrinth and add its Project ID as a repo secret named MODRINTH_ID.
+#   3. Create a Modrinth personal access token with the "Create versions" scope.
+#   4. Add it as a repo secret named MODRINTH_TOKEN.
+
+name: publish
+
+on:
+  release:
+    types: [published]
+
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout repository
+        uses: actions/checkout@v4
+
+      - name: check tag matches mod_version
+        if: github.event_name == 'release'
+        run: |
+          v=$(grep '^mod_version=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')
+          tag="${GITHUB_REF_NAME#v}"
+          if [ "$tag" != "$v" ]; then
+            echo "::error::Release tag $GITHUB_REF_NAME does not match mod_version $v in gradle.properties"
+            exit 1
+          fi
+
+  build:
+    needs: check
+    uses: ./.github/workflows/build.yml
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: checkout repository
+        uses: actions/checkout@v4
+
+      - name: download built jar
+        uses: actions/download-artifact@v4
+        with:
+          name: Artifacts
+          path: build/libs/
+
+      - name: publish to modrinth and github
+        uses: Kir-Antipov/mc-publish@v3.3
+        with:
+          modrinth-id: ${{ secrets.MODRINTH_ID }}
+          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
+          modrinth-featured: true
+
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+          files: |
+            build/libs/!(*-@(dev|sources|javadoc)).jar
+
+          name: Skyblock Shopping List ${{ github.ref_name }}
+          version-type: release
+          loaders: fabric
+          game-versions: |
+            26.2
+          java: |
+            25
+
+          dependencies: |
+            fabric-api(required)
+            yacl(required)
+            hypixel-mod-api(optional)
