@@ -118,6 +118,9 @@ public class SandboxViewer extends Screen {
     private void addRecipeSearchAndAmount() {
         searchBox = new EditBox(this.font, 30, 56, 180, 18, Component.literal(""));
         searchBox.setHint(Component.literal("Search recipes..."));
+        // init() runs again on every recipe click and resize; keep what was typed (set before the responder,
+        // so the list keeps its scroll position).
+        searchBox.setValue(recipeSearchTerm);
         searchBox.setResponder(this::onRecipeSearchChanged);
         this.addRenderableWidget(searchBox);
 
@@ -179,6 +182,7 @@ public class SandboxViewer extends Screen {
 
         searchBox = new EditBox(this.font, 30, 56, 210, 18, Component.literal("Search Resources"));
         searchBox.setHint(Component.literal("Search resources..."));
+        searchBox.setValue(resourceSearchTerm);
         searchBox.setResponder(this::onResourceSearchChanged);
         this.addRenderableWidget(searchBox);
 
