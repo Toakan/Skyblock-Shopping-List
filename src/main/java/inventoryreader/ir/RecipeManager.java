@@ -63,7 +63,9 @@ public class RecipeManager {
             for (Map<String, Integer> m : sanitized.values()) allNames.addAll(m.keySet());
             itemNames = Collections.unmodifiableSet(allNames);
             // Ingredient-only items (shop currencies such as Agatha's Coupon) can be added to the list too.
+            // Sorted once here: the recipe pickers ask for the list on every keystroke.
             List<String> newNames = new ArrayList<>(allNames);
+            newNames.sort(String::compareToIgnoreCase);
 
             recipes = Collections.unmodifiableMap(sanitized);
             recipeNames = Collections.unmodifiableList(newNames);
@@ -119,10 +121,9 @@ public class RecipeManager {
         return seconds == null ? 0 : seconds;
     }
 
+    /** Every item name, A-Z ignoring case. Unmodifiable. */
     public List<String> getRecipeNames() {
-        List<String> list = new ArrayList<>(recipeNames);
-        list.sort(String::compareToIgnoreCase);
-        return list;
+        return recipeNames;
     }
 
     public Map<String, Integer> getSimpleRecipe(String name, int amt) {
@@ -178,7 +179,7 @@ public class RecipeManager {
         for (Map.Entry<String, Map<String, Integer>> entry : input.entrySet()) {
             String output = entry.getKey();
             Map<String, Integer> ing = entry.getValue();
-            // No ingredients is no recipe: kept, it would count as craftable from nothing.
+            // No ingredients is no recipe; keeping it would make the item craftable from nothing.
             if (ing == null || ing.isEmpty()) continue;
 
             // Drop known decompression entries entirely
