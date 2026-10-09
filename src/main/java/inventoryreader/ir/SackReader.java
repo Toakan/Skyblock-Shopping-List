@@ -47,7 +47,7 @@ public class SackReader {
 
     private Map<String, Integer> snapshot() {
         if (snapshot == null) {
-            Map<String, Integer> loaded = JsonFiles.read(FilePathManager.SACKS_JSON, MAP_TYPE);
+            Map<String, Integer> loaded = JsonFiles.read(FilePathManager.sacksJson(), MAP_TYPE);
             snapshot = loaded != null ? new LinkedHashMap<>(loaded) : new LinkedHashMap<>();
         }
         return snapshot;
@@ -62,7 +62,7 @@ public class SackReader {
     /** When a sack menu was last read (epoch ms), or 0 if never. Chat updates don't count. */
     public synchronized long getLastRead() {
         if (lastRead == null) {
-            SackMeta meta = JsonFiles.read(FilePathManager.SACKS_META_JSON, SackMeta.class);
+            SackMeta meta = JsonFiles.read(FilePathManager.sacksMetaJson(), SackMeta.class);
             lastRead = meta != null ? meta.lastRead : 0L;
         }
         return lastRead;
@@ -95,7 +95,7 @@ public class SackReader {
 
         SackMeta meta = new SackMeta();
         meta.lastRead = lastRead = System.currentTimeMillis();
-        JsonFiles.write(FilePathManager.SACKS_META_JSON, meta);
+        JsonFiles.write(FilePathManager.sacksMetaJson(), meta);
 
         Map<String, Integer> snap = snapshot();
         Map<String, Integer> deltas = new LinkedHashMap<>();
@@ -106,7 +106,7 @@ public class SackReader {
         });
         if (!deltas.isEmpty()) {
             ResourcesManager.getInstance().saveData(deltas);
-            JsonFiles.write(FilePathManager.SACKS_JSON, snap);
+            JsonFiles.write(FilePathManager.sacksJson(), snap);
         }
     }
 
@@ -116,7 +116,7 @@ public class SackReader {
         Map<String, Integer> snap = snapshot();
         deltas.forEach((name, delta) -> snap.merge(ItemNames.clean(name), delta, Integer::sum));
         ResourcesManager.getInstance().saveData(deltas);
-        JsonFiles.write(FilePathManager.SACKS_JSON, snap);
+        JsonFiles.write(FilePathManager.sacksJson(), snap);
     }
 
     private static void readStoredLore(String itemName, List<Component> lines, Map<String, Integer> out) {

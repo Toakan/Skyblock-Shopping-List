@@ -42,6 +42,14 @@ public final class SkyblockDetector {
         return onSkyblock;
     }
 
+    /**
+     * On SkyBlock and the profile is known, so item changes may be booked to it. Just after a server change
+     * this waits for Hypixel's "Profile ID" line (see {@link ProfileManager}); the HUD and keys don't wait.
+     */
+    public static boolean isTracking() {
+        return onSkyblock && ProfileManager.isReady();
+    }
+
     /** The SkyBlock island mode from the Mod API (e.g. "mining_3"), or null if unknown. */
     public static String getIsland() {
         return island;

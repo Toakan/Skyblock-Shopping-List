@@ -25,18 +25,25 @@ public class FilePathManager {
         new File(FabricLoader.getInstance().getGameDir().toFile(), ".skyblock-shopping-list"),
         new File(FabricLoader.getInstance().getGameDir().toFile(), ".ir-data"),
     };
-    public static final File CONTAINER_JSON = new File(DATA_DIR, "allcontainerData.json");
-    public static final File INVENTORY_JSON = new File(DATA_DIR, "inventorydata.json");
-    public static final File RESOURCES_JSON = new File(DATA_DIR, "resources.json");
-    public static final File SACKS_JSON = new File(DATA_DIR, "sacks.json");
+    // Per SkyBlock profile (see ProfileManager): resolved against the current profile's folder on every use.
+    public static File containerJson() { return profileFile("allcontainerData.json"); }
+    public static File inventoryJson() { return profileFile("inventorydata.json"); }
+    public static File resourcesJson() { return profileFile("resources.json"); }
+    public static File sacksJson() { return profileFile("sacks.json"); }
     /** When a sack menu was last read, for the stale-sack warning. */
-    public static final File SACKS_META_JSON = new File(DATA_DIR, "sacks_meta.json");
+    public static File sacksMetaJson() { return profileFile("sacks_meta.json"); }
     /** Last bank balance seen in the bank menu. */
-    public static final File COINS_JSON = new File(DATA_DIR, "coins.json");
+    public static File coinsJson() { return profileFile("coins.json"); }
     /** What was cooking in the Dwarven Forge when it was last opened. */
-    public static final File FORGE_JSON = new File(DATA_DIR, "forge.json");
+    public static File forgeJson() { return profileFile("forge.json"); }
     /** Quick Forge % from the HOTM menu and the mayor forge bonus, for forge-time estimates. */
-    public static final File FORGE_SPEED_JSON = new File(DATA_DIR, "forge_speed.json");
+    public static File forgeSpeedJson() { return profileFile("forge_speed.json"); }
+    /** The shopping list. */
+    public static File shoppingListJson() { return profileFile("shopping_list.json"); }
+
+    private static File profileFile(String name) {
+        return new File(ProfileManager.dir(), name);
+    }
     public static final File WIDGET_CONFIG_JSON = new File(DATA_DIR, "widget_config.json");
     /** HUD colours, sizes, font and parts (Settings > Appearance). */
     public static final File HUD_STYLE_JSON = new File(DATA_DIR, "hud_style.json");
@@ -106,9 +113,13 @@ public class FilePathManager {
         }
     }
 
-    /** Deletes all tracked item data and widget settings. Recipes are kept. */
+    /** Deletes the current profile's tracked data and the widget settings. Recipes and other profiles are kept. */
     public static synchronized void resetData() {
-        for (File f : new File[]{CONTAINER_JSON, INVENTORY_JSON, RESOURCES_JSON, SACKS_JSON, SACKS_META_JSON, COINS_JSON, FORGE_JSON, FORGE_SPEED_JSON, WIDGET_CONFIG_JSON, HUD_STYLE_JSON}) {
+        List<File> files = new java.util.ArrayList<>();
+        for (String name : ProfileManager.PROFILE_FILES) files.add(profileFile(name));
+        files.add(WIDGET_CONFIG_JSON);
+        files.add(HUD_STYLE_JSON);
+        for (File f : files) {
             if (f.exists() && !f.delete()) {
                 InventoryReader.LOGGER.warn("Could not delete {}", f.getName());
             }
@@ -117,7 +128,8 @@ public class FilePathManager {
         seedResources();
     }
 
-    private static void seedResources() {
+    /** Adds the default and recipe item names (zero counts) to the current profile's resources. */
+    static void seedResources() {
         ResourcesManager.getInstance().ensureResourceNames(Arrays.asList(DEFAULT_RESOURCE_NAMES));
         RecipeManager.getInstance().reload();
     }
@@ -149,12 +161,12 @@ public class FilePathManager {
     }
 
     private static void migrateVersionedResources() {
-        if (RESOURCES_JSON.exists()) return;
+        if (resourcesJson().exists()) return;
         File[] versioned = DATA_DIR.listFiles((d, n) -> n.matches("resources\\.v.+\\.json"));
         if (versioned == null || versioned.length == 0) return;
         Arrays.sort(versioned, (a, b) -> Long.compare(b.lastModified(), a.lastModified()));
         try {
-            Files.copy(versioned[0].toPath(), RESOURCES_JSON.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            Files.copy(versioned[0].toPath(), resourcesJson().toPath(), StandardCopyOption.REPLACE_EXISTING);
             InventoryReader.debug("Migrated {} -> resources.json", versioned[0].getName());
             for (File f : versioned) f.delete();
         } catch (IOException e) {

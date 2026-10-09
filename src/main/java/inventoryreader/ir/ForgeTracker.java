@@ -80,7 +80,7 @@ public final class ForgeTracker {
         if (sameAs(getEntries(), found)) return;
         entries = List.copyOf(found);
         version++;
-        JsonFiles.write(FilePathManager.FORGE_JSON, found);
+        JsonFiles.write(FilePathManager.forgeJson(), found);
     }
 
     /** Same items and counts, finishing within a few seconds of each other (times are read to the second). */
@@ -98,7 +98,7 @@ public final class ForgeTracker {
     public static List<Entry> getEntries() {
         List<Entry> current = entries;
         if (current == null) {
-            List<Entry> loaded = JsonFiles.read(FilePathManager.FORGE_JSON, LIST_TYPE);
+            List<Entry> loaded = JsonFiles.read(FilePathManager.forgeJson(), LIST_TYPE);
             current = loaded != null ? List.copyOf(loaded) : List.of();
             entries = current;
         }

@@ -1,5 +1,6 @@
 package inventoryreader.ir;
 
+import com.google.gson.reflect.TypeToken;
 import com.mojang.blaze3d.platform.Window;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.minecraft.ChatFormatting;
@@ -25,6 +26,7 @@ public class SandboxWidget {
     public static final int MAX_RECIPES_LIMIT = 10;
     private static final SystemToast.SystemToastId READY_TOAST = new SystemToast.SystemToastId(5000L);
     private static final SystemToast.SystemToastId ACHIEVED_TOAST = new SystemToast.SystemToastId(5000L);
+    private static final java.lang.reflect.Type SHOPPING_LIST_TYPE = new TypeToken<List<ShoppingListEntry>>() {}.getType();
     private volatile boolean enabled = false;
     /** Entries are never mutated in place; changes replace the entry so the update thread sees whole values. */
     private final List<ShoppingListEntry> shoppingList = new CopyOnWriteArrayList<>();
@@ -182,6 +184,36 @@ public class SandboxWidget {
     private void listChanged() {
         requestRefresh();
         saveConfiguration();
+        saveShoppingList();
+    }
+    /** The list lives with the SkyBlock profile (shopping_list.json in its folder). */
+    private synchronized void saveShoppingList() {
+        JsonFiles.write(FilePathManager.shoppingListJson(), getShoppingList());
+    }
+    private synchronized void loadShoppingList() {
+        shoppingList.clear();
+        List<ShoppingListEntry> saved = JsonFiles.read(FilePathManager.shoppingListJson(), SHOPPING_LIST_TYPE);
+        if (saved == null) return;
+        for (ShoppingListEntry e : saved) {
+            if (e != null && e.recipe != null && !e.recipe.isBlank()) {
+                shoppingList.add(new ShoppingListEntry(e.recipe, Math.max(1, e.amount), e.startCount, e.isHaveTotal()));
+            }
+        }
+    }
+    /**
+     * Profile switch: runs {@code switchFolder} (which points the data files at the new profile) and loads that
+     * profile's list, both under this object's lock so a list save can't land in the wrong folder. Pop-ups are
+     * re-baselined so the switch itself doesn't announce anything.
+     */
+    public synchronized void reloadShoppingList(Runnable switchFolder) {
+        switchFolder.run();
+        loadShoppingList();
+        scheduler.execute(() -> {
+            readyEntries.clear();
+            achievedEntries.clear();
+            baselineSet = false;
+        });
+        requestRefresh();
     }
     /** HUD heading. The recipes themselves are the top-level rows underneath. */
     public String getTitle() {
@@ -242,7 +274,6 @@ public class SandboxWidget {
         config.craftablePanel = craftablePanel;
         config.forgingPanel = forgingPanel;
         config.expandedNodes = new HashMap<>(expandedNodes);
-        config.shoppingList = getShoppingList();
         config.showTotal = showTotal;
         config.totalMode = totalMode;
         config.notifications = notifications;
@@ -254,7 +285,10 @@ public class SandboxWidget {
     }
     private void loadConfiguration() {
         WidgetConfig config = JsonFiles.read(FilePathManager.WIDGET_CONFIG_JSON, WidgetConfig.class);
-        if (config == null) return;
+        if (config != null) loadWidgetConfig(config);
+        loadShoppingList();
+    }
+    private void loadWidgetConfig(WidgetConfig config) {
         this.enabled = config.enabled;
         this.widgetX = config.widgetX;
         this.widgetY = config.widgetY;
@@ -280,19 +314,25 @@ public class SandboxWidget {
         if (config.widgetScale != null) this.widgetScale = clampPanelScale(config.widgetScale);
         if (config.craftablePanel != null) this.craftablePanel = config.craftablePanel;
         if (config.forgingPanel != null) this.forgingPanel = config.forgingPanel;
-        shoppingList.clear();
-        if (config.shoppingList != null) {
-            for (ShoppingListEntry e : config.shoppingList) {
-                if (e != null && e.recipe != null && !e.recipe.isBlank()) {
-                    // 4.20.6 had one list-wide switch; entries saved then take its value.
-                    boolean haveTotal = e.haveTotal != null ? e.haveTotal : !Boolean.FALSE.equals(config.haveTotal);
-                    shoppingList.add(new ShoppingListEntry(e.recipe, Math.max(1, e.amount), e.startCount, haveTotal));
+        // Before 4.22 the list was kept in widget_config.json: move it to its own file (with the other data
+        // that ProfileManager hands to the first SkyBlock profile seen), then drop it from the config.
+        if ((config.shoppingList != null || config.selectedRecipe != null) && !FilePathManager.shoppingListJson().exists()) {
+            List<ShoppingListEntry> legacy = new ArrayList<>();
+            if (config.shoppingList != null) {
+                for (ShoppingListEntry e : config.shoppingList) {
+                    if (e != null && e.recipe != null && !e.recipe.isBlank()) {
+                        // 4.20.6 had one list-wide switch; entries saved then take its value.
+                        boolean haveTotal = e.haveTotal != null ? e.haveTotal : !Boolean.FALSE.equals(config.haveTotal);
+                        legacy.add(new ShoppingListEntry(e.recipe, Math.max(1, e.amount), e.startCount, haveTotal));
+                    }
                 }
+            } else {
+                // Config from before the shopping list: keep the one recipe it tracked.
+                int amount = config.craftAmount != null && config.craftAmount > 0 ? config.craftAmount : 1;
+                legacy.add(new ShoppingListEntry(config.selectedRecipe, amount, resourcesManager.getResourceByName(config.selectedRecipe)));
             }
-        } else if (config.selectedRecipe != null) {
-            // Config from before the shopping list: keep the one recipe it tracked.
-            int amount = config.craftAmount != null && config.craftAmount > 0 ? config.craftAmount : 1;
-            shoppingList.add(new ShoppingListEntry(config.selectedRecipe, amount, resourcesManager.getResourceByName(config.selectedRecipe)));
+            JsonFiles.write(FilePathManager.shoppingListJson(), legacy);
+            saveConfiguration();
         }
     }
     /** Restores defaults after a reset deleted the config file. */
@@ -333,6 +373,7 @@ public class SandboxWidget {
         PanelRect craftablePanel;
         PanelRect forgingPanel;
         Map<String, Boolean> expandedNodes;
+        /** Read only: where the list was kept before 4.22 (now shopping_list.json, per profile). */
         List<ShoppingListEntry> shoppingList;
         /** Read only, for configs written before the shopping list existed. */
         String selectedRecipe;

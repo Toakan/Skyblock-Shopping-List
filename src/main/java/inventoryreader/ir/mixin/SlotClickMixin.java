@@ -23,7 +23,7 @@ public abstract class SlotClickMixin {
     private void onClickSlotReturn(int slotIndex, int button, ContainerInput input, Player player, CallbackInfo ci) {
         Minecraft client = Minecraft.getInstance();
         // In singleplayer the integrated server's copy of the menu runs this too; only read the client's.
-        if (!client.isSameThread() || !SkyblockDetector.isOnSkyblock()) return;
+        if (!client.isSameThread() || !SkyblockDetector.isTracking()) return;
         Screen screen = client.gui.screen();
         if (screen == null) return;
         String title = screen.getTitle().getString();

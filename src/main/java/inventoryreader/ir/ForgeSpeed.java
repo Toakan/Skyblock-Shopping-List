@@ -161,7 +161,7 @@ public final class ForgeSpeed {
     private static Data get() {
         Data d = data;
         if (d == null) {
-            d = JsonFiles.read(FilePathManager.FORGE_SPEED_JSON, Data.class);
+            d = JsonFiles.read(FilePathManager.forgeSpeedJson(), Data.class);
             if (d == null) d = new Data();
             data = d;
         }
@@ -181,7 +181,7 @@ public final class ForgeSpeed {
         change.accept(next);
         data = next;
         version++;
-        JsonFiles.write(FilePathManager.FORGE_SPEED_JSON, next);
+        JsonFiles.write(FilePathManager.forgeSpeedJson(), next);
     }
 
     private static double parse(String number) {

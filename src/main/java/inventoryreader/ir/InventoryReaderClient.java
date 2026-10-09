@@ -62,7 +62,8 @@ public class InventoryReaderClient implements ClientModInitializer {
                 widget.setEnabled(!widget.isEnabled());
             }
             // Other servers' inventories must never change the SkyBlock counts.
-            if (onSkyblock && client.player != null && client.level != null && ++tickCounter >= 2) {
+            // Waits for the profile after a server change, so its items aren't booked to the last one.
+            if (SkyblockDetector.isTracking() && client.player != null && client.level != null && ++tickCounter >= 2) {
                 tickCounter = 0;
                 checkInventory(client);
             }
@@ -72,6 +73,8 @@ public class InventoryReaderClient implements ClientModInitializer {
         StorageViewerMod.register();
         IrCommandManager.register();
         SackChatListener.register();
+        ProfileManager.register();
+        ProfileChatListener.register();
         CoinTracker.register();
         ReminderManager.initialize();
         WelcomeManager.initialize();
@@ -96,7 +99,7 @@ public class InventoryReaderClient implements ClientModInitializer {
         }
 
         if (lastInventory == null) {
-            Map<String, Map<String, Integer>> saved = JsonFiles.read(FilePathManager.INVENTORY_JSON, DATA_TYPE);
+            Map<String, Map<String, Integer>> saved = JsonFiles.read(FilePathManager.inventoryJson(), DATA_TYPE);
             Map<String, Integer> previous = saved != null ? saved.get(INVENTORY_KEY) : null;
             lastInventory = previous != null ? previous : new HashMap<>();
         }
@@ -114,7 +117,7 @@ public class InventoryReaderClient implements ClientModInitializer {
         lastInventory = current;
         Map<String, Map<String, Integer>> data = new HashMap<>();
         data.put(INVENTORY_KEY, current);
-        JsonFiles.write(FilePathManager.INVENTORY_JSON, data);
+        JsonFiles.write(FilePathManager.inventoryJson(), data);
         ResourcesManager.getInstance().saveData(changes);
     }
 }

@@ -26,7 +26,6 @@ public class ResourcesManager {
     /** Recipe trees are acyclic after sanitising; this only stops pathological data from overflowing the stack. */
     private static final int MAX_DEPTH = 64;
 
-    private final File file = FilePathManager.RESOURCES_JSON;
     private final ExecutorService writer = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "IR-ResourcesWriter");
         t.setDaemon(true);
@@ -47,7 +46,7 @@ public class ResourcesManager {
         return version.get();
     }
 
-    /** Drops the in-memory copy and re-reads resources.json (after a reset). */
+    /** Drops the in-memory copy and re-reads resources.json (after a reset or a profile switch). */
     public synchronized void reload() {
         resources = null;
         loaded();
@@ -56,7 +55,7 @@ public class ResourcesManager {
 
     private Map<String, Integer> loaded() {
         if (resources == null) {
-            Map<String, Integer> fromFile = JsonFiles.read(file, MAP_TYPE);
+            Map<String, Integer> fromFile = JsonFiles.read(FilePathManager.resourcesJson(), MAP_TYPE);
             resources = new LinkedHashMap<>();
             if (fromFile != null) {
                 fromFile.forEach((k, v) -> {
@@ -84,7 +83,9 @@ public class ResourcesManager {
     private void changed() {
         version.incrementAndGet();
         Map<String, Integer> snapshot = new LinkedHashMap<>(resources);
-        writer.execute(() -> JsonFiles.write(file, snapshot));
+        // The file is picked now: a write still queued after a profile switch goes to the old profile.
+        File target = FilePathManager.resourcesJson();
+        writer.execute(() -> JsonFiles.write(target, snapshot));
     }
 
     /** Adds the names as zero-count entries, and drops plain names that duplicate a symbol-prefixed one. */

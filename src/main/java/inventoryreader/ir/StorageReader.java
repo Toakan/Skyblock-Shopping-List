@@ -40,7 +40,7 @@ public class StorageReader {
 
     private Map<String, Map<String, Integer>> containers() {
         if (containers == null) {
-            Map<String, Map<String, Integer>> loaded = JsonFiles.read(FilePathManager.CONTAINER_JSON, TYPE);
+            Map<String, Map<String, Integer>> loaded = JsonFiles.read(FilePathManager.containerJson(), TYPE);
             containers = loaded != null ? new HashMap<>(loaded) : new HashMap<>();
         }
         return containers;
@@ -79,7 +79,7 @@ public class StorageReader {
         });
 
         containers.put(title, newData);
-        JsonFiles.write(FilePathManager.CONTAINER_JSON, containers);
+        JsonFiles.write(FilePathManager.containerJson(), containers);
         ResourcesManager.getInstance().saveData(changes);
     }
 }

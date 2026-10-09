@@ -60,7 +60,7 @@ When a recipe has everything it needs you get a "Ready to craft" pop-up, and onc
 | `H` | Toggle the HUD |
 | `B` or `/ssl hud` | Move / resize the HUD |
 | `/ssl` | List commands |
-| `/ssl reset` | Delete all tracked item data and settings |
+| `/ssl reset` | Delete the current profile's tracked data and the HUD settings |
 | `/ssl done` | Stop the "open a sack" reminder |
 | `/ssl credits` | Show credits |
 
@@ -71,7 +71,7 @@ The mod only runs on Hypixel SkyBlock. With the official Hypixel Mod API install
 
 ## Hypixel rules
 Skyblock Shopping List is designed to stay within the [Hypixel Allowed Modifications](https://support.hypixel.net/hc/en-us/articles/6472550754962-Hypixel-Allowed-Modifications) guidelines:
-- It is read-only. It looks at screens you open and chat messages you receive, and never sends packets, chat messages or commands to the server.
+- It is read-only. It looks at screens you open and chat messages you receive (only Hypixel's own `[Sacks]` summaries and `Profile ID` line, matched exactly so player chat can't trigger them), and never sends packets, chat messages or commands to the server. It never hides or changes a message.
 - It does not automate anything: no clicking, crafting, moving items or opening menus for you.
 - The HUD only shows your own items and recipe arithmetic.
 
@@ -80,15 +80,20 @@ Outside the game connection it downloads recipes from the NEU repository, and at
 As Hypixel states, every modification is used at your own risk.
 
 ## Where data is stored
-Everything lives in `config/skyblock-shopping-list/` inside your Minecraft folder:
+Everything lives in `config/skyblock-shopping-list/` inside your Minecraft folder.
+
+Each SkyBlock profile keeps its own data in `profiles/<account>/<profile>/`, so switching profile (or account) switches the counts and the shopping list with it. The profile is taken from Hypixel's `Profile ID: ...` chat line, sent each time you join SkyBlock. Right after a server change, tracking waits for that line (or 5 seconds, if another mod hides it) so items are never booked to the wrong profile. Data from before profiles existed is moved into the first profile seen. Per profile:
 - `resources.json`: tracked item counts
+- `shopping_list.json`: the shopping list
 - `inventorydata.json`, `allcontainerData.json`, `sacks.json`, `sacks_meta.json`: last-seen inventory, container and sack contents, used to work out changes
 - `coins.json`: last bank balance seen
-- `hud_style.json`: your Appearance settings
-- `presets/`: your saved HUD presets, one file each (share them by sending the file or a share code); kept by a data reset
 - `forge.json`: what was cooking in the Forge when you last opened it
 - `forge_speed.json`: your Quick Forge % and the current mayor forge bonus
-- `widget_config.json`: shopping list, HUD position and size, expanded nodes and settings
+
+`profiles/<account>/last_profile.txt` remembers the profile you used last. Shared by all profiles:
+- `hud_style.json`: your Appearance settings
+- `presets/`: your saved HUD presets, one file each (share them by sending the file or a share code); kept by a data reset
+- `widget_config.json`: HUD position and size, expanded nodes and settings
 - `forging.json`, `gemstone_recipes.json`: built-in fallback recipes
 - `recipes_remote.json`, `recipes_remote_forge.json`, `recipes_remote_shop.json`: crafting, forge and NPC shop recipes parsed from the NEU repository
 - `item_names.json`: SkyBlock item ID to name table
