@@ -298,15 +298,17 @@ public class SandboxWidget {
             if (config.shoppingList != null) {
                 for (ShoppingListEntry e : config.shoppingList) {
                     if (e != null && e.recipe != null && !e.recipe.isBlank()) {
-                        // 4.20.6 had one list-wide switch; entries saved then take its value.
-                        boolean haveTotal = e.haveTotal != null ? e.haveTotal : !Boolean.FALSE.equals(config.haveTotal);
+                        // 4.20.6 had one list-wide switch (always saved); entries saved then take its value.
+                        // Without it the config is older still, when every entry meant Add more.
+                        boolean haveTotal = e.haveTotal != null ? e.haveTotal : Boolean.TRUE.equals(config.haveTotal);
                         legacy.add(new ShoppingListEntry(e.recipe, Math.max(1, e.amount), e.startCount, haveTotal));
                     }
                 }
             } else {
-                // Config from before the shopping list: keep the one recipe it tracked.
+                // Config from before the shopping list: keep the one recipe it tracked, as Add more like then.
                 int amount = config.craftAmount != null && config.craftAmount > 0 ? config.craftAmount : 1;
-                legacy.add(new ShoppingListEntry(config.selectedRecipe, amount, resourcesManager.getResourceByName(config.selectedRecipe)));
+                legacy.add(new ShoppingListEntry(config.selectedRecipe, amount,
+                    resourcesManager.getResourceByName(config.selectedRecipe), false));
             }
             JsonFiles.write(FilePathManager.shoppingListJson(), legacy);
             saveConfiguration();
