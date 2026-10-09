@@ -3,6 +3,10 @@
 name: build
 on: [pull_request, push]
 
+# Only reads the repository; artifact uploads don't use the token.
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
