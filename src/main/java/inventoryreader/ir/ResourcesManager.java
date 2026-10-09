@@ -211,9 +211,9 @@ public class ResourcesManager {
         // another spelling, e.g. "☘ Fine Jade Gemstone" for "Fine Jade Gemstone").
         java.util.Set<String> names = new java.util.LinkedHashSet<>();
         for (ShoppingListEntry entry : entries) collectNames(entry.recipe, forging, names);
-        Map<String, Integer> counts = countsByRecipeName(names, snapshot);
-        Map<String, Integer> highestPossibleResources = new LinkedHashMap<>(counts);
-        Map<String, Integer> currentAvailableResources = new LinkedHashMap<>(counts);
+        SharedCounts counts = countsByRecipeName(names, snapshot);
+        Map<String, Integer> highestPossibleResources = counts.copy();
+        Map<String, Integer> currentAvailableResources = counts.copy();
         Map<String, Integer> messages = new LinkedHashMap<>();
 
         // Phase 1: craft what can be crafted, entry by entry, and note how many of each are still to make.
@@ -253,7 +253,7 @@ public class ResourcesManager {
         // Phase 2: expand what is still missing. A root does not draw on existing stock of itself: the
         // player asked for this many more. Phase 1 counted items craftable from materials as stock; owned
         // tells them apart from items actually held.
-        Map<String, Integer> owned = new LinkedHashMap<>(counts);
+        Map<String, Integer> owned = counts.copy();
         for (int i = 0; i < entries.size(); i++) {
             if (fromStock[i] > 0) owned.merge(entries.get(i).recipe, -fromStock[i], Integer::sum);
         }
@@ -510,18 +510,59 @@ public class ResourcesManager {
 
     /**
      * Each name's count in {@code snapshot}, under whichever spelling it is tracked as. One lock for all of them.
-     * Two spellings of one item get its count once (the first), so the same stock is never counted twice.
+     * Two spellings of one item share one balance (kept under the first), so the same stock is never counted twice
+     * and what one spelling leaves over is still there for the other.
      */
-    private Map<String, Integer> countsByRecipeName(java.util.Set<String> names, Map<String, Integer> snapshot) {
-        Map<String, Integer> out = new LinkedHashMap<>();
-        java.util.Set<String> usedKeys = new java.util.HashSet<>();
+    private SharedCounts countsByRecipeName(java.util.Set<String> names, Map<String, Integer> snapshot) {
+        SharedCounts out = new SharedCounts(new java.util.HashMap<>());
+        Map<String, String> firstByKey = new java.util.HashMap<>();
         synchronized (this) {
             for (String name : names) {
                 String key = resolve(name);
-                out.put(name, key == null || !usedKeys.add(key) ? 0 : snapshot.getOrDefault(key, 0));
+                if (key == null) {
+                    out.put(name, 0);
+                    continue;
+                }
+                String first = firstByKey.putIfAbsent(key, name);
+                if (first == null) out.put(name, snapshot.getOrDefault(key, 0));
+                else out.aliases.put(name, first);
             }
         }
         return out;
+    }
+
+    /**
+     * Counts by recipe name where other spellings of an item read and write the first spelling's entry. Only the
+     * methods used here (get, getOrDefault, put, merge, containsKey) translate names.
+     */
+    private static final class SharedCounts extends LinkedHashMap<String, Integer> {
+        private final Map<String, String> aliases;
+
+        SharedCounts(Map<String, String> aliases) {
+            this.aliases = aliases;
+        }
+
+        /** A separate balance with the same counts and spellings. */
+        SharedCounts copy() {
+            SharedCounts copy = new SharedCounts(aliases);
+            copy.putAll(this);
+            return copy;
+        }
+
+        private String key(Object name) {
+            String first = aliases.get(name);
+            return first != null ? first : (String) name;
+        }
+
+        @Override public Integer get(Object name) { return super.get(key(name)); }
+        @Override public Integer getOrDefault(Object name, Integer fallback) { return super.getOrDefault(key(name), fallback); }
+        @Override public Integer put(String name, Integer count) { return super.put(key(name), count); }
+        @Override public boolean containsKey(Object name) { return super.containsKey(key(name)); }
+        @Override
+        public Integer merge(String name, Integer count,
+                             java.util.function.BiFunction<? super Integer, ? super Integer, ? extends Integer> remap) {
+            return super.merge(key(name), count, remap);
+        }
     }
 
     public static class ResourceEntry {
