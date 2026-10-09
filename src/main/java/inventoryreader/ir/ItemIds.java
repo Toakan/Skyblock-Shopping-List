@@ -12,6 +12,7 @@ import java.lang.reflect.Type;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.WeakHashMap;
 
 /**
  * Names items by their SkyBlock ID instead of their shown name. Hypixel stores the ID as "id" in the
@@ -24,6 +25,12 @@ public final class ItemIds {
     /** Pet rarities in the order of the NEU pet ID suffix ("BEE;4" = Legendary Bee). */
     private static final List<String> PET_TIERS = List.of("COMMON", "UNCOMMON", "RARE", "EPIC", "LEGENDARY", "MYTHIC");
     private static volatile Map<String, String> namesById;
+    /**
+     * SkyBlock ID per stack. Reading it copies the item's whole custom data (26.2 only offers copyTag()), and
+     * the inventory is scanned every 2 ticks. ItemStack uses identity equality and Hypixel sends a new stack
+     * whenever an item's data changes, so the ID of a stack never goes stale; entries vanish with the stack.
+     */
+    private static final Map<ItemStack, String> ID_CACHE = new WeakHashMap<>();
 
     private ItemIds() {}
 
@@ -33,9 +40,21 @@ public final class ItemIds {
         namesById = loaded != null ? Map.copyOf(loaded) : Map.of();
     }
 
+    /** The item's SkyBlock ID (pets in NEU form), from the cache when this stack was seen before. */
+    private static String cachedId(ItemStack stack) {
+        synchronized (ID_CACHE) {
+            String id = ID_CACHE.get(stack);
+            if (id == null) {
+                id = skyblockId(stack);
+                ID_CACHE.put(stack, id);
+            }
+            return id;
+        }
+    }
+
     /** The recipe name for this item if its SkyBlock ID is known, otherwise its shown name. */
     public static String nameOf(ItemStack stack) {
-        String id = skyblockId(stack);
+        String id = cachedId(stack);
         if (!id.isEmpty()) {
             Map<String, String> names = namesById;
             if (names == null) {
@@ -48,9 +67,16 @@ public final class ItemIds {
         return stack.getHoverName().getString();
     }
 
+    /** True for a real SkyBlock item; menu buttons ("Go Back", "Next Page", glass panes) have no ID. */
+    public static boolean hasSkyblockId(ItemStack stack) {
+        return !cachedId(stack).isEmpty();
+    }
+
     /** True for a SkyBlock pet item. */
     public static boolean isPet(ItemStack stack) {
-        return PET_ID.equals(customData(stack).getStringOr("id", ""));
+        // Pets get the NEU form "TYPE;rarity" (only pets get a ';'); one whose info couldn't be read keeps "PET".
+        String id = cachedId(stack);
+        return id.equals(PET_ID) || id.indexOf(';') >= 0;
     }
 
     /**

@@ -9,6 +9,7 @@ import net.minecraft.resources.Identifier;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Supplier;
 
 /**
  * How the shopping-list HUD looks: colours, sizes, text and which parts are drawn. Edited in Settings >
@@ -36,14 +37,23 @@ public final class HudStyle {
     public int partial = 0xFFFFA040;
     public int missing = 0xFFFF6B6B;
     public int craftable = 0xFFFFE45C;
+    /** Held, but some of it is still cooking in the Forge. */
+    public int cooking = 0xFF5CC8FF;
     public int sectionHeader = 0xFFFFFF55;
     public int sectionText = 0xFFFF9D00;
     public int forgingHeader = 0xFFFFFF55;
     public int forgingText = 0xFFFF9D00;
 
-    // Size: percent of the original size. Ignores Minecraft's GUI Scale unless followGuiScale is on.
+    /** Which rows show the forge time still ahead, e.g. [25hrs]. */
+    public enum ForgeTimes { OFF, TOP_LEVEL, ALL }
+    /** How the HUD size reacts to the window: with its height, with GUI Scale, or not at all. */
+    public enum Sizing { WINDOW, GUI_SCALE, FIXED }
+
+    // Size: percent of the original size (as drawn in a 1080p window).
     public int hudScale = 100;
-    public boolean followGuiScale = false;
+    public Sizing sizing = Sizing.WINDOW;
+    /** Read only: the Follow GUI Scale toggle from before HUD sizing, carried over in {@link #clamp()}. */
+    public Boolean followGuiScale;
 
     // Sizes (GUI pixels).
     public int rowHeight = 16;
@@ -74,17 +84,26 @@ public final class HudStyle {
     public boolean showRowBoxes = true;
     public boolean showMarks = false;
     public AmountFormat amountFormat = AmountFormat.REMAINING;
+    /** Row amounts as 1.2k / 500m / 1.5b instead of the full number. */
+    public boolean shortNumbers = true;
     public boolean showCraftable = true;
     public boolean showForging = true;
+    public ForgeTimes forgeTimes = ForgeTimes.ALL;
     public Placement craftablePlacement = Placement.MAIN_PANEL;
     public Placement forgingPlacement = Placement.MAIN_PANEL;
 
     private static volatile HudStyle current;
+    /** Style drawn instead of the active one on this thread (the Appearance preview), or null. */
+    private static final ThreadLocal<HudStyle> OVERRIDE = new ThreadLocal<>();
     /** Font id -> description, cached so text drawing doesn't parse the id every frame. */
     private transient FontDescription fontDescription;
+    /** The font id {@link #fontDescription} was made from (the preview changes {@link #font} on the fly). */
+    private transient String fontDescriptionId;
 
     /** The active style, loaded from disk on first use. */
     public static HudStyle get() {
+        HudStyle override = OVERRIDE.get();
+        if (override != null) return override;
         HudStyle style = current;
         if (style == null) {
             style = JsonFiles.read(FilePathManager.HUD_STYLE_JSON, HudStyle.class);
@@ -93,6 +112,23 @@ public final class HudStyle {
             current = style;
         }
         return style;
+    }
+
+    /** Runs {@code action} with {@link #get()} returning {@code style} on this thread (for previews). */
+    public static <T> T withOverride(HudStyle style, Supplier<T> action) {
+        OVERRIDE.set(style);
+        try {
+            return action.get();
+        } finally {
+            OVERRIDE.remove();
+        }
+    }
+
+    /** An independent copy of the active style. */
+    public static HudStyle copy() {
+        HudStyle copy = JsonFiles.GSON.fromJson(JsonFiles.GSON.toJson(get()), HudStyle.class);
+        copy.clamp();
+        return copy;
     }
 
     /** True once hud_style.json exists (used to migrate the old Show remaining setting only once). */
@@ -106,6 +142,15 @@ public final class HudStyle {
         style.clamp();
         style.fontDescription = null;
         JsonFiles.write(FilePathManager.HUD_STYLE_JSON, style);
+    }
+
+    /** Switches to {@code style} (from a preset) and saves. The player's own HUD sizing choice is kept. */
+    public static void replace(HudStyle style) {
+        style.sizing = get().sizing;
+        style.fontDescription = null;
+        style.clamp();
+        current = style;
+        save();
     }
 
     /** Puts every look setting back to its default and saves. */
@@ -140,6 +185,13 @@ public final class HudStyle {
         if (forgingPlacement == null) forgingPlacement = Placement.MAIN_PANEL;
         if (font == null || Identifier.tryParse(font) == null) font = DEFAULT_FONT;
         if (amountFormat == null) amountFormat = AmountFormat.REMAINING;
+        if (forgeTimes == null) forgeTimes = ForgeTimes.ALL;
+        // Files from before HUD sizing: Follow GUI Scale ON keeps following it, OFF gets the new default.
+        if (followGuiScale != null) {
+            if (Boolean.TRUE.equals(followGuiScale)) sizing = Sizing.GUI_SCALE;
+            followGuiScale = null;
+        }
+        if (sizing == null) sizing = Sizing.WINDOW;
     }
 
     private static int clamp(int value, int min, int max) {
@@ -157,10 +209,11 @@ public final class HudStyle {
 
     private FontDescription fontDescription() {
         FontDescription description = fontDescription;
-        if (description == null) {
+        if (description == null || !font.equals(fontDescriptionId)) {
             Identifier id = Identifier.tryParse(font);
             description = id == null ? FontDescription.DEFAULT : new FontDescription.Resource(id);
             fontDescription = description;
+            fontDescriptionId = font;
         }
         return description;
     }

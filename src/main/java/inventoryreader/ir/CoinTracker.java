@@ -42,7 +42,7 @@ public final class CoinTracker {
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (++ticks < CHECK_INTERVAL_TICKS) return;
             ticks = 0;
-            if (!SkyblockDetector.isOnSkyblock() || client.level == null) return;
+            if (!SkyblockDetector.isTracking() || client.level == null) return;
             long read = readPurse(client);
             if (read >= 0) {
                 purse = read;
@@ -53,27 +53,28 @@ public final class CoinTracker {
 
     /** Called when a menu with "Bank" in its title is opened. */
     public static void readBank(AbstractContainerMenu menu, String title) {
-        for (int i = 0; i < menu.slots.size() - 36; i++) {
-            ItemStack stack = menu.slots.get(i).getItem();
+        for (ItemStack stack : MenuSlots.containerStacks(menu)) {
             ItemLore lore = stack.get(DataComponents.LORE);
             if (lore == null) continue;
             for (Component line : lore.lines()) {
                 Matcher m = BANK.matcher(ItemNames.clean(line.getString()));
                 if (m.find()) {
                     bank = parse(m.group(1));
-                    JsonFiles.write(FilePathManager.COINS_JSON, Map.of("bank", bank));
+                    Map<String, Long> saved = Map.of("bank", bank);
+                    JsonFiles.writeAsync(FilePathManager.coinsJson(), () -> saved);
                     publish();
                     return;
                 }
             }
         }
         // Logged so a changed menu layout can be diagnosed from latest.log.
-        InventoryReader.LOGGER.info("No bank balance found in menu \"{}\"", title);
+        InventoryReader.debug("No bank balance found in menu \"{}\"", title);
     }
 
-    /** Forgets the bank balance (after a reset deleted coins.json). */
+    /** Forgets purse and bank (after a reset or a profile switch); both are read again from that profile. */
     public static void clear() {
-        bank = 0L;
+        purse = -1;
+        bank = null;
         lastWritten = -1;
     }
 
@@ -94,7 +95,7 @@ public final class CoinTracker {
     private static void publish() {
         if (purse < 0) return; // wait for the first sidebar read
         if (bank == null) {
-            Map<String, Long> saved = JsonFiles.read(FilePathManager.COINS_JSON, MAP_TYPE);
+            Map<String, Long> saved = JsonFiles.read(FilePathManager.coinsJson(), MAP_TYPE);
             bank = saved != null && saved.get("bank") != null ? saved.get("bank") : 0L;
         }
         long total = Math.max(0, purse) + bank;

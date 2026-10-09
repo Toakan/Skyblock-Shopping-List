@@ -18,25 +18,34 @@ import java.util.regex.Pattern;
  * cancels or edits them.
  */
 public final class SackChatListener {
+    /**
+     * The whole message, "[Sacks] +12 items, -3 items. (Last 30s.)". Player chat always starts with the
+     * sender's name or a channel prefix, so a player typing "[Sacks] ..." can't match.
+     */
+    private static final Pattern SACKS_MESSAGE = Pattern.compile("^\\[Sacks] [+-][\\d,]+ items?.*\\(Last \\d+s\\.\\)$");
     /** "+1,234 Enchanted Coal (Mining Sack)": optional sign, count, item name, optional sack name. */
     private static final Pattern ITEM_LINE = Pattern.compile("^\\s*([+-]?)([\\d,]+)\\s+(.+?)(?:\\s+\\([^()]*\\))?\\s*$");
 
     private SackChatListener() {}
 
     public static void register() {
-        ClientReceiveMessageEvents.GAME.register((message, overlay) -> {
-            if (overlay || !SkyblockDetector.isOnSkyblock()) return;
-            try {
-                onGameMessage(message);
-            } catch (RuntimeException e) {
-                InventoryReader.LOGGER.warn("Could not parse sack message: {}", message.getString(), e);
-            }
-        });
+        // Every message fires exactly one of these: hidden by another mod (e.g. a chat filter) or shown.
+        ClientReceiveMessageEvents.GAME.register(SackChatListener::read);
+        ClientReceiveMessageEvents.GAME_CANCELED.register(SackChatListener::read);
+    }
+
+    private static void read(Component message, boolean overlay) {
+        if (overlay || !SkyblockDetector.isTracking()) return;
+        try {
+            onGameMessage(message);
+        } catch (RuntimeException e) {
+            InventoryReader.LOGGER.warn("Could not parse sack message: {}", message.getString(), e);
+        }
     }
 
     private static void onGameMessage(Component message) {
-        String text = message.getString();
-        if (!text.contains("[Sacks]")) return;
+        String text = message.getString().strip();
+        if (!SACKS_MESSAGE.matcher(text).matches()) return;
 
         // A set of texts: several parts of the message can carry their own copy of the same hover list.
         Set<String> hoverTexts = new LinkedHashSet<>();
@@ -51,7 +60,7 @@ public final class SackChatListener {
                 else if (line.contains("Added")) sectionSign = 1;
                 Matcher m = ITEM_LINE.matcher(line);
                 if (!m.matches()) continue;
-                Integer count = parseCount(m.group(2));
+                Integer count = Counts.parse(m.group(2));
                 if (count == null || count == 0) continue;
                 int sign = m.group(1).isEmpty() ? sectionSign : (m.group(1).equals("-") ? -1 : 1);
                 deltas.merge(ItemNames.clean(m.group(3)), sign * count, Integer::sum);
@@ -60,10 +69,10 @@ public final class SackChatListener {
 
         if (deltas.isEmpty()) {
             // Logged so a changed message format can be diagnosed from latest.log.
-            InventoryReader.LOGGER.info("Unrecognised [Sacks] message: {} | hover: {}", text, hoverTexts);
+            InventoryReader.debug("Unrecognised [Sacks] message: {} | hover: {}", text, hoverTexts);
             return;
         }
-        InventoryReader.LOGGER.info("[Sacks] read: {}", deltas);
+        InventoryReader.debug("[Sacks] read: {}", deltas);
         SackReader.getInstance().applyChatDeltas(deltas);
     }
 
@@ -77,11 +86,4 @@ public final class SackChatListener {
         }
     }
 
-    private static Integer parseCount(String s) {
-        try {
-            return Integer.parseInt(s.replace(",", ""));
-        } catch (NumberFormatException e) {
-            return null;
-        }
-    }
 }

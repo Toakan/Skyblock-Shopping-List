@@ -35,7 +35,10 @@ public final class MenuTabs {
     private static final int LEFT = 20;
     private static final int GAP = 4;
     private static final int MAX_TAB_WIDTH = 110;
-    private static final int GOLD = 0xFFFFB728;
+    /** Colours shared by the mod's screens. */
+    public static final int GOLD = 0xFFFFB728;
+    public static final int HEADER_BG = 0xFF17293A;
+    public static final int HEADER_BORDER = 0xFF223344;
 
     private MenuTabs() {}
 
@@ -69,8 +72,8 @@ public final class MenuTabs {
 
     /** Title bar, tab strip background and the active-tab underline. Draw before the screen's widgets. */
     public static void renderHeader(GuiGraphicsExtractor context, Font font, int screenWidth, Tab active) {
-        context.fill(0, 0, screenWidth, 22, 0xFF17293A);
-        context.outline(0, 0, screenWidth, 22, 0xFF223344);
+        context.fill(0, 0, screenWidth, 22, HEADER_BG);
+        context.outline(0, 0, screenWidth, 22, HEADER_BORDER);
         context.text(font, Component.literal(InventoryReader.NAME).setStyle(Style.EMPTY.withColor(ChatFormatting.GOLD).withBold(true)),
             12, 7, GOLD, false);
         context.fill(0, 22, screenWidth, HEADER_BOTTOM, 0xFF131313);

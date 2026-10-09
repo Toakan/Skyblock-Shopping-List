@@ -16,11 +16,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.InputStream;
 import java.net.URI;
-import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
@@ -40,16 +37,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class RemoteRecipeFetcher {
     private static final Logger LOGGER = LoggerFactory.getLogger("IR-RemoteRecipeFetcher");
     private static final Gson GSON = new Gson();
-    private static final HttpClient HTTP = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(6))
-            .followRedirects(HttpClient.Redirect.NORMAL)
-            .build();
     public static final String DEFAULT_NEU_REPO_URL = "https://codeload.github.com/NotEnoughUpdates/NotEnoughUpdates-REPO/zip/refs/heads/master";
     /**
      * Bump when the way recipes are extracted from the repo changes, so cached snapshots are rebuilt
      * even if the remote reports "not modified".
      */
-    private static final String PARSER_VERSION = "6";
+    private static final String PARSER_VERSION = "7";
     /** NEU's pseudo item for coin costs in shop recipes. */
     private static final String COIN_ID = "SKYBLOCK_COIN";
     public static final String COINS_NAME = "Coins";
@@ -88,7 +81,7 @@ public final class RemoteRecipeFetcher {
         if (sources.isEmpty()) return;
 
         for (Map<String, String> s : sources) {
-            String type = String.valueOf(s.getOrDefault("type", "")).toLowerCase();
+            String type = String.valueOf(s.getOrDefault("type", "")).toLowerCase(java.util.Locale.ROOT);
             String url = s.get("url");
             if (url == null || url.isBlank()) continue;
             boolean done = false;
@@ -120,8 +113,8 @@ public final class RemoteRecipeFetcher {
                     .timeout(Duration.ofSeconds(15))
                     .GET();
             if (!etag.isEmpty()) b.header("If-None-Match", etag);
-            HttpResponse<String> resp = HTTP.send(b.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-            if (resp.statusCode() == 304) { LOGGER.info("Remote recipes not modified (ETag)"); return true; }
+            HttpResponse<String> resp = inventoryreader.ir.Http.CLIENT.send(b.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            if (resp.statusCode() == 304) { inventoryreader.ir.InventoryReader.debug("Remote recipes not modified (ETag)"); return true; }
             if (resp.statusCode() / 100 != 2) { LOGGER.warn("Remote fetch HTTP {}", resp.statusCode()); return false; }
 
             String body = resp.body();
@@ -130,14 +123,15 @@ public final class RemoteRecipeFetcher {
             Map<String, Object> parsed = GSON.fromJson(body, t);
             if (parsed == null || parsed.isEmpty()) { LOGGER.warn("Remote recipes JSON empty"); return false; }
 
-            writeRemoteSnapshot(parsed);
+            boolean changed = writeSnapshot(parsed, FilePathManager.REMOTE_RECIPES_JSON, meta);
 
             String newEtag = resp.headers().firstValue("etag").orElse("");
             if (!newEtag.isEmpty()) meta.put(etagKey, newEtag);
             meta.put(PARSER_VERSION_KEY, PARSER_VERSION);
             writeMeta(FilePathManager.REMOTE_META_JSON, meta);
 
-            inventoryreader.ir.RecipeManager.getInstance().reload();
+            if (changed) inventoryreader.ir.RecipeManager.getInstance().reload();
+            else inventoryreader.ir.InventoryReader.debug("Recipes unchanged");
             return true;
         } catch (Exception e) {
             LOGGER.warn("fetchDirectJson failed: {}", e.toString());
@@ -163,7 +157,7 @@ public final class RemoteRecipeFetcher {
                     metaKey = "mtime::" + f.getAbsolutePath();
                     String prev = meta.getOrDefault(metaKey, "");
                     String cur = Long.toString(f.lastModified());
-                    if (cacheCurrent && !prev.isEmpty() && prev.equals(cur)) { LOGGER.info("NEU ZIP file unchanged (mtime cache)"); return true; }
+                    if (cacheCurrent && !prev.isEmpty() && prev.equals(cur)) { inventoryreader.ir.InventoryReader.debug("NEU ZIP file unchanged (mtime cache)"); return true; }
                     inputStream = new java.io.FileInputStream(f);
                     metaValToWrite = cur;
                 } else {
@@ -174,10 +168,10 @@ public final class RemoteRecipeFetcher {
                             .timeout(Duration.ofSeconds(30))
                             .GET();
                     if (!etag.isEmpty()) b.header("If-None-Match", etag);
-                    HttpResponse<java.io.InputStream> resp = HTTP.send(b.build(), HttpResponse.BodyHandlers.ofInputStream());
+                    HttpResponse<java.io.InputStream> resp = inventoryreader.ir.Http.CLIENT.send(b.build(), HttpResponse.BodyHandlers.ofInputStream());
                     if (resp.statusCode() / 100 != 2) {
                         resp.body().close();
-                        if (resp.statusCode() == 304) { LOGGER.info("NEU ZIP not modified (ETag)"); return true; }
+                        if (resp.statusCode() == 304) { inventoryreader.ir.InventoryReader.debug("NEU ZIP not modified (ETag)"); return true; }
                         LOGGER.warn("NEU ZIP fetch HTTP {}", resp.statusCode());
                         return false;
                     }
@@ -191,7 +185,7 @@ public final class RemoteRecipeFetcher {
                 metaKey = "mtime::" + f.getAbsolutePath();
                 String prev = meta.getOrDefault(metaKey, "");
                 String cur = Long.toString(f.lastModified());
-                if (cacheCurrent && !prev.isEmpty() && prev.equals(cur)) { LOGGER.info("NEU ZIP file unchanged (mtime cache)"); return true; }
+                if (cacheCurrent && !prev.isEmpty() && prev.equals(cur)) { inventoryreader.ir.InventoryReader.debug("NEU ZIP file unchanged (mtime cache)"); return true; }
                 inputStream = new java.io.FileInputStream(f);
                 metaValToWrite = cur;
             }
@@ -201,7 +195,7 @@ public final class RemoteRecipeFetcher {
             try (InputStream in = inputStream) {
                 extractZipStrippingRoot(in, repoExtracted);
             }
-            LOGGER.info("NEU ZIP extracted to {}", repoExtracted);
+            inventoryreader.ir.InventoryReader.debug("NEU ZIP extracted to {}", repoExtracted);
 
             NEURepository neuRepo = NEURepository.of(repoExtracted);
             try {
@@ -225,12 +219,18 @@ public final class RemoteRecipeFetcher {
             Map<String, Map<String, Integer>> forgeByInternal    = new LinkedHashMap<>();
             Map<String, Map<String, Integer>> shopByInternal     = new LinkedHashMap<>();
             Map<String, Map<String, Integer>> katByInternal      = new LinkedHashMap<>();
+            Map<String, Integer> forgeSecondsByInternal = new LinkedHashMap<>();
             for (NEUItem item : neuRepo.getItems().getItems().values()) {
                 for (NEURecipe recipe : item.getRecipes()) {
                     if (recipe instanceof NEUCraftingRecipe cr) {
                         collectRecipeIngredients(craftingByInternal, cr.getAllOutputs(), cr.getAllInputs());
                     } else if (recipe instanceof NEUForgeRecipe fr) {
+                        boolean first = fr.getOutputStack() != null && !forgeByInternal.containsKey(fr.getOutputStack().getItemId());
                         collectRecipeIngredients(forgeByInternal, fr.getAllOutputs(), fr.getAllInputs());
+                        // Same first-recipe-wins rule as the ingredients, so time and ingredients match.
+                        if (first && fr.getDuration() > 0 && forgeByInternal.containsKey(fr.getOutputStack().getItemId())) {
+                            forgeSecondsByInternal.put(fr.getOutputStack().getItemId(), fr.getDuration());
+                        }
                     } else if (recipe instanceof NEUNpcShopRecipe shop) {
                         collectRecipeIngredients(shopByInternal, shop.getAllOutputs(), shop.getAllInputs());
                     } else if (recipe instanceof NEUKatUpgradeRecipe kat) {
@@ -259,14 +259,25 @@ public final class RemoteRecipeFetcher {
             Map<String, Map<String, Integer>> forgeWire    = resolveToDisplayNames(forgeByInternal,    internalToDisplay, recipeNameById);
             Map<String, Map<String, Integer>> shopWire     = resolveToDisplayNames(shopByInternal,     internalToDisplay, recipeNameById);
 
-            if (!craftingWire.isEmpty()) writeRemoteSnapshot(craftingWire);
-            if (!forgeWire.isEmpty())    writeForgeSnapshot(forgeWire);
-            writeSnapshot(shopWire, FilePathManager.REMOTE_SHOP_JSON, "recipes_remote_shop.json.tmp");
-            writeSnapshot(recipeNameById, FilePathManager.ITEM_NAMES_JSON, "item_names.json.tmp");
-            inventoryreader.ir.ItemIds.reload();
+            // Each file is only rewritten (and the recipes only reloaded) when its content actually changed:
+            // the repo changes often, the recipes much less.
+            boolean changed = false;
+            if (!craftingWire.isEmpty()) changed |= writeSnapshot(craftingWire, FilePathManager.REMOTE_RECIPES_JSON, meta);
+            if (!forgeWire.isEmpty())    changed |= writeSnapshot(forgeWire, FilePathManager.REMOTE_FORGE_JSON, meta);
+            changed |= writeSnapshot(shopWire, FilePathManager.REMOTE_SHOP_JSON, meta);
+            // Base forge time per forge item, under the name its recipe uses (resolved after any renames above).
+            Map<String, Integer> forgeSeconds = new LinkedHashMap<>();
+            forgeSecondsByInternal.forEach((id, seconds) -> forgeSeconds.put(recipeNameById.getOrDefault(id, id), seconds));
+            changed |= writeSnapshot(forgeSeconds, FilePathManager.FORGE_TIMES_JSON, meta);
+            changed |= writeSnapshot(recipeNameById, FilePathManager.ITEM_NAMES_JSON, meta);
 
-            LOGGER.info("NEU repo parsed (library): {} crafting (incl. {} pet upgrades), {} forge, {} shop recipes", craftingWire.size(), katCount, forgeWire.size(), shopWire.size());
-            inventoryreader.ir.RecipeManager.getInstance().reload();
+            inventoryreader.ir.InventoryReader.debug("NEU repo parsed (library): {} crafting (incl. {} pet upgrades), {} forge, {} shop recipes", craftingWire.size(), katCount, forgeWire.size(), shopWire.size());
+            if (changed) {
+                inventoryreader.ir.ItemIds.reload();
+                inventoryreader.ir.RecipeManager.getInstance().reload();
+            } else {
+                inventoryreader.ir.InventoryReader.debug("Recipes unchanged");
+            }
 
             if (metaValToWrite != null && !metaValToWrite.isEmpty()) {
                 meta.put(metaKey, metaValToWrite);
@@ -370,30 +381,28 @@ public final class RemoteRecipeFetcher {
         } catch (Exception ignore) {}
     }
 
-    private static void writeRemoteSnapshot(Map<String, ?> data) throws Exception {
-        writeSnapshot(data, FilePathManager.REMOTE_RECIPES_JSON, "recipes_remote.json.tmp");
+    /**
+     * Writes {@code data} to {@code dest} unless the file already holds exactly that: the SHA-256 of the JSON is
+     * kept in the meta file ("hash::name"). Returns true when the file was (re)written.
+     */
+    private static boolean writeSnapshot(Map<String, ?> data, File dest, Map<String, String> meta) throws Exception {
+        String json = GSON.toJson(data);
+        String key = "hash::" + dest.getName();
+        String hash = sha256(json);
+        if (dest.isFile() && hash.equals(meta.get(key))) return false;
+        if (!inventoryreader.ir.JsonFiles.writeText(dest, json)) throw new java.io.IOException("Could not write " + dest.getName());
+        meta.put(key, hash);
+        return true;
     }
 
-    private static void writeForgeSnapshot(Map<String, ?> data) throws Exception {
-        writeSnapshot(data, FilePathManager.REMOTE_FORGE_JSON, "recipes_remote_forge.json.tmp");
-    }
-
-    private static void writeSnapshot(Map<String, ?> data, File dest, String tmpName) throws Exception {
-        File tmp = new File(FilePathManager.DATA_DIR, tmpName);
-        try (FileWriter fw = new FileWriter(tmp, StandardCharsets.UTF_8)) {
-            GSON.toJson(data, fw);
-        }
-        try {
-            Files.move(tmp.toPath(), dest.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-        } catch (Exception e) {
-            Files.move(tmp.toPath(), dest.toPath(), StandardCopyOption.REPLACE_EXISTING);
-        }
+    private static String sha256(String text) throws java.security.NoSuchAlgorithmException {
+        byte[] digest = java.security.MessageDigest.getInstance("SHA-256").digest(text.getBytes(StandardCharsets.UTF_8));
+        return java.util.HexFormat.of().formatHex(digest);
     }
 
     private static List<Map<String, String>> readSources(File f) {
-        try (FileReader fr = new FileReader(f, StandardCharsets.UTF_8)) {
-            java.lang.reflect.Type t = new TypeToken<Map<String, Object>>(){}.getType();
-            Map<String, Object> root = GSON.fromJson(fr, t);
+        try {
+            Map<String, Object> root = inventoryreader.ir.JsonFiles.read(f, new TypeToken<Map<String, Object>>(){}.getType());
             Object arr = root == null ? null : root.get("sources");
             List<Map<String, String>> out = new ArrayList<>();
             if (arr instanceof List<?>) {
@@ -417,20 +426,13 @@ public final class RemoteRecipeFetcher {
     }
 
     private static Map<String, String> readMeta(File f) {
-        if (!f.exists()) return new LinkedHashMap<>();
-        try (FileReader fr = new FileReader(f, StandardCharsets.UTF_8)) {
-            java.lang.reflect.Type t = new TypeToken<Map<String, String>>(){}.getType();
-            Map<String, String> m = GSON.fromJson(fr, t);
-            return m == null ? new LinkedHashMap<>() : m;
-        } catch (Exception e) {
-            return new LinkedHashMap<>();
-        }
+        Map<String, String> m = inventoryreader.ir.JsonFiles.read(f, new TypeToken<Map<String, String>>(){}.getType());
+        return m == null ? new LinkedHashMap<>() : new LinkedHashMap<>(m);
     }
 
     private static void writeMeta(File f, Map<String, String> meta) {
-        try (FileWriter fw = new FileWriter(f, StandardCharsets.UTF_8)) {
-            GSON.toJson(meta, fw);
-        } catch (Exception ignored) {}
+        // Temp file and move, so a crash mid-write can't leave a half-written cache state.
+        inventoryreader.ir.JsonFiles.write(f, meta);
     }
 
     /**

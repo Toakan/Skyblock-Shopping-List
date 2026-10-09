@@ -11,8 +11,6 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -23,17 +21,11 @@ import java.util.concurrent.atomic.AtomicLong;
 public class ResourcesManager {
     private static final ResourcesManager INSTANCE = new ResourcesManager();
     private static final Type MAP_TYPE = new TypeToken<Map<String, Integer>>() {}.getType();
-    /** Recipe trees are acyclic after sanitising; this only stops pathological data from overflowing the stack. */
-    private static final int MAX_DEPTH = 64;
 
-    private final File file = FilePathManager.RESOURCES_JSON;
-    private final ExecutorService writer = Executors.newSingleThreadExecutor(r -> {
-        Thread t = new Thread(r, "IR-ResourcesWriter");
-        t.setDaemon(true);
-        return t;
-    });
     private final AtomicLong version = new AtomicLong();
     private Map<String, Integer> resources;
+    /** The file {@link #resources} was read from: changes are only ever saved back there (see profiles). */
+    private File loadedFrom;
     private Map<String, String> keyByNormalized;
 
     private ResourcesManager() {}
@@ -47,7 +39,7 @@ public class ResourcesManager {
         return version.get();
     }
 
-    /** Drops the in-memory copy and re-reads resources.json (after a reset). */
+    /** Drops the in-memory copy and re-reads resources.json (after a reset or a profile switch). */
     public synchronized void reload() {
         resources = null;
         loaded();
@@ -56,7 +48,8 @@ public class ResourcesManager {
 
     private Map<String, Integer> loaded() {
         if (resources == null) {
-            Map<String, Integer> fromFile = JsonFiles.read(file, MAP_TYPE);
+            loadedFrom = FilePathManager.resourcesJson();
+            Map<String, Integer> fromFile = JsonFiles.read(loadedFrom, MAP_TYPE);
             resources = new LinkedHashMap<>();
             if (fromFile != null) {
                 fromFile.forEach((k, v) -> {
@@ -83,8 +76,14 @@ public class ResourcesManager {
 
     private void changed() {
         version.incrementAndGet();
-        Map<String, Integer> snapshot = new LinkedHashMap<>(resources);
-        writer.execute(() -> JsonFiles.write(file, snapshot));
+        // This map and the file it came from go together, so after a profile switch a late save of the old
+        // profile's counts still lands in the old profile's file. The copy is made on the writer thread.
+        Map<String, Integer> map = resources;
+        JsonFiles.writeAsync(loadedFrom, () -> {
+            synchronized (this) {
+                return new LinkedHashMap<>(map);
+            }
+        });
     }
 
     /** Adds the names as zero-count entries, and drops plain names that duplicate a symbol-prefixed one. */
@@ -117,6 +116,18 @@ public class ResourcesManager {
         String cleaned = ItemNames.clean(name);
         if (resources.containsKey(cleaned)) return cleaned;
         return keyByNormalized.get(ItemNames.normalize(cleaned));
+    }
+
+    /**
+     * The count of {@code name} in {@code snapshot}, under whichever spelling it is tracked as (like
+     * {@link #getResourceByName}, but read from the snapshot so one calculation sees one state).
+     */
+    private int heldIn(Map<String, Integer> snapshot, String name) {
+        String key;
+        synchronized (this) {
+            key = resolve(name);
+        }
+        return key == null ? 0 : snapshot.getOrDefault(key, 0);
     }
 
     /** Applies count changes (item name to delta). */
@@ -177,7 +188,10 @@ public class ResourcesManager {
 
     /** Shopping list for a single recipe. */
     public RemainingResponse getRemainingIngredients(String name, int amt) {
-        ShoppingResponse response = getShoppingList(List.of(new ShoppingListEntry(name, amt, 0)));
+        // Add more, counted from what is held now (in the same snapshot the calculation uses): exactly amt to make.
+        Map<String, Integer> snapshot = getAllResources();
+        ShoppingListEntry entry = new ShoppingListEntry(name, amt, heldIn(snapshot, name), false);
+        ShoppingResponse response = getShoppingList(List.of(entry), snapshot);
         return new RemainingResponse(name, response.trees.get(0), response.craftable);
     }
 
@@ -186,47 +200,80 @@ public class ResourcesManager {
      * order and each one only gets what earlier entries left over, so nothing is counted twice.
      */
     public ShoppingResponse getShoppingList(List<ShoppingListEntry> entries) {
-        Map<String, Map<String, Integer>> forging = RecipeManager.getInstance().getAllRecipes();
-        Map<String, Integer> highestPossibleResources = getAllResources();
-        Map<String, Integer> currentAvailableResources = new LinkedHashMap<>(highestPossibleResources);
-        Map<String, Integer> messages = new LinkedHashMap<>();
+        // One snapshot for the whole calculation, so a change mid-way can't make "owned" and "available" disagree.
+        return getShoppingList(entries, getAllResources());
+    }
 
-        java.util.Set<String> visited = new java.util.HashSet<>();
-        for (ShoppingListEntry entry : entries) {
-            initializeResourceMaps(entry.recipe, forging, highestPossibleResources, currentAvailableResources, visited);
-        }
+    /** As above, worked out from {@code snapshot} (item counts, never changed here). */
+    private ShoppingResponse getShoppingList(List<ShoppingListEntry> entries, Map<String, Integer> snapshot) {
+        Map<String, Map<String, Integer>> forging = RecipeManager.getInstance().getAllRecipes();
+        // Every item in the trees, by the name the recipes use, with the count it is tracked under (which may be
+        // another spelling, e.g. "☘ Fine Jade Gemstone" for "Fine Jade Gemstone").
+        java.util.Set<String> names = new java.util.LinkedHashSet<>();
+        for (ShoppingListEntry entry : entries) collectNames(entry.recipe, forging, names);
+        SharedCounts counts = countsByRecipeName(names, snapshot);
+        Map<String, Integer> highestPossibleResources = counts.copy();
+        Map<String, Integer> currentAvailableResources = counts.copy();
+        Map<String, Integer> messages = new LinkedHashMap<>();
 
         // Phase 1: craft what can be crafted, entry by entry, and note how many of each are still to make.
         int[] toCraft = new int[entries.size()];
+        int[] fromStock = new int[entries.size()];
+        // How many of each entry can be crafted right now from what is held (shown as "can craft", not as held).
+        int[] craftedNow = new int[entries.size()];
+        int[] required = new int[entries.size()];
         for (int i = 0; i < entries.size(); i++) {
             ShoppingListEntry entry = entries.get(i);
+            // Have total: done once this many are held. Add more: once startCount + amount are held (as
+            // SandboxWidget checks it), so copies made since the entry was added count.
+            int target = (entry.isHaveTotal() ? 0 : entry.startCount) + entry.amount;
+            // Held copies towards the target are kept for this entry, so later entries can't use them as well.
+            int held = Math.max(0, currentAvailableResources.getOrDefault(entry.recipe, 0));
+            fromStock[i] = Math.min(held, target);
+            int need = target - fromStock[i];
+            currentAvailableResources.put(entry.recipe, held - fromStock[i]);
+            highestPossibleResources.merge(entry.recipe, -fromStock[i], Integer::sum);
+            // What the root row shows as required: the amount, or more if an Add more entry has lost stock since.
+            required[i] = Math.max(entry.amount, need);
             int old = highestPossibleResources.getOrDefault(entry.recipe, 0);
-            buildRecipe(entry.recipe, entry.amount, forging, highestPossibleResources, currentAvailableResources, messages, 0);
+            if (need > 0) {
+                buildRecipe(entry.recipe, need, forging, highestPossibleResources, currentAvailableResources, messages, 0);
+            }
             int crafted = highestPossibleResources.getOrDefault(entry.recipe, 0) - old;
-            toCraft[i] = crafted >= entry.amount ? crafted - entry.amount : entry.amount - crafted;
+            craftedNow[i] = Math.max(0, Math.min(need, crafted));
+            toCraft[i] = Math.max(0, need - crafted);
         }
 
         // Phase 2: expand what is still missing. A root does not draw on existing stock of itself: the
         // player asked for this many more. Phase 1 counted items craftable from materials as stock; owned
         // tells them apart from items actually held.
-        Map<String, Integer> owned = getAllResources();
+        Map<String, Integer> owned = counts.copy();
+        for (int i = 0; i < entries.size(); i++) {
+            if (fromStock[i] > 0) owned.merge(entries.get(i).recipe, -fromStock[i], Integer::sum);
+        }
         List<RecipeManager.RecipeNode> trees = new ArrayList<>();
         for (int i = 0; i < entries.size(); i++) {
             ShoppingListEntry entry = entries.get(i);
             List<RecipeManager.RecipeNode> ingredients = new ArrayList<>();
             Map<String, Integer> recipe = forging.get(entry.recipe);
             if (recipe != null) {
+                // Expand both what is missing and what can be crafted now, so the steps still to do show.
+                giveBack(recipe, craftedNow[i], highestPossibleResources);
                 for (Map.Entry<String, Integer> ingredient : recipe.entrySet()) {
-                    ingredients.add(expandRequiredRecipe(ingredient.getKey(), ingredient.getValue() * toCraft[i], forging, highestPossibleResources, owned, 1));
+                    ingredients.add(expandRequiredRecipe(ingredient.getKey(), ingredient.getValue() * (toCraft[i] + craftedNow[i]),
+                        forging, highestPossibleResources, owned, 1));
                 }
             }
-            trees.add(new RecipeManager.RecipeNode(entry.recipe, toCraft[i], entry.amount, ingredients));
+            RecipeManager.RecipeNode root = new RecipeManager.RecipeNode(entry.recipe, toCraft[i], required[i], ingredients);
+            root.toCraft = craftedNow[i];
+            trees.add(root);
         }
-        return new ShoppingResponse(trees, totalOf(trees), messages);
+        return new ShoppingResponse(trees, totalOf(trees, forging), ingredientTotalOf(trees), messages);
     }
 
     /** Raw materials (leaves) across all trees, summed; missing items first, most missing at the top. */
-    private static RecipeManager.RecipeNode totalOf(List<RecipeManager.RecipeNode> trees) {
+    private static RecipeManager.RecipeNode totalOf(List<RecipeManager.RecipeNode> trees,
+                                                    Map<String, Map<String, Integer>> forging) {
         Map<String, int[]> sums = new LinkedHashMap<>();
         for (RecipeManager.RecipeNode tree : trees) {
             if (tree.ingredients != null) {
@@ -238,18 +285,58 @@ public class ResourcesManager {
         int required = 0;
         for (Map.Entry<String, int[]> e : sums.entrySet()) {
             int[] v = e.getValue();
-            if (v[1] <= 0) continue;
+            // Held intermediates are leaves of the tree too, but the Total only lists raw materials.
+            if (v[1] <= 0 || forging.containsKey(e.getKey())) continue;
             leaves.add(new RecipeManager.RecipeNode(e.getKey(), v[0], v[1], Collections.emptyList()));
             missing += v[0];
             required += v[1];
         }
-        leaves.sort((a, b) -> {
-            boolean aDone = a.amount <= 0;
-            boolean bDone = b.amount <= 0;
-            if (aDone != bDone) return aDone ? 1 : -1;
-            return Integer.compare(b.amount, a.amount);
-        });
+        sortTotalRows(leaves);
         return new RecipeManager.RecipeNode("Total", missing, required, leaves);
+    }
+
+    /** Direct ingredients of every entry, summed by name; intermediates such as Refined Titanium included. */
+    private static RecipeManager.RecipeNode ingredientTotalOf(List<RecipeManager.RecipeNode> trees) {
+        Map<String, int[]> sums = new LinkedHashMap<>();
+        for (RecipeManager.RecipeNode tree : trees) {
+            if (tree.ingredients == null) continue;
+            for (RecipeManager.RecipeNode child : tree.ingredients) {
+                int[] v = sums.computeIfAbsent(child.name, k -> new int[3]);
+                v[0] += Math.max(0, child.amount);
+                v[1] += child.required;
+                v[2] += child.toCraft;
+            }
+        }
+        List<RecipeManager.RecipeNode> rows = new ArrayList<>();
+        int missing = 0;
+        int required = 0;
+        int toCraft = 0;
+        for (Map.Entry<String, int[]> e : sums.entrySet()) {
+            int[] v = e.getValue();
+            if (v[1] <= 0) continue;
+            RecipeManager.RecipeNode row = new RecipeManager.RecipeNode(e.getKey(), v[0], v[1], Collections.emptyList());
+            row.toCraft = v[2];
+            rows.add(row);
+            missing += v[0];
+            required += v[1];
+            toCraft += v[2];
+        }
+        sortTotalRows(rows);
+        RecipeManager.RecipeNode total = new RecipeManager.RecipeNode("Total", missing, required, rows);
+        total.toCraft = toCraft;
+        return total;
+    }
+
+    /** Rows still to get or craft first, most at the top; finished rows last. */
+    private static void sortTotalRows(List<RecipeManager.RecipeNode> rows) {
+        rows.sort((a, b) -> {
+            int aLeft = a.amount + a.toCraft;
+            int bLeft = b.amount + b.toCraft;
+            boolean aDone = aLeft <= 0;
+            boolean bDone = bLeft <= 0;
+            if (aDone != bDone) return aDone ? 1 : -1;
+            return Integer.compare(bLeft, aLeft);
+        });
     }
 
     private static void collectLeaves(RecipeManager.RecipeNode node, Map<String, int[]> sums) {
@@ -266,7 +353,7 @@ public class ResourcesManager {
                             Map<String, Integer> highestPossibleResources, Map<String, Integer> currentAvailableResources,
                             Map<String, Integer> messages, int depth) {
         Map<String, Integer> recipe = forging.get(currentItem);
-        if (recipe == null || depth > MAX_DEPTH) return;
+        if (recipe == null || depth > RecipeManager.MAX_DEPTH) return;
         Map<String, Integer> madeResources = new LinkedHashMap<>();
         for (Map.Entry<String, Integer> entry : recipe.entrySet()) {
             String item = entry.getKey();
@@ -360,9 +447,21 @@ public class ResourcesManager {
     }
 
     /**
+     * Phase 1 used up the ingredients of everything it crafted. Before expanding {@code crafted} of an item into
+     * its ingredients, those are put back so the ingredient rows can draw on them again.
+     */
+    private static void giveBack(Map<String, Integer> recipe, int crafted, Map<String, Integer> highestPossibleResources) {
+        if (crafted <= 0) return;
+        for (Map.Entry<String, Integer> ingredient : recipe.entrySet()) {
+            highestPossibleResources.merge(ingredient.getKey(), ingredient.getValue() * crafted, Integer::sum);
+        }
+    }
+
+    /**
      * Builds the shopping-list node for {@code needed} of an item: stock the player has is used first,
-     * {@code amount} is what is still missing, and only that shortfall is expanded into ingredients. Stock
-     * beyond what is in {@code owned} is craftable from held materials and goes into {@code toCraft}.
+     * {@code amount} is what is still missing. Stock beyond what is in {@code owned} is craftable from held
+     * materials and goes into {@code toCraft}. Both the missing part and the part to craft are expanded into
+     * ingredients, so every crafting step still to do shows; held items are not expanded.
      */
     private RecipeManager.RecipeNode expandRequiredRecipe(String currentName, int needed, Map<String, Map<String, Integer>> forging,
                                                           Map<String, Integer> highestPossibleResources, Map<String, Integer> owned,
@@ -377,12 +476,16 @@ public class ResourcesManager {
 
         Map<String, Integer> recipe = forging.get(currentName);
         RecipeManager.RecipeNode node;
-        if (recipe == null || depth > MAX_DEPTH) {
+        // Held items (nothing missing, nothing to craft) have no steps left, so they are not expanded.
+        if (recipe == null || depth > RecipeManager.MAX_DEPTH || missing + fromStock - fromHeld <= 0) {
             node = new RecipeManager.RecipeNode(currentName, missing, needed, Collections.emptyList());
         } else {
             List<RecipeManager.RecipeNode> ingredients = new ArrayList<>();
+            int toCraft = fromStock - fromHeld;
+            giveBack(recipe, toCraft, highestPossibleResources);
             for (Map.Entry<String, Integer> entry : recipe.entrySet()) {
-                ingredients.add(expandRequiredRecipe(entry.getKey(), entry.getValue() * missing, forging, highestPossibleResources, owned, depth + 1));
+                ingredients.add(expandRequiredRecipe(entry.getKey(), entry.getValue() * (missing + toCraft), forging,
+                    highestPossibleResources, owned, depth + 1));
             }
             node = new RecipeManager.RecipeNode(currentName, missing, needed, ingredients);
         }
@@ -390,23 +493,69 @@ public class ResourcesManager {
         return node;
     }
 
-    private void initializeResourceMaps(String targetItem, Map<String, Map<String, Integer>> forging,
-                                       Map<String, Integer> highestPossibleResources,
-                                       Map<String, Integer> currentAvailableResources,
-                                       java.util.Set<String> visited) {
-        if (!visited.add(targetItem)) {
-            return; // already visited — break the cycle
-        }
-        highestPossibleResources.putIfAbsent(targetItem, 0);
-        currentAvailableResources.putIfAbsent(targetItem, 0);
-
-        Map<String, Integer> recipe = forging.get(targetItem);
+    /** Adds {@code target} and everything in its recipe tree to {@code names}; each item once (stops cycles). */
+    private static void collectNames(String target, Map<String, Map<String, Integer>> forging, java.util.Set<String> names) {
+        if (!names.add(target)) return;
+        Map<String, Integer> recipe = forging.get(target);
         if (recipe != null) {
-            for (String ingredient : recipe.keySet()) {
-                highestPossibleResources.putIfAbsent(ingredient, 0);
-                currentAvailableResources.putIfAbsent(ingredient, 0);
-                initializeResourceMaps(ingredient, forging, highestPossibleResources, currentAvailableResources, visited);
+            for (String ingredient : recipe.keySet()) collectNames(ingredient, forging, names);
+        }
+    }
+
+    /**
+     * Each name's count in {@code snapshot}, under whichever spelling it is tracked as. One lock for all of them.
+     * Two spellings of one item share one balance (kept under the first), so the same stock is never counted twice
+     * and what one spelling leaves over is still there for the other.
+     */
+    private SharedCounts countsByRecipeName(java.util.Set<String> names, Map<String, Integer> snapshot) {
+        SharedCounts out = new SharedCounts(new java.util.HashMap<>());
+        Map<String, String> firstByKey = new java.util.HashMap<>();
+        synchronized (this) {
+            for (String name : names) {
+                String key = resolve(name);
+                if (key == null) {
+                    out.put(name, 0);
+                    continue;
+                }
+                String first = firstByKey.putIfAbsent(key, name);
+                if (first == null) out.put(name, snapshot.getOrDefault(key, 0));
+                else out.aliases.put(name, first);
             }
+        }
+        return out;
+    }
+
+    /**
+     * Counts by recipe name where other spellings of an item read and write the first spelling's entry. Only the
+     * methods used here (get, getOrDefault, put, merge, containsKey) translate names.
+     */
+    private static final class SharedCounts extends LinkedHashMap<String, Integer> {
+        private final Map<String, String> aliases;
+
+        SharedCounts(Map<String, String> aliases) {
+            this.aliases = aliases;
+        }
+
+        /** A separate balance with the same counts and spellings. */
+        SharedCounts copy() {
+            SharedCounts copy = new SharedCounts(aliases);
+            copy.putAll(this);
+            return copy;
+        }
+
+        private String key(Object name) {
+            String first = aliases.get(name);
+            return first != null ? first : (String) name;
+        }
+
+        @Override public Integer get(Object name) { return super.get(key(name)); }
+        @Override public Integer getOrDefault(Object name, Integer fallback) { return super.getOrDefault(key(name), fallback); }
+        @Override public Integer put(String name, Integer count) { return super.put(key(name), count); }
+        @Override public boolean containsKey(Object name) { return super.containsKey(key(name)); }
+        @Override
+        public Integer merge(String name, Integer count,
+                             java.util.function.BiFunction<? super Integer, ? super Integer, ? extends Integer> remap) {
+            return super.merge(key(name), count, remap);
         }
     }
 
@@ -424,12 +573,16 @@ public class ResourcesManager {
         public final List<RecipeManager.RecipeNode> trees;
         /** Raw materials across all entries; children are the individual items. */
         public final RecipeManager.RecipeNode total;
+        /** Direct ingredients of every entry, summed; the Total when set to Recipe ingredients. */
+        public final RecipeManager.RecipeNode ingredientTotal;
         /** What can be crafted right now from current stock, item name to count. */
         public final Map<String, Integer> craftable;
 
-        public ShoppingResponse(List<RecipeManager.RecipeNode> trees, RecipeManager.RecipeNode total, Map<String, Integer> craftable) {
+        public ShoppingResponse(List<RecipeManager.RecipeNode> trees, RecipeManager.RecipeNode total,
+                                RecipeManager.RecipeNode ingredientTotal, Map<String, Integer> craftable) {
             this.trees = trees;
             this.total = total;
+            this.ingredientTotal = ingredientTotal;
             this.craftable = craftable;
         }
     }

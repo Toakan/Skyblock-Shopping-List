@@ -25,23 +25,36 @@ public class FilePathManager {
         new File(FabricLoader.getInstance().getGameDir().toFile(), ".skyblock-shopping-list"),
         new File(FabricLoader.getInstance().getGameDir().toFile(), ".ir-data"),
     };
-    public static final File CONTAINER_JSON = new File(DATA_DIR, "allcontainerData.json");
-    public static final File INVENTORY_JSON = new File(DATA_DIR, "inventorydata.json");
-    public static final File RESOURCES_JSON = new File(DATA_DIR, "resources.json");
-    public static final File SACKS_JSON = new File(DATA_DIR, "sacks.json");
+    // Per SkyBlock profile (see ProfileManager): resolved against the current profile's folder on every use.
+    public static File containerJson() { return profileFile("allcontainerData.json"); }
+    public static File inventoryJson() { return profileFile("inventorydata.json"); }
+    public static File resourcesJson() { return profileFile("resources.json"); }
+    public static File sacksJson() { return profileFile("sacks.json"); }
     /** When a sack menu was last read, for the stale-sack warning. */
-    public static final File SACKS_META_JSON = new File(DATA_DIR, "sacks_meta.json");
+    public static File sacksMetaJson() { return profileFile("sacks_meta.json"); }
     /** Last bank balance seen in the bank menu. */
-    public static final File COINS_JSON = new File(DATA_DIR, "coins.json");
+    public static File coinsJson() { return profileFile("coins.json"); }
     /** What was cooking in the Dwarven Forge when it was last opened. */
-    public static final File FORGE_JSON = new File(DATA_DIR, "forge.json");
+    public static File forgeJson() { return profileFile("forge.json"); }
+    /** Quick Forge % from the HOTM menu and the mayor forge bonus, for forge-time estimates. */
+    public static File forgeSpeedJson() { return profileFile("forge_speed.json"); }
+    /** The shopping list. */
+    public static File shoppingListJson() { return profileFile("shopping_list.json"); }
+
+    private static File profileFile(String name) {
+        return new File(ProfileManager.dir(), name);
+    }
     public static final File WIDGET_CONFIG_JSON = new File(DATA_DIR, "widget_config.json");
     /** HUD colours, sizes, font and parts (Settings > Appearance). */
     public static final File HUD_STYLE_JSON = new File(DATA_DIR, "hud_style.json");
+    /** Saved HUD presets, one JSON file each. Not part of the data reset: they are the player's own work. */
+    public static final File PRESETS_DIR = new File(DATA_DIR, "presets");
     public static final File FORGING_JSON = new File(DATA_DIR, "forging.json");
     public static final File GEMSTONE_RECIPES_JSON = new File(DATA_DIR, "gemstone_recipes.json");
     public static final File REMOTE_RECIPES_JSON = new File(DATA_DIR, "recipes_remote.json");
     public static final File REMOTE_FORGE_JSON = new File(DATA_DIR, "recipes_remote_forge.json");
+    /** Base forge time in seconds per forge item, written by the recipe fetch. */
+    public static final File FORGE_TIMES_JSON = new File(DATA_DIR, "forge_times.json");
     /** NPC shop purchases (coins + items) for items with no crafting or forge recipe. */
     public static final File REMOTE_SHOP_JSON = new File(DATA_DIR, "recipes_remote_shop.json");
     /** SkyBlock item ID to the name recipes use, written by the recipe fetch. */
@@ -69,7 +82,8 @@ public class FilePathManager {
         migrateVersionedResources();
         cleanupStaleFiles();
         if (!REMOTE_SOURCES_JSON.exists()) initializeRemoteSourcesConfig();
-        seedResources();
+        // Item names are added to the profile's resources once ProfileManager knows the profile.
+        RecipeManager.getInstance().reload();
         RemoteRecipeFetcher.fetchAsync();
     }
 
@@ -92,7 +106,7 @@ public class FilePathManager {
                 // Only empty folders are removed; anything unexpected is left where it was.
                 legacyData.delete();
                 legacy.delete();
-                InventoryReader.LOGGER.info("Moved {} to {}", legacy.getName(), MOD_DIR);
+                InventoryReader.debug("Moved {} to {}", legacy.getName(), MOD_DIR);
             } catch (IOException e) {
                 InventoryReader.LOGGER.warn("Could not move {} to {}; some data may need moving by hand", legacy, MOD_DIR, e);
             }
@@ -100,9 +114,15 @@ public class FilePathManager {
         }
     }
 
-    /** Deletes all tracked item data and widget settings. Recipes are kept. */
+    /** Deletes the current profile's tracked data and the widget settings. Recipes and other profiles are kept. */
     public static synchronized void resetData() {
-        for (File f : new File[]{CONTAINER_JSON, INVENTORY_JSON, RESOURCES_JSON, SACKS_JSON, SACKS_META_JSON, COINS_JSON, FORGE_JSON, WIDGET_CONFIG_JSON, HUD_STYLE_JSON}) {
+        // Queued saves land first, so none of them brings a deleted file back afterwards.
+        JsonFiles.flush();
+        List<File> files = new java.util.ArrayList<>();
+        for (String name : ProfileManager.PROFILE_FILES) files.add(profileFile(name));
+        files.add(WIDGET_CONFIG_JSON);
+        files.add(HUD_STYLE_JSON);
+        for (File f : files) {
             if (f.exists() && !f.delete()) {
                 InventoryReader.LOGGER.warn("Could not delete {}", f.getName());
             }
@@ -111,9 +131,15 @@ public class FilePathManager {
         seedResources();
     }
 
-    private static void seedResources() {
-        ResourcesManager.getInstance().ensureResourceNames(Arrays.asList(DEFAULT_RESOURCE_NAMES));
-        RecipeManager.getInstance().reload();
+    /**
+     * Adds the default and recipe item names (zero counts) to the current profile's resources. Does nothing
+     * until ProfileManager has picked the profile, so start-up never loads or writes the wrong folder.
+     */
+    static void seedResources() {
+        if (!ProfileManager.isInitialized()) return;
+        List<String> names = new java.util.ArrayList<>(Arrays.asList(DEFAULT_RESOURCE_NAMES));
+        names.addAll(RecipeManager.getInstance().getItemNames());
+        ResourcesManager.getInstance().ensureResourceNames(names);
     }
 
     private static String getModVersionString() {
@@ -137,19 +163,19 @@ public class FilePathManager {
             } catch (IOException e) {
                 InventoryReader.LOGGER.warn("Could not write version file", e);
             }
-            InventoryReader.LOGGER.info("Version changed {} -> {}, regenerating recipe files", stored.isEmpty() ? "none" : stored, version);
+            InventoryReader.debug("Version changed {} -> {}, regenerating recipe files", stored.isEmpty() ? "none" : stored, version);
         }
         RecipeFileGenerator.initializeRecipeFiles();
     }
 
     private static void migrateVersionedResources() {
-        if (RESOURCES_JSON.exists()) return;
+        if (resourcesJson().exists()) return;
         File[] versioned = DATA_DIR.listFiles((d, n) -> n.matches("resources\\.v.+\\.json"));
         if (versioned == null || versioned.length == 0) return;
         Arrays.sort(versioned, (a, b) -> Long.compare(b.lastModified(), a.lastModified()));
         try {
-            Files.copy(versioned[0].toPath(), RESOURCES_JSON.toPath(), StandardCopyOption.REPLACE_EXISTING);
-            InventoryReader.LOGGER.info("Migrated {} -> resources.json", versioned[0].getName());
+            Files.copy(versioned[0].toPath(), resourcesJson().toPath(), StandardCopyOption.REPLACE_EXISTING);
+            InventoryReader.debug("Migrated {} -> resources.json", versioned[0].getName());
             for (File f : versioned) f.delete();
         } catch (IOException e) {
             InventoryReader.LOGGER.warn("Failed to migrate versioned resources: {}", e.getMessage());

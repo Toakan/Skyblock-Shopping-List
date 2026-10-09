@@ -2,6 +2,7 @@ package inventoryreader.ir;
 
 import com.google.gson.reflect.TypeToken;
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.minecraft.client.KeyMapping;
@@ -62,7 +63,8 @@ public class InventoryReaderClient implements ClientModInitializer {
                 widget.setEnabled(!widget.isEnabled());
             }
             // Other servers' inventories must never change the SkyBlock counts.
-            if (onSkyblock && client.player != null && client.level != null && ++tickCounter >= 2) {
+            // Waits for the profile after a server change, so its items aren't booked to the last one.
+            if (SkyblockDetector.isTracking() && client.player != null && client.level != null && ++tickCounter >= 2) {
                 tickCounter = 0;
                 checkInventory(client);
             }
@@ -72,11 +74,16 @@ public class InventoryReaderClient implements ClientModInitializer {
         StorageViewerMod.register();
         IrCommandManager.register();
         SackChatListener.register();
+        ProfileManager.register();
+        ProfileChatListener.register();
+        // Saves run on a background thread; make sure the last ones reach the disk before the game closes.
+        ClientLifecycleEvents.CLIENT_STOPPING.register(client -> JsonFiles.flush());
         CoinTracker.register();
         ReminderManager.initialize();
         WelcomeManager.initialize();
         SandboxWidget.getInstance();
-        InventoryReader.LOGGER.info("Initialized {} client components", InventoryReader.NAME);
+        HudPresets.migrate();
+        InventoryReader.debug("Initialized {} client components", InventoryReader.NAME);
     }
 
     /** Forgets the remembered inventory (after a reset deleted the file). */
@@ -95,25 +102,18 @@ public class InventoryReaderClient implements ClientModInitializer {
         }
 
         if (lastInventory == null) {
-            Map<String, Map<String, Integer>> saved = JsonFiles.read(FilePathManager.INVENTORY_JSON, DATA_TYPE);
+            Map<String, Map<String, Integer>> saved = JsonFiles.read(FilePathManager.inventoryJson(), DATA_TYPE);
             Map<String, Integer> previous = saved != null ? saved.get(INVENTORY_KEY) : null;
             lastInventory = previous != null ? previous : new HashMap<>();
         }
         if (current.equals(lastInventory)) return;
 
-        Map<String, Integer> changes = new HashMap<>();
-        current.forEach((name, count) -> {
-            int delta = count - lastInventory.getOrDefault(name, 0);
-            if (delta != 0) changes.put(name, delta);
-        });
-        lastInventory.forEach((name, count) -> {
-            if (!current.containsKey(name) && count != 0) changes.put(name, -count);
-        });
+        Map<String, Integer> changes = Counts.diff(lastInventory, current);
 
         lastInventory = current;
         Map<String, Map<String, Integer>> data = new HashMap<>();
         data.put(INVENTORY_KEY, current);
-        JsonFiles.write(FilePathManager.INVENTORY_JSON, data);
+        JsonFiles.writeAsync(FilePathManager.inventoryJson(), () -> data);
         ResourcesManager.getInstance().saveData(changes);
     }
 }

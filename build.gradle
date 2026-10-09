@@ -34,8 +34,8 @@ dependencies {
 	// available at runtime without requiring a separate mod on the classpath.
 	include implementation("moe.nea:neurepoparser:1.9.0")
 
-	// Official Hypixel Mod API, used for SkyBlock detection when the hypixel-mod-api mod is installed.
-	// Optional at runtime ("suggests" in fabric.mod.json), so it is compile-only and not bundled.
+	// Official Hypixel Mod API, used for SkyBlock detection. Required at runtime ("depends" in
+	// fabric.mod.json); players install the hypixel-mod-api mod themselves, so it is compile-only, not bundled.
 	compileOnly "net.hypixel:mod-api:1.0.2"
 
 	// YetAnotherConfigLib for the Settings screen. Required at runtime ("depends" in fabric.mod.json), not bundled.
@@ -56,11 +56,6 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 java {
-	// Loom will automatically attach sourcesJar to a RemapSourcesJar task and to the "build" task
-	// if it is present.
-	// If you remove this line, sources will not be generated.
-	withSourcesJar()
-
 	sourceCompatibility = JavaVersion.VERSION_25
 	targetCompatibility = JavaVersion.VERSION_25
 }

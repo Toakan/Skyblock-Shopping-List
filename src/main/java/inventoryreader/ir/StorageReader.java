@@ -4,22 +4,26 @@ import com.google.gson.reflect.TypeToken;
 import java.lang.reflect.Type;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
+import net.minecraft.client.Minecraft;
+import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 
 /**
- * Remembers the contents of each storage container (backpacks, ender chest pages, forge, accessory bag, Pets menu pages)
- * by title, and passes changes since the last time it was seen to {@link ResourcesManager}.
+ * Remembers the contents of each storage container (backpacks, ender chest pages, forge, accessory bag, Pets menu pages,
+ * wardrobe pages, worn equipment) by title, and passes changes since the last time it was seen to {@link ResourcesManager}.
  */
 public class StorageReader {
     private static final Type TYPE = new TypeToken<Map<String, Map<String, Integer>>>() {}.getType();
     private static final StorageReader INSTANCE = new StorageReader();
     /** The Pets menu, one title per page: "Pets" or "(1/3) Pets". */
     private static final Pattern PETS_MENU = Pattern.compile("^(\\(\\d+/\\d+\\) )?Pets$");
+    /** Wardrobe pages: "Armor Sets" or "(2/3) Equipment Sets" (the titles Skyblocker matches). */
+    private static final Pattern WARDROBE = Pattern.compile("^(\\(\\d+/\\d+\\) )?(Armor Sets|Equipment Sets)$");
+    /** The menu showing worn equipment (necklace, cloak, belt, gloves). */
+    private static final String EQUIPMENT_MENU = "Stats & Equipment";
 
     private Map<String, Map<String, Integer>> containers;
 
@@ -31,7 +35,13 @@ public class StorageReader {
 
     public static boolean isTrackedContainer(String title) {
         return title.contains("Backpack") || title.contains("Ender Chest")
-            || title.contains("The Forge") || title.contains("Accessory Bag") || isPetsMenu(title);
+            || title.contains("The Forge") || title.contains("Accessory Bag") || isPetsMenu(title)
+            || isWearableMenu(title);
+    }
+
+    /** Wardrobe pages and the worn-equipment menu. */
+    private static boolean isWearableMenu(String title) {
+        return WARDROBE.matcher(title).matches() || title.startsWith(EQUIPMENT_MENU);
     }
 
     private static boolean isPetsMenu(String title) {
@@ -40,7 +50,7 @@ public class StorageReader {
 
     private Map<String, Map<String, Integer>> containers() {
         if (containers == null) {
-            Map<String, Map<String, Integer>> loaded = JsonFiles.read(FilePathManager.CONTAINER_JSON, TYPE);
+            Map<String, Map<String, Integer>> loaded = JsonFiles.read(FilePathManager.containerJson(), TYPE);
             containers = loaded != null ? new HashMap<>(loaded) : new HashMap<>();
         }
         return containers;
@@ -57,29 +67,52 @@ public class StorageReader {
         Map<String, Integer> newData = new LinkedHashMap<>();
         // The Pets menu also holds buttons (sort, convert, close...); only the pets count.
         boolean petsOnly = isPetsMenu(title);
-        List<Slot> slots = handler.slots;
-        // The last 36 slots are the player's own inventory, which is tracked separately.
-        for (int i = 0; i < slots.size() - 36; i++) {
-            ItemStack stack = slots.get(i).getItem();
-            if (!stack.isEmpty() && (!petsOnly || ItemIds.isPet(stack))) {
-                newData.merge(ItemIds.nameOf(stack), stack.getCount(), Integer::sum);
-            }
+        // These menus mix items with buttons; only real SkyBlock items count.
+        boolean wearable = isWearableMenu(title);
+        boolean itemsOnly = wearable || title.contains("Accessory Bag");
+        // Worn items show in these menus too but are already counted (armor with the inventory, equipment
+        // from the equipment menu); skipping as many copies as are worn keeps them from counting twice,
+        // while a spare copy of the same item stored here still counts.
+        Map<String, Integer> worn = wearable ? wornCounts(title) : new HashMap<>();
+        // The player's own inventory (below the menu) is tracked separately.
+        for (ItemStack stack : MenuSlots.containerStacks(handler)) {
+            if (petsOnly ? !ItemIds.isPet(stack) : itemsOnly && !ItemIds.hasSkyblockId(stack)) continue;
+            if (wearable && ItemIds.isPet(stack)) continue;
+            String name = ItemIds.nameOf(stack);
+            int count = stack.getCount();
+            int wornLeft = worn.getOrDefault(name, 0);
+            int skipped = Math.min(wornLeft, count);
+            if (skipped > 0) worn.put(name, wornLeft - skipped);
+            if (count > skipped) newData.merge(name, count - skipped, Integer::sum);
         }
 
         Map<String, Integer> previous = containers().getOrDefault(title, Map.of());
         if (previous.equals(newData)) return;
 
-        Map<String, Integer> changes = new HashMap<>();
-        newData.forEach((name, count) -> {
-            int delta = count - previous.getOrDefault(name, 0);
-            if (delta != 0) changes.put(name, delta);
-        });
-        previous.forEach((name, count) -> {
-            if (!newData.containsKey(name) && count != 0) changes.put(name, -count);
-        });
+        Map<String, Integer> changes = Counts.diff(previous, newData);
 
         containers.put(title, newData);
-        JsonFiles.write(FilePathManager.CONTAINER_JSON, containers);
+        Map<String, Map<String, Integer>> copy = new HashMap<>(containers);
+        JsonFiles.writeAsync(FilePathManager.containerJson(), () -> copy);
         ResourcesManager.getInstance().saveData(changes);
+    }
+
+    /** How many of each item are worn: the armor, plus (outside the equipment menu itself) the worn equipment. */
+    private Map<String, Integer> wornCounts(String title) {
+        Map<String, Integer> counts = new HashMap<>();
+        Minecraft client = Minecraft.getInstance();
+        if (client.player != null) {
+            Inventory inventory = client.player.getInventory();
+            for (int i = Inventory.INVENTORY_SIZE; i < Inventory.SLOT_OFFHAND; i++) {
+                ItemStack stack = inventory.getItem(i);
+                if (!stack.isEmpty()) counts.merge(ItemIds.nameOf(stack), stack.getCount(), Integer::sum);
+            }
+        }
+        if (!title.startsWith(EQUIPMENT_MENU)) {
+            containers().forEach((key, items) -> {
+                if (key.startsWith(EQUIPMENT_MENU)) items.forEach((name, count) -> counts.merge(name, count, Integer::sum));
+            });
+        }
+        return counts;
     }
 }

@@ -4,7 +4,6 @@ import com.google.gson.reflect.TypeToken;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ItemLore;
 
@@ -51,11 +50,7 @@ public final class ForgeTracker {
     public static void readForge(AbstractContainerMenu menu) {
         long now = System.currentTimeMillis();
         List<Entry> found = new ArrayList<>();
-        List<Slot> slots = menu.slots;
-        // The last 36 slots are the player's own inventory.
-        for (int i = 0; i < slots.size() - 36; i++) {
-            ItemStack stack = slots.get(i).getItem();
-            if (stack.isEmpty()) continue;
+        for (ItemStack stack : MenuSlots.containerStacks(menu)) {
             ItemLore lore = stack.get(DataComponents.LORE);
             if (lore == null) continue;
             String making = null;
@@ -69,9 +64,9 @@ public final class ForgeTracker {
             }
             // Glass panes and buttons have no "Currently making" line.
             if (making == null) continue;
-            if (remaining == null && !loggedReadyLore) {
+            if (remaining == null && !loggedReadyLore && InventoryReader.debugLogging) {
                 loggedReadyLore = true;
-                InventoryReader.LOGGER.info("Forge slot without a time, treated as ready: {}",
+                InventoryReader.debug("Forge slot without a time, treated as ready: {}",
                     lore.lines().stream().map(Component::getString).toList());
             }
             String name = ItemNames.clean(ItemIds.nameOf(stack));
@@ -80,7 +75,8 @@ public final class ForgeTracker {
         if (sameAs(getEntries(), found)) return;
         entries = List.copyOf(found);
         version++;
-        JsonFiles.write(FilePathManager.FORGE_JSON, found);
+        List<Entry> saved = List.copyOf(found);
+        JsonFiles.writeAsync(FilePathManager.forgeJson(), () -> saved);
     }
 
     /** Same items and counts, finishing within a few seconds of each other (times are read to the second). */
@@ -95,10 +91,10 @@ public final class ForgeTracker {
     }
 
     /** What was in the forge when it was last opened. */
-    public static List<Entry> getEntries() {
+    public static synchronized List<Entry> getEntries() {
         List<Entry> current = entries;
         if (current == null) {
-            List<Entry> loaded = JsonFiles.read(FilePathManager.FORGE_JSON, LIST_TYPE);
+            List<Entry> loaded = JsonFiles.read(FilePathManager.forgeJson(), LIST_TYPE);
             current = loaded != null ? List.copyOf(loaded) : List.of();
             entries = current;
         }
@@ -111,7 +107,7 @@ public final class ForgeTracker {
     }
 
     /** Forgets the in-memory copy (after a reset deleted the file). */
-    public static void clear() {
+    public static synchronized void clear() {
         entries = null;
         version++;
     }

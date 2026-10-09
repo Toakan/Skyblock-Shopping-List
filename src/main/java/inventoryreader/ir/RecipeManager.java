@@ -16,9 +16,14 @@ public class RecipeManager {
     private static final RecipeManager INSTANCE = new RecipeManager();
     private volatile Map<String, Map<String, Integer>> recipes = Collections.emptyMap();
     private volatile List<String> recipeNames = Collections.emptyList();
+    private volatile Set<String> itemNames = Collections.emptySet();
+    /** Base forge time in seconds per forge item (before Quick Forge or mayor bonuses). */
+    private volatile Map<String, Integer> forgeSeconds = Collections.emptyMap();
+    /** Changes every time the recipes are (re)loaded, so the HUD knows to recompute. */
+    private volatile long version = 0;
 
     /** Recipe trees are acyclic after sanitising; this only stops pathological data from overflowing the stack. */
-    private static final int MAX_DEPTH = 64;
+    static final int MAX_DEPTH = 64;
 
     private RecipeManager() {}
 
@@ -54,14 +59,20 @@ public class RecipeManager {
 
             Map<String, Map<String, Integer>> sanitized = sanitizeRecipes(working);
 
-            List<String> newNames = new ArrayList<>(sanitized.keySet());
-
             Set<String> allNames = new LinkedHashSet<>(sanitized.keySet());
             for (Map<String, Integer> m : sanitized.values()) allNames.addAll(m.keySet());
-            ResourcesManager.getInstance().ensureResourceNames(allNames);
+            itemNames = Collections.unmodifiableSet(allNames);
+            // Ingredient-only items (shop currencies such as Agatha's Coupon) can be added to the list too.
+            // Sorted once here: the recipe pickers ask for the list on every keystroke.
+            List<String> newNames = new ArrayList<>(allNames);
+            newNames.sort(String::compareToIgnoreCase);
 
             recipes = Collections.unmodifiableMap(sanitized);
             recipeNames = Collections.unmodifiableList(newNames);
+            Map<String, Integer> times = JsonFiles.read(FilePathManager.FORGE_TIMES_JSON,
+                new com.google.gson.reflect.TypeToken<Map<String, Integer>>(){}.getType());
+            forgeSeconds = times == null ? Collections.emptyMap() : Collections.unmodifiableMap(new HashMap<>(times));
+            version++;
         } catch (IOException | JsonParseException e) {
             InventoryReader.LOGGER.error("Failed to load recipes", e);
         }
@@ -70,6 +81,18 @@ public class RecipeManager {
     /** Re-reads all recipe files. Called at startup and by RemoteRecipeFetcher after a successful fetch. */
     public synchronized void reload() {
         loadRecipes();
+        // New recipes can bring new item names; add them to the current profile (once a profile is known).
+        FilePathManager.seedResources();
+    }
+
+    /** Changes every time the recipes are (re)loaded. */
+    public long getVersion() {
+        return version;
+    }
+
+    /** Every item name in the recipes, as outputs or ingredients. */
+    public Set<String> getItemNames() {
+        return itemNames;
     }
 
     private Map<String, Map<String, Integer>> readRecipeMap(Gson gson, File file) throws IOException {
@@ -88,14 +111,19 @@ public class RecipeManager {
             }
 
             java.lang.reflect.Type t = new com.google.gson.reflect.TypeToken<Map<String, Map<String, Integer>>>(){}.getType();
-            return new Gson().fromJson(recipesNode, t);
+            return gson.fromJson(recipesNode, t);
         }
     }
 
+    /** Base forge time of one craft in seconds, or 0 when the item is not made in the Forge. */
+    public int getForgeSeconds(String name) {
+        Integer seconds = forgeSeconds.get(name);
+        return seconds == null ? 0 : seconds;
+    }
+
+    /** Every item name, A-Z ignoring case. Unmodifiable. */
     public List<String> getRecipeNames() {
-        List<String> list = new ArrayList<>(recipeNames);
-        list.sort(String::compareToIgnoreCase);
-        return list;
+        return recipeNames;
     }
 
     public Map<String, Integer> getSimpleRecipe(String name, int amt) {
@@ -123,8 +151,9 @@ public class RecipeManager {
         return new RecipeNode(currentName, multiplier, ingredients);
     }
 
+    /** Every recipe, output name to ingredients. Read only: a reload replaces the map rather than changing it, so no copy. */
     public Map<String, Map<String, Integer>> getAllRecipes() {
-        return new LinkedHashMap<>(recipes);
+        return recipes;
     }
 
 
@@ -151,7 +180,8 @@ public class RecipeManager {
         for (Map.Entry<String, Map<String, Integer>> entry : input.entrySet()) {
             String output = entry.getKey();
             Map<String, Integer> ing = entry.getValue();
-            if (ing == null || ing.isEmpty()) { out.put(output, ing); continue; }
+            // No ingredients is no recipe; keeping it would make the item craftable from nothing.
+            if (ing == null || ing.isEmpty()) continue;
 
             // Drop known decompression entries entirely
             if (DECOMPRESSION_SKIP.contains(output)) continue;
@@ -159,8 +189,8 @@ public class RecipeManager {
             Map<String, Integer> cleaned = new LinkedHashMap<>();
             for (Map.Entry<String, Integer> ie : ing.entrySet()) {
                 String name = ie.getKey();
-                if (name == null || name.isEmpty()) continue;
-                if (name.matches("\\d+")) continue;
+                // Empty or digits-only names are junk.
+                if (ItemNames.isJunk(name)) continue;
                 // --- Pass 2: remove self-references ---
                 // Items that list themselves as their own ingredient cause immediate
                 // infinite recursion. Explicitly strip them out.
@@ -229,7 +259,22 @@ public class RecipeManager {
          * materials you have.
          */
         public int toCraft;
+        /**
+         * Shopping-list trees only: forge time still ahead for this step and everything under it, every craft
+         * one after another. {@code forgeMs} covers crafts not started yet; {@code forgeCookingEnds} holds when
+         * each item cooking in the Forge now (that this step needs) is done, see {@link #forgeLeft(long)}.
+         */
+        public long forgeMs;
+        /** Shopping-list trees only: held enough only by counting copies still cooking in the Forge. */
+        public boolean cooking;
+        public long[] forgeCookingEnds = new long[0];
         public List<RecipeNode> ingredients;
+
+        public long forgeLeft(long now) {
+            long left = forgeMs;
+            for (long end : forgeCookingEnds) left += Math.max(0, end - now);
+            return left;
+        }
 
         public RecipeNode(String name, int amount, List<RecipeNode> ingredients) {
             this(name, amount, amount, ingredients);
