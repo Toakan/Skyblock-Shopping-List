@@ -326,6 +326,13 @@ public class RecipeManager {
         /** Shopping-list trees only: held enough only by counting copies still cooking in the Forge. */
         public boolean cooking;
         public long[] forgeCookingEnds = new long[0];
+        /**
+         * Shopping-list trees only: what unlocks this row's own recipe ("HotM 6"), and the requirements of rows
+         * still to make further down ("HotM 2 (Refined Titanium)"), deduplicated in tree order. Empty when the
+         * row is done or nothing needs an unlock.
+         */
+        public String ownLock = "";
+        public List<String> locksBelow = List.of();
         public List<RecipeNode> ingredients;
 
         public long forgeLeft(long now) {

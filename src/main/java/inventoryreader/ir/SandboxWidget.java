@@ -603,6 +603,8 @@ public class SandboxWidget {
         Map<String, Long> cookingEnds = cookingEnds();
         double forgeMultiplier = ForgeSpeed.multiplier();
         for (RecipeManager.RecipeNode tree : response.trees) setForgeTimes(tree, cookingEnds, forgeMultiplier);
+        RecipeManager recipeManager = RecipeManager.getInstance();
+        for (RecipeManager.RecipeNode tree : response.trees) setLocks(tree, recipeManager, 0);
 
         List<RecipeManager.RecipeNode> tops = new ArrayList<>();
         RecipeManager.RecipeNode total = totalMode == TotalMode.INGREDIENTS ? response.ingredientTotal : response.total;
@@ -1351,7 +1353,7 @@ public class SandboxWidget {
         Component name = style.text(node.name, nameColor, bold);
         String forge = forgeText(node, level);
         Component tag = forge.isEmpty() ? Component.empty() : style.text(forge, nameColor, false);
-        int lockWidth = lockRequirement(node, hasEnough).isEmpty() ? 0 : LOCK_WIDTH;
+        int lockWidth = showsLock(node) ? LOCK_WIDTH : 0;
         List<String> sacksLeft = neededSacks;
         int listSackCount = listSacks.size();
         if (level == 0 && "Total".equals(node.name) && !sacksLeft.isEmpty()) {
@@ -1488,13 +1490,33 @@ public class SandboxWidget {
     /** Room a padlock takes after a row's text, in font pixels: a gap, the 5 px lock and a pixel after it. */
     public static final int LOCK_WIDTH = 9;
 
+    /** True when a row shows a padlock: Recipe locks on, and it or a row under it still to make needs an unlock. */
+    public static boolean showsLock(RecipeManager.RecipeNode node) {
+        return HudStyle.get().showRequirements && (!node.ownLock.isEmpty() || !node.locksBelow.isEmpty());
+    }
+
     /**
-     * What unlocks the recipe of a row still to make ("Coal III"), or "" when no padlock should show: Recipe
-     * locks off, nothing to make, or no unlock needed.
+     * Fills {@link RecipeManager.RecipeNode#ownLock} and {@code locksBelow} for this row and every row under it,
+     * so the HUD only reads them. Rows you have enough of need nothing made, so they pass nothing up. Returns
+     * this subtree's requirements for the row above, each named after its item.
      */
-    public static String lockRequirement(RecipeManager.RecipeNode node, boolean hasEnough) {
-        if (hasEnough || !HudStyle.get().showRequirements) return "";
-        return RecipeManager.getInstance().getRequirement(node.name);
+    private static Set<String> setLocks(RecipeManager.RecipeNode node, RecipeManager recipes, int depth) {
+        Set<String> below = new LinkedHashSet<>();
+        if (node.ingredients != null && depth < RecipeManager.MAX_DEPTH) {
+            for (RecipeManager.RecipeNode child : node.ingredients) below.addAll(setLocks(child, recipes, depth + 1));
+        }
+        boolean hasEnough = node.amount <= 0 && node.toCraft <= 0 && !node.cooking;
+        if (hasEnough) {
+            node.ownLock = "";
+            node.locksBelow = List.of();
+            return Set.of();
+        }
+        node.ownLock = recipes.getRequirement(node.name);
+        node.locksBelow = List.copyOf(below);
+        Set<String> up = new LinkedHashSet<>();
+        if (!node.ownLock.isEmpty()) up.add(node.ownLock + " (" + node.name + ")");
+        up.addAll(below);
+        return up;
     }
 
     /**
