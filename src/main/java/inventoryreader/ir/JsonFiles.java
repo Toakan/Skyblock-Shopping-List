@@ -83,12 +83,17 @@ public final class JsonFiles {
     }
 
     public static boolean write(File file, Object value) {
+        return writeText(file, GSON.toJson(value));
+    }
+
+    /** Writes {@code text} as the whole file, through a temp file and a move. */
+    public static boolean writeText(File file, String text) {
         Path target = file.toPath();
         Path tmp = target.resolveSibling(file.getName() + ".tmp");
         try {
             Files.createDirectories(target.getParent());
             try (Writer writer = Files.newBufferedWriter(tmp, StandardCharsets.UTF_8)) {
-                GSON.toJson(value, writer);
+                writer.write(text);
             }
             try {
                 Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);

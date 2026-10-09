@@ -4,34 +4,29 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
-import net.minecraft.world.scores.DisplaySlot;
-import net.minecraft.world.scores.Objective;
-
-import java.util.Locale;
 
 /**
  * Tells whether the player is on a Hypixel SkyBlock server. Tracking, the HUD and keybinds are off
  * everywhere else, so lobbies and other servers never change the counts.
  *
- * <p>With the official Hypixel Mod API mod installed, its location event decides (and also reports the
- * island). Without it, the sidebar scoreboard title ("SKYBLOCK", "SKYBLOCK CO-OP", ...) is used. Both
- * only read what Hypixel provides.
+ * <p>The official Hypixel Mod API is a required dependency: its location event decides. If it is somehow
+ * missing at runtime, every server is treated as SkyBlock rather than never showing anything.
  */
 public final class SkyblockDetector {
     private static final String MOD_API_ID = "hypixel-mod-api";
 
-    private static boolean useModApi = false;
+    /** True when the Mod API is missing: every server counts as SkyBlock. */
+    private static boolean alwaysOn = false;
     private static volatile boolean onSkyblock = false;
 
     private SkyblockDetector() {}
 
     public static void register() {
-        useModApi = FabricLoader.getInstance().isModLoaded(MOD_API_ID);
-        if (useModApi) {
+        if (FabricLoader.getInstance().isModLoaded(MOD_API_ID)) {
             HypixelLocationListener.register();
-            InventoryReader.debug("Using the Hypixel Mod API for SkyBlock detection");
         } else {
-            InventoryReader.debug("Hypixel Mod API not installed; detecting SkyBlock from the scoreboard");
+            alwaysOn = true;
+            InventoryReader.LOGGER.warn("Hypixel Mod API not found; treating every server as SkyBlock");
         }
         ClientTickEvents.START_CLIENT_TICK.register(SkyblockDetector::tick);
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> set(false, null));
@@ -55,20 +50,10 @@ public final class SkyblockDetector {
     }
 
     private static void tick(Minecraft client) {
-        // The dev client runs in singleplayer, where neither signal exists.
-        if (FabricLoader.getInstance().isDevelopmentEnvironment()) {
+        // The dev client runs in singleplayer, where the Mod API sends nothing.
+        if (alwaysOn || FabricLoader.getInstance().isDevelopmentEnvironment()) {
             onSkyblock = client.level != null;
-            return;
         }
-        if (useModApi) return;
-        boolean found = false;
-        if (client.level != null) {
-            Objective sidebar = client.level.getScoreboard().getDisplayObjective(DisplaySlot.SIDEBAR);
-            if (sidebar != null) {
-                found = ItemNames.clean(sidebar.getDisplayName().getString()).toUpperCase(Locale.ROOT).contains("SKYBLOCK");
-            }
-        }
-        set(found, null);
     }
 
     private static void set(boolean skyblock, String mode) {

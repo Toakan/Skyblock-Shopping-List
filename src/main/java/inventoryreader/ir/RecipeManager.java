@@ -101,7 +101,7 @@ public class RecipeManager {
             }
 
             java.lang.reflect.Type t = new com.google.gson.reflect.TypeToken<Map<String, Map<String, Integer>>>(){}.getType();
-            return new Gson().fromJson(recipesNode, t);
+            return gson.fromJson(recipesNode, t);
         }
     }
 

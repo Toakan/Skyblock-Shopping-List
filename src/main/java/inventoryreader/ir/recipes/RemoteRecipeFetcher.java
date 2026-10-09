@@ -17,7 +17,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -130,14 +129,15 @@ public final class RemoteRecipeFetcher {
             Map<String, Object> parsed = GSON.fromJson(body, t);
             if (parsed == null || parsed.isEmpty()) { LOGGER.warn("Remote recipes JSON empty"); return false; }
 
-            writeRemoteSnapshot(parsed);
+            boolean changed = writeSnapshot(parsed, FilePathManager.REMOTE_RECIPES_JSON, meta);
 
             String newEtag = resp.headers().firstValue("etag").orElse("");
             if (!newEtag.isEmpty()) meta.put(etagKey, newEtag);
             meta.put(PARSER_VERSION_KEY, PARSER_VERSION);
             writeMeta(FilePathManager.REMOTE_META_JSON, meta);
 
-            inventoryreader.ir.RecipeManager.getInstance().reload();
+            if (changed) inventoryreader.ir.RecipeManager.getInstance().reload();
+            else inventoryreader.ir.InventoryReader.debug("Recipes unchanged");
             return true;
         } catch (Exception e) {
             LOGGER.warn("fetchDirectJson failed: {}", e.toString());
@@ -265,18 +265,25 @@ public final class RemoteRecipeFetcher {
             Map<String, Map<String, Integer>> forgeWire    = resolveToDisplayNames(forgeByInternal,    internalToDisplay, recipeNameById);
             Map<String, Map<String, Integer>> shopWire     = resolveToDisplayNames(shopByInternal,     internalToDisplay, recipeNameById);
 
-            if (!craftingWire.isEmpty()) writeRemoteSnapshot(craftingWire);
-            if (!forgeWire.isEmpty())    writeForgeSnapshot(forgeWire);
-            writeSnapshot(shopWire, FilePathManager.REMOTE_SHOP_JSON, "recipes_remote_shop.json.tmp");
+            // Each file is only rewritten (and the recipes only reloaded) when its content actually changed:
+            // the repo changes often, the recipes much less.
+            boolean changed = false;
+            if (!craftingWire.isEmpty()) changed |= writeSnapshot(craftingWire, FilePathManager.REMOTE_RECIPES_JSON, meta);
+            if (!forgeWire.isEmpty())    changed |= writeSnapshot(forgeWire, FilePathManager.REMOTE_FORGE_JSON, meta);
+            changed |= writeSnapshot(shopWire, FilePathManager.REMOTE_SHOP_JSON, meta);
             // Base forge time per forge item, under the name its recipe uses (resolved after any renames above).
             Map<String, Integer> forgeSeconds = new LinkedHashMap<>();
             forgeSecondsByInternal.forEach((id, seconds) -> forgeSeconds.put(recipeNameById.getOrDefault(id, id), seconds));
-            writeSnapshot(forgeSeconds, FilePathManager.FORGE_TIMES_JSON, "forge_times.json.tmp");
-            writeSnapshot(recipeNameById, FilePathManager.ITEM_NAMES_JSON, "item_names.json.tmp");
-            inventoryreader.ir.ItemIds.reload();
+            changed |= writeSnapshot(forgeSeconds, FilePathManager.FORGE_TIMES_JSON, meta);
+            changed |= writeSnapshot(recipeNameById, FilePathManager.ITEM_NAMES_JSON, meta);
 
             inventoryreader.ir.InventoryReader.debug("NEU repo parsed (library): {} crafting (incl. {} pet upgrades), {} forge, {} shop recipes", craftingWire.size(), katCount, forgeWire.size(), shopWire.size());
-            inventoryreader.ir.RecipeManager.getInstance().reload();
+            if (changed) {
+                inventoryreader.ir.ItemIds.reload();
+                inventoryreader.ir.RecipeManager.getInstance().reload();
+            } else {
+                inventoryreader.ir.InventoryReader.debug("Recipes unchanged");
+            }
 
             if (metaValToWrite != null && !metaValToWrite.isEmpty()) {
                 meta.put(metaKey, metaValToWrite);
@@ -380,24 +387,23 @@ public final class RemoteRecipeFetcher {
         } catch (Exception ignore) {}
     }
 
-    private static void writeRemoteSnapshot(Map<String, ?> data) throws Exception {
-        writeSnapshot(data, FilePathManager.REMOTE_RECIPES_JSON, "recipes_remote.json.tmp");
+    /**
+     * Writes {@code data} to {@code dest} unless the file already holds exactly that: the SHA-256 of the JSON is
+     * kept in the meta file ("hash::name"). Returns true when the file was (re)written.
+     */
+    private static boolean writeSnapshot(Map<String, ?> data, File dest, Map<String, String> meta) throws Exception {
+        String json = GSON.toJson(data);
+        String key = "hash::" + dest.getName();
+        String hash = sha256(json);
+        if (dest.isFile() && hash.equals(meta.get(key))) return false;
+        if (!inventoryreader.ir.JsonFiles.writeText(dest, json)) throw new java.io.IOException("Could not write " + dest.getName());
+        meta.put(key, hash);
+        return true;
     }
 
-    private static void writeForgeSnapshot(Map<String, ?> data) throws Exception {
-        writeSnapshot(data, FilePathManager.REMOTE_FORGE_JSON, "recipes_remote_forge.json.tmp");
-    }
-
-    private static void writeSnapshot(Map<String, ?> data, File dest, String tmpName) throws Exception {
-        File tmp = new File(FilePathManager.DATA_DIR, tmpName);
-        try (FileWriter fw = new FileWriter(tmp, StandardCharsets.UTF_8)) {
-            GSON.toJson(data, fw);
-        }
-        try {
-            Files.move(tmp.toPath(), dest.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-        } catch (Exception e) {
-            Files.move(tmp.toPath(), dest.toPath(), StandardCopyOption.REPLACE_EXISTING);
-        }
+    private static String sha256(String text) throws java.security.NoSuchAlgorithmException {
+        byte[] digest = java.security.MessageDigest.getInstance("SHA-256").digest(text.getBytes(StandardCharsets.UTF_8));
+        return java.util.HexFormat.of().formatHex(digest);
     }
 
     private static List<Map<String, String>> readSources(File f) {

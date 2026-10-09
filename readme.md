@@ -15,12 +15,12 @@ The license and credits remain the same as the original Inventory Reader project
 - Fabric Loader 0.19.5 or newer
 - Fabric API 0.161.0+26.2 or newer
 - YetAnotherConfigLib 3.9.7+26.2 or newer (already installed if you use Skyblocker)
+- [Hypixel Mod API](https://modrinth.com/mod/hypixel-mod-api) 1.0.2 or newer (official; used to know when you are on SkyBlock)
 - Java 25
-- Recommended: [Hypixel Mod API](https://modrinth.com/mod/hypixel-mod-api) (official), for reliable SkyBlock detection
 
 ## Installation
 1. Install Fabric Loader for Minecraft 26.2.
-2. Put Fabric API, YetAnotherConfigLib, the Hypixel Mod API (recommended) and the Skyblock Shopping List jar in your `mods/` folder.
+2. Put Fabric API, YetAnotherConfigLib, the Hypixel Mod API and the Skyblock Shopping List jar in your `mods/` folder.
 3. Launch Minecraft with the Fabric profile.
 
 ## First-time setup
@@ -67,7 +67,7 @@ When a recipe has everything it needs you get a "Ready to craft" pop-up, and onc
 `/ir` still works as an alias for `/ssl`, and `/ssl widget` for `/ssl menu`. Keys can be rebound under Options > Controls > Key Binds > Skyblock Shopping List (or Settings → Key binds...).
 
 ## SkyBlock only
-The mod only runs on Hypixel SkyBlock. With the official Hypixel Mod API installed, it uses the API's location event (Hypixel's own signal, which also reports the island). Without it, it falls back to the sidebar scoreboard title ("SKYBLOCK"). In lobbies, other Hypixel games and other servers the HUD is hidden, the keys do nothing and nothing is tracked, so other inventories never change your counts. The `/ssl` commands still work everywhere.
+The mod only runs on Hypixel SkyBlock. It uses the official Hypixel Mod API's location event (Hypixel's own signal), so the Hypixel Mod API is required; the game won't start without it. In lobbies, other Hypixel games and other servers the HUD is hidden, the keys do nothing and nothing is tracked, so other inventories never change your counts. The `/ssl` commands still work everywhere.
 
 ## Hypixel rules
 Skyblock Shopping List is designed to stay within the [Hypixel Allowed Modifications](https://support.hypixel.net/hc/en-us/articles/6472550754962-Hypixel-Allowed-Modifications) guidelines:
