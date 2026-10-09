@@ -46,6 +46,16 @@ public final class ConfigScreen {
                 .option(toggle("Total section",
                     "Show a Total at the top of the HUD with every raw material still needed across all recipes.",
                     widget::isShowTotal, widget::setShowTotal))
+                .option(Option.<SandboxWidget.TotalMode>createBuilder()
+                    .name(Component.literal("Total lists"))
+                    .description(OptionDescription.of(Component.literal(
+                        "Raw materials: everything down to the basic items (e.g. Titanium).\nRecipe ingredients: "
+                            + "the pieces each recipe on your list takes directly (e.g. Refined Titanium).")))
+                    .binding(SandboxWidget.TotalMode.RAW, widget::getTotalMode, widget::setTotalMode)
+                    .controller(opt -> EnumControllerBuilder.create(opt).enumClass(SandboxWidget.TotalMode.class)
+                        .formatValue(v -> Component.literal(
+                            v == SandboxWidget.TotalMode.INGREDIENTS ? "Recipe ingredients" : "Raw materials")))
+                    .build())
                 .option(Option.<Integer>createBuilder()
                     .name(Component.literal("Max recipes"))
                     .description(OptionDescription.of(Component.literal(

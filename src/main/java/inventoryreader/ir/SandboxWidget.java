@@ -52,6 +52,9 @@ public class SandboxWidget {
     /** Update thread only: a recipe has everything but something in its tree is still cooking in the Forge. */
     private boolean waitingOnForge = false;
     private volatile boolean showTotal = true;
+    /** What the Total adds up: raw materials, or the direct ingredients of each recipe on the list. */
+    public enum TotalMode { RAW, INGREDIENTS }
+    private volatile TotalMode totalMode = TotalMode.RAW;
     private volatile boolean notifications = true;
     private volatile boolean autoRemove = true;
     private volatile boolean staleSackWarning = true;
@@ -232,6 +235,7 @@ public class SandboxWidget {
         config.expandedNodes = new HashMap<>(expandedNodes);
         config.shoppingList = getShoppingList();
         config.showTotal = showTotal;
+        config.totalMode = totalMode;
         config.notifications = notifications;
         config.autoRemove = autoRemove;
         config.staleSackWarning = staleSackWarning;
@@ -253,6 +257,7 @@ public class SandboxWidget {
             HudStyle.save();
         }
         if (config.showTotal != null) this.showTotal = config.showTotal;
+        if (config.totalMode != null) this.totalMode = config.totalMode;
         if (config.notifications != null) this.notifications = config.notifications;
         if (config.autoRemove != null) this.autoRemove = config.autoRemove;
         if (config.staleSackWarning != null) this.staleSackWarning = config.staleSackWarning;
@@ -291,6 +296,7 @@ public class SandboxWidget {
         forgingPanel = new PanelRect(270, 200, 180, 120);
         expandedNodes = new ConcurrentHashMap<>();
         showTotal = true;
+        totalMode = TotalMode.RAW;
         notifications = true;
         autoRemove = true;
         staleSackWarning = true;
@@ -318,6 +324,7 @@ public class SandboxWidget {
         /** Read only, for configs written before Settings > Appearance existed. */
         Boolean showRemaining;
         Boolean showTotal;
+        TotalMode totalMode;
         Boolean notifications;
         Boolean autoRemove;
         /** Read only: the list-wide Have total / Add more switch from 4.20.6, now set per entry. */
@@ -429,9 +436,10 @@ public class SandboxWidget {
         }
 
         List<RecipeManager.RecipeNode> tops = new ArrayList<>();
-        if (showTotal && !response.total.ingredients.isEmpty()) {
-            tops.add(response.total);
-            expandedNodes.putIfAbsent(makePathKey(LIST_KEY, response.total.name), true);
+        RecipeManager.RecipeNode total = totalMode == TotalMode.INGREDIENTS ? response.ingredientTotal : response.total;
+        if (showTotal && !total.ingredients.isEmpty()) {
+            tops.add(total);
+            expandedNodes.putIfAbsent(makePathKey(LIST_KEY, total.name), true);
         }
         for (RecipeManager.RecipeNode tree : response.trees) {
             tops.add(tree);
@@ -1022,6 +1030,12 @@ public class SandboxWidget {
     public boolean isShowTotal() { return showTotal; }
     public void setShowTotal(boolean showTotal) {
         this.showTotal = showTotal;
+        requestRefresh();
+        saveConfiguration();
+    }
+    public TotalMode getTotalMode() { return totalMode; }
+    public void setTotalMode(TotalMode totalMode) {
+        this.totalMode = totalMode;
         requestRefresh();
         saveConfiguration();
     }

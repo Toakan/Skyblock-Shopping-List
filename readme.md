@@ -32,7 +32,7 @@ Press `V` (or `/ssl menu`) to open the menu. It has five tabs:
 - **Resources**: your item counts with search. Type in a box or use − / + to correct a count; changes save straight away. **Show all** also lists items you have none of.
 - **Recipes**: browse any recipe's full tree for a chosen amount, and **Add to list**.
 - **Forge**: what you still need for one recipe, with **Add to list**.
-- **Settings**: opens the settings screen (YetAnotherConfigLib, same style as Skyblocker), with HUD, Appearance, Notifications and Controls categories: HUD on/off, Total section, Max recipes, **Move HUD...**, Pop-ups, Auto-remove, Sack reminder and **Key binds...**. Changes apply when you press Save.
+- **Settings**: opens the settings screen (YetAnotherConfigLib, same style as Skyblocker), with HUD, Appearance, Notifications and Controls categories: HUD on/off, Total section, Total lists, Max recipes, **Move HUD...**, Pop-ups, Auto-remove, Sack reminder and **Key binds...**. Changes apply when you press Save.
 - **Appearance** (in Settings): design the HUD yourself. Colours (with transparency) for the panel, borders, title, rows, tree lines, text and the done / partly gathered / missing / can craft states; row height, row gap, indent, padding, border thicknesses and rounded corners (panels and rows, 0-6 px); font (Minecraft's fonts plus any your enabled resource packs add), shadow and bold recipe names; separate text sizes for the title, rows, Craftable and Forging, and left / centre / right alignment for the title, Craftable and Forging; tick/cross marks, row boxes, tree lines, and the amount format (Remaining "3×", Have / need "83/5,120", or Required "6×"), with **Short numbers** (on by default) showing big amounts as 5.1k / 500m / 1.5b. A live preview at the top of the description column shows a sample panel with your changes before you press Save. **Reset look to defaults** restores the original look.
   - **HUD scale** (50-300%) sizes every panel. By default the HUD keeps its size whatever Minecraft's GUI Scale is; turn on **Follow GUI Scale** to have it change with GUI Scale.
   - **Craftable** and **Forging** can each be hidden, or moved to their **own panel** that you place and size separately in Move HUD.
@@ -41,7 +41,7 @@ Press `V` (or `/ssl menu`) to open the menu. It has five tabs:
   - Panels grow to fit their content up to the height set in Move HUD; anything beyond is cut off and marked with "…" (make the panel taller or collapse rows).
 
 The HUD (`H` to toggle) shows:
-- **Total**: every raw material still needed across all recipes, missing items first. Your stock is shared between recipes, never counted twice (earlier entries get it first).
+- **Total**: every raw material still needed across all recipes, missing items first. Set **Total lists** to Recipe ingredients to sum the pieces each recipe takes directly (e.g. Refined Titanium) instead. Your stock is shared between recipes, never counted twice (earlier entries get it first).
 - One tree per recipe.
 - **Craftable**: intermediates you can make right now.
 - **Forging**: items cooking in your Dwarven Forge that the list needs, with time left. Updated when you open The Forge.

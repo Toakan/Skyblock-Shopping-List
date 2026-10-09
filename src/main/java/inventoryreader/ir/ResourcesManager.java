@@ -246,7 +246,7 @@ public class ResourcesManager {
             root.toCraft = craftedNow[i];
             trees.add(root);
         }
-        return new ShoppingResponse(trees, totalOf(trees, forging), messages);
+        return new ShoppingResponse(trees, totalOf(trees, forging), ingredientTotalOf(trees), messages);
     }
 
     /** Raw materials (leaves) across all trees, summed; missing items first, most missing at the top. */
@@ -269,13 +269,52 @@ public class ResourcesManager {
             missing += v[0];
             required += v[1];
         }
-        leaves.sort((a, b) -> {
-            boolean aDone = a.amount <= 0;
-            boolean bDone = b.amount <= 0;
-            if (aDone != bDone) return aDone ? 1 : -1;
-            return Integer.compare(b.amount, a.amount);
-        });
+        sortTotalRows(leaves);
         return new RecipeManager.RecipeNode("Total", missing, required, leaves);
+    }
+
+    /** Direct ingredients of every entry, summed by name; intermediates such as Refined Titanium included. */
+    private static RecipeManager.RecipeNode ingredientTotalOf(List<RecipeManager.RecipeNode> trees) {
+        Map<String, int[]> sums = new LinkedHashMap<>();
+        for (RecipeManager.RecipeNode tree : trees) {
+            if (tree.ingredients == null) continue;
+            for (RecipeManager.RecipeNode child : tree.ingredients) {
+                int[] v = sums.computeIfAbsent(child.name, k -> new int[3]);
+                v[0] += Math.max(0, child.amount);
+                v[1] += child.required;
+                v[2] += child.toCraft;
+            }
+        }
+        List<RecipeManager.RecipeNode> rows = new ArrayList<>();
+        int missing = 0;
+        int required = 0;
+        int toCraft = 0;
+        for (Map.Entry<String, int[]> e : sums.entrySet()) {
+            int[] v = e.getValue();
+            if (v[1] <= 0) continue;
+            RecipeManager.RecipeNode row = new RecipeManager.RecipeNode(e.getKey(), v[0], v[1], Collections.emptyList());
+            row.toCraft = v[2];
+            rows.add(row);
+            missing += v[0];
+            required += v[1];
+            toCraft += v[2];
+        }
+        sortTotalRows(rows);
+        RecipeManager.RecipeNode total = new RecipeManager.RecipeNode("Total", missing, required, rows);
+        total.toCraft = toCraft;
+        return total;
+    }
+
+    /** Rows still to get or craft first, most at the top; finished rows last. */
+    private static void sortTotalRows(List<RecipeManager.RecipeNode> rows) {
+        rows.sort((a, b) -> {
+            int aLeft = a.amount + a.toCraft;
+            int bLeft = b.amount + b.toCraft;
+            boolean aDone = aLeft <= 0;
+            boolean bDone = bLeft <= 0;
+            if (aDone != bDone) return aDone ? 1 : -1;
+            return Integer.compare(bLeft, aLeft);
+        });
     }
 
     private static void collectLeaves(RecipeManager.RecipeNode node, Map<String, int[]> sums) {
@@ -466,12 +505,16 @@ public class ResourcesManager {
         public final List<RecipeManager.RecipeNode> trees;
         /** Raw materials across all entries; children are the individual items. */
         public final RecipeManager.RecipeNode total;
+        /** Direct ingredients of every entry, summed; the Total when set to Recipe ingredients. */
+        public final RecipeManager.RecipeNode ingredientTotal;
         /** What can be crafted right now from current stock, item name to count. */
         public final Map<String, Integer> craftable;
 
-        public ShoppingResponse(List<RecipeManager.RecipeNode> trees, RecipeManager.RecipeNode total, Map<String, Integer> craftable) {
+        public ShoppingResponse(List<RecipeManager.RecipeNode> trees, RecipeManager.RecipeNode total,
+                                RecipeManager.RecipeNode ingredientTotal, Map<String, Integer> craftable) {
             this.trees = trees;
             this.total = total;
+            this.ingredientTotal = ingredientTotal;
             this.craftable = craftable;
         }
     }
