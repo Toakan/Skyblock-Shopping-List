@@ -19,6 +19,7 @@ import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
@@ -46,24 +47,30 @@ public final class JsonFiles {
      */
     public static void writeAsync(File file, Supplier<?> value) {
         Path path = file.toPath();
-        boolean queued;
+        // Recorded and queued under one lock, the same one flush() queues under, so a flush can never slip in
+        // between and return before this save is on disk.
         synchronized (PENDING) {
-            queued = PENDING.put(path, value) != null;
+            if (PENDING.put(path, value) != null) return; // a write for this file is already queued
+            WRITER.execute(() -> {
+                Supplier<?> latest;
+                synchronized (PENDING) {
+                    latest = PENDING.remove(path);
+                }
+                if (latest != null) write(file, latest.get());
+            });
         }
-        if (queued) return;
-        WRITER.execute(() -> {
-            Supplier<?> latest;
-            synchronized (PENDING) {
-                latest = PENDING.remove(path);
-            }
-            if (latest != null) write(file, latest.get());
-        });
     }
 
     /** Waits (up to 5 s) until every save queued so far is on disk. */
     public static void flush() {
+        Future<?> done;
+        // Queued under the lock writeAsync queues under: the writer runs tasks in order, so this runs after every
+        // save queued before it.
+        synchronized (PENDING) {
+            done = WRITER.submit(() -> {});
+        }
         try {
-            WRITER.submit(() -> {}).get(5, TimeUnit.SECONDS);
+            done.get(5, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         } catch (ExecutionException | TimeoutException e) {
