@@ -603,6 +603,8 @@ public class SandboxWidget {
         Map<String, Long> cookingEnds = cookingEnds();
         double forgeMultiplier = ForgeSpeed.multiplier();
         for (RecipeManager.RecipeNode tree : response.trees) setForgeTimes(tree, cookingEnds, forgeMultiplier);
+        RecipeManager recipeManager = RecipeManager.getInstance();
+        for (RecipeManager.RecipeNode tree : response.trees) setLocks(tree, recipeManager, 0);
 
         List<RecipeManager.RecipeNode> tops = new ArrayList<>();
         RecipeManager.RecipeNode total = totalMode == TotalMode.INGREDIENTS ? response.ingredientTotal : response.total;
@@ -1351,6 +1353,7 @@ public class SandboxWidget {
         Component name = style.text(node.name, nameColor, bold);
         String forge = forgeText(node, level);
         Component tag = forge.isEmpty() ? Component.empty() : style.text(forge, nameColor, false);
+        int lockWidth = showsLock(node) ? LOCK_WIDTH : 0;
         List<String> sacksLeft = neededSacks;
         int listSackCount = listSacks.size();
         if (level == 0 && "Total".equals(node.name) && !sacksLeft.isEmpty()) {
@@ -1363,12 +1366,12 @@ public class SandboxWidget {
         int maxTextWidth = Math.max(10, nodeWidth - iconOffset);
         float textScale;
         if (forge.isEmpty()) {
-            int totalTextWidth = markWidth + amountWidth + client.font.width(name) + tagWidth;
+            int totalTextWidth = markWidth + amountWidth + client.font.width(name) + tagWidth + lockWidth;
             textScale = Math.min(rowScale, (float) maxTextWidth / Math.max(1, totalTextWidth));
         } else {
             // The forge time always shows; a long name is cut short to make room instead of shrinking the row.
             textScale = rowScale;
-            int room = Math.round(maxTextWidth / rowScale) - markWidth - amountWidth - tagWidth;
+            int room = Math.round(maxTextWidth / rowScale) - markWidth - amountWidth - tagWidth - lockWidth;
             name = fitName(client.font, style, node.name, nameColor, bold, room);
         }
         int nameWidth = client.font.width(name);
@@ -1380,6 +1383,7 @@ public class SandboxWidget {
         context.text(client.font, amount, markWidth, 0, 0xFFFFFFFF, style.textShadow);
         context.text(client.font, name, markWidth + amountWidth, 0, 0xFFFFFFFF, style.textShadow);
         context.text(client.font, tag, markWidth + amountWidth + nameWidth, 0, 0xFFFFFFFF, style.textShadow);
+        if (lockWidth > 0) drawLock(context, markWidth + amountWidth + nameWidth + tagWidth, 0, nameColor);
         context.pose().popMatrix();
         y += nodeHeight + currentRowGap;
 
@@ -1483,6 +1487,51 @@ public class SandboxWidget {
      * Forge time still ahead for a row, per Settings > Appearance > Forge times: "[25hrs]", "[45m]" or
      * "[<1m]"; empty when there is none or the setting hides it for this row (level 0 = the top rows).
      */
+    /** Room a padlock takes after a row's text, in font pixels: a gap, the 5 px lock and a pixel after it. */
+    public static final int LOCK_WIDTH = 9;
+
+    /** True when a row shows a padlock: Recipe locks on, and it or a row under it still to make needs an unlock. */
+    public static boolean showsLock(RecipeManager.RecipeNode node) {
+        return HudStyle.get().showRequirements && (!node.ownLock.isEmpty() || !node.locksBelow.isEmpty());
+    }
+
+    /**
+     * Fills {@link RecipeManager.RecipeNode#ownLock} and {@code locksBelow} for this row and every row under it,
+     * so the HUD only reads them. Rows you have enough of need nothing made, so they pass nothing up. Returns
+     * this subtree's requirements for the row above, each named after its item.
+     */
+    private static Set<String> setLocks(RecipeManager.RecipeNode node, RecipeManager recipes, int depth) {
+        Set<String> below = new LinkedHashSet<>();
+        if (node.ingredients != null && depth < RecipeManager.MAX_DEPTH) {
+            for (RecipeManager.RecipeNode child : node.ingredients) below.addAll(setLocks(child, recipes, depth + 1));
+        }
+        boolean hasEnough = node.amount <= 0 && node.toCraft <= 0 && !node.cooking;
+        if (hasEnough) {
+            node.ownLock = "";
+            node.locksBelow = List.of();
+            return Set.of();
+        }
+        node.ownLock = recipes.getRequirement(node.name);
+        node.locksBelow = List.copyOf(below);
+        Set<String> up = new LinkedHashSet<>();
+        if (!node.ownLock.isEmpty()) up.add(node.ownLock + " (" + node.name + ")");
+        up.addAll(below);
+        return up;
+    }
+
+    /**
+     * A 5x7 padlock drawn with fills (Minecraft's fonts have no padlock glyph), {@link #LOCK_WIDTH} wide, top-left
+     * at (x, y) on a text line.
+     */
+    public static void drawLock(GuiGraphicsExtractor context, int x, int y, int color) {
+        int left = x + 3;
+        context.fill(left + 1, y, left + 4, y + 1, color);          // shackle top
+        context.fill(left, y + 1, left + 1, y + 3, color);          // shackle sides
+        context.fill(left + 4, y + 1, left + 5, y + 3, color);
+        context.fill(left, y + 3, left + 5, y + 7, color);          // body
+        context.fill(left + 2, y + 4, left + 3, y + 6, 0xFF000000 | (~color & 0xFFFFFF)); // keyhole
+    }
+
     public static String forgeText(RecipeManager.RecipeNode node, int level) {
         HudStyle.ForgeTimes mode = HudStyle.get().forgeTimes;
         if (mode == HudStyle.ForgeTimes.OFF || (mode == HudStyle.ForgeTimes.TOP_LEVEL && level > 0)) return "";

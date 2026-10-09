@@ -90,6 +90,8 @@ public final class HudStyle {
     public boolean showForging = true;
     /** Coins to buy the list's raw materials at NPCs and what NPCs pay for them, at the bottom of the main panel. */
     public boolean showNpcPrice = true;
+    /** A padlock after rows still to make whose recipe needs an unlock (collection, HotM, slayer level). */
+    public boolean showRequirements = true;
     public ForgeTimes forgeTimes = ForgeTimes.ALL;
     public Placement craftablePlacement = Placement.MAIN_PANEL;
     public Placement forgingPlacement = Placement.MAIN_PANEL;

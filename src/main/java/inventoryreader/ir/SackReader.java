@@ -33,6 +33,11 @@ public class SackReader {
      * updates don't add to it: they only report changes. Null until loaded.
      */
     private Set<String> scanned;
+    /**
+     * Read-only copy of {@link #scanned} for the HUD, which asks per row per frame: read without the lock, so
+     * drawing never waits on a sack being read. Null until the meta file is loaded.
+     */
+    private volatile Set<String> scannedView;
     /** Changes whenever {@link #scanned} grows or is cleared, so callers can cache what depends on it. */
     private volatile long scanVersion = 0;
 
@@ -55,7 +60,10 @@ public class SackReader {
         snapshot = null;
         lastRead = null;
         scanned = null;
+        scannedView = null;
         scanVersion++;
+        // Loaded now (on a profile switch or reset), not on the first HUD frame that needs it.
+        loadMeta();
     }
 
     /** When a sack menu was last read (epoch ms), or 0 if never. Chat updates don't count. */
@@ -69,6 +77,7 @@ public class SackReader {
         SackMeta meta = JsonFiles.read(FilePathManager.sacksMetaJson(), SackMeta.class);
         lastRead = meta != null ? meta.lastRead : 0L;
         scanned = meta != null && meta.scanned != null ? new HashSet<>(meta.scanned) : new HashSet<>();
+        scannedView = Set.copyOf(scanned);
     }
 
     /** Changes whenever the set of scanned sack items changes. */
@@ -78,30 +87,23 @@ public class SackReader {
 
     /**
      * True when {@code name} is kept in a sack that hasn't been read from its menu yet, so the count shown for
-     * it may be too low.
+     * it may be too low. False until the sack data is loaded (it is on each profile switch).
      */
-    public synchronized boolean isUncertain(String name) {
-        if (RecipeManager.getInstance().getSack(name).isEmpty()) return false;
-        loadMeta();
-        return !scanned.contains(ItemNames.normalize(name));
+    public boolean isUncertain(String name) {
+        Set<String> view = scannedView;
+        if (view == null || RecipeManager.getInstance().getSack(name).isEmpty()) return false;
+        return !view.contains(ItemNames.normalize(name));
     }
 
     /** The sacks still to open for {@code names}, each once, in the order first needed. */
     public synchronized List<String> unscannedSacks(Collection<String> names) {
+        // Runs on the HUD update thread every list update, so this loads the data before the HUD needs it.
+        loadMeta();
         Set<String> out = new LinkedHashSet<>();
         for (String name : names) {
             if (isUncertain(name)) out.add(RecipeManager.getInstance().getSack(name));
         }
         return new ArrayList<>(out);
-    }
-
-    /** Whether any item of {@code sack} ("Enchanted Mining Sack") has been read from its menu. */
-    public synchronized boolean isSackScanned(String sack) {
-        loadMeta();
-        for (Map.Entry<String, String> e : RecipeManager.getInstance().getItemSacks().entrySet()) {
-            if (e.getValue().equals(sack) && scanned.contains(ItemNames.normalize(e.getKey()))) return true;
-        }
-        return false;
     }
 
     private static class SackMeta {
@@ -128,7 +130,10 @@ public class SackReader {
         loadMeta();
         boolean grew = false;
         for (String name : current.keySet()) grew |= scanned.add(ItemNames.normalize(name));
-        if (grew) scanVersion++;
+        if (grew) {
+            scannedView = Set.copyOf(scanned);
+            scanVersion++;
+        }
         SackMeta meta = new SackMeta();
         meta.lastRead = lastRead = System.currentTimeMillis();
         meta.scanned = new ArrayList<>(scanned);

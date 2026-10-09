@@ -1,0 +1,71 @@
+name: Bug report
+description: Something in the mod doesn't work as expected.
+title: "Bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please check the open issues first in case it's already known.
+  - type: input
+    id: mod-version
+    attributes:
+      label: Mod version
+      description: Shown in the mod list, or in the jar name (e.g. skyblock-shopping-list-4.27.1.jar).
+      placeholder: "4.27.1"
+    validations:
+      required: true
+  - type: dropdown
+    id: mc-version
+    attributes:
+      label: Minecraft version
+      options:
+        - "26.2"
+        - "26.3"
+    validations:
+      required: true
+  - type: dropdown
+    id: profile
+    attributes:
+      label: Profile type
+      options:
+        - Ironman
+        - Regular
+        - Other (Stranded, Bingo...)
+    validations:
+      required: false
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead. Screenshots help a lot.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: For example, which recipe was on the list, which menu you opened, which island you were on.
+      placeholder: |
+        1. Add Titanium Drill DR-X455 to the list
+        2. Open the Forge
+        3. ...
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log
+      description: |
+        If you can, turn on Settings > Advanced > Debug logging, reproduce the problem, then paste the relevant
+        part of `logs/latest.log` (or upload the file). Crash? Paste the crash report instead.
+      render: text
+    validations:
+      required: false
+  - type: textarea
+    id: other-mods
+    attributes:
+      label: Other mods
+      description: Other client mods you run (Skyblocker, Firmament, etc.), in case they clash.
+    validations:
+      required: false

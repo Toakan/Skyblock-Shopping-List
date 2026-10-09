@@ -625,11 +625,19 @@ public class ShoppingListScreen extends Screen {
         // Long names are cut with "..." so the forge time (if any) always fits.
         String forge = SandboxWidget.forgeText(node, level);
         Component tag = forge.isEmpty() ? Component.empty() : style.text(forge, nameColor, false);
+        int lockWidth = SandboxWidget.showsLock(node) ? SandboxWidget.LOCK_WIDTH : 0;
         int nameX = amountX + font.width(amount);
-        int room = rowX + nodeWidth - 4 - nameX - font.width(tag);
+        int room = rowX + nodeWidth - 4 - nameX - font.width(tag) - lockWidth;
         Component name = SandboxWidget.fitName(font, style, node.name, nameColor, bold, room);
         context.text(font, name, nameX, y + 4, 0xFFFFFFFF, style.textShadow);
         context.text(font, tag, nameX + font.width(name), y + 4, 0xFFFFFFFF, style.textShadow);
+        if (lockWidth > 0) {
+            SandboxWidget.drawLock(context, nameX + font.width(name) + font.width(tag), y + 4, nameColor);
+            // Only inside the scrolled preview box, so a row scrolled out of view never shows a tooltip.
+            boolean hovered = mouseX >= rowX && mouseX <= rowX + nodeWidth && mouseY >= y && mouseY <= y + 16
+                && mouseY >= treeViewY && mouseY <= treeViewY + treeViewHeight;
+            if (hovered) context.setComponentTooltipForNextFrame(font, lockTooltip(node), mouseX, mouseY);
+        }
 
         y += 16;
 
@@ -645,6 +653,17 @@ public class ShoppingListScreen extends Screen {
             }
         }
         return y;
+    }
+
+    /** "Requires: HotM 6", then "Needs below:" and one line per requirement further down the tree. */
+    private static List<Component> lockTooltip(RecipeManager.RecipeNode node) {
+        List<Component> lines = new ArrayList<>();
+        if (!node.ownLock.isEmpty()) lines.add(Component.literal("Requires: " + node.ownLock));
+        if (!node.locksBelow.isEmpty()) {
+            lines.add(Component.literal("Needs below:").setStyle(Style.EMPTY.withColor(ChatFormatting.GRAY)));
+            for (String lock : node.locksBelow) lines.add(Component.literal("  " + lock));
+        }
+        return lines;
     }
 
     @Override

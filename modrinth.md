@@ -1,8 +1,8 @@
 Pick the items you want to make, and a HUD shopping list shows what you can already craft and what you still need to gather. Skyblock Shopping List counts the items in your inventory, sacks, backpacks and ender chest, and works out every recipe tree down to its raw materials.
 
-Built with Ironman accounts in mind, but just as useful on a regular profile for keeping track of your stock and planning crafts.
+**Built for Ironman first, works for everyone.** No Bazaar, no Auction House: on Ironman everything is gathered or crafted yourself, so the mod is designed around that, from full recipe trees down to raw materials to NPC coin prices instead of Bazaar prices. Nothing is limited to Ironman, though; on a regular profile it tracks your stock and plans crafts just the same.
 
-**Fork notice:** this is a renamed, maintained fork of [Inventory Reader](https://github.com/Scholiboi/InventoryReader) by Scholiboi. Remove any old Inventory Reader jar before installing; its data is moved to `config/skyblock-shopping-list/` automatically on first launch.
+**Coming from Inventory Reader?** This mod grew out of [Inventory Reader](https://github.com/Scholiboi/InventoryReader) by Scholiboi. Remove the old jar before installing; your data is moved to `config/skyblock-shopping-list/` automatically on first launch.
 
 ## Features
 - **Shopping list HUD:** add recipes with an amount and reorder them by priority. A **Total** section lists every raw material still needed (missing items first), followed by one tree per recipe. Your stock is shared between recipes and never counted twice. Each amount is either a total to hold (what you already have counts) or how many more to make.
@@ -12,6 +12,7 @@ Built with Ironman accounts in mind, but just as useful on a regular profile for
 - **Per-profile data:** each SkyBlock profile keeps its own counts and shopping list, and switching profile switches them with it.
 - **Craftable:** intermediates you can make right now.
 - **Forging:** items cooking in your Dwarven Forge that the list needs, with time left.
+- **Recipe locks:** a padlock on rows whose recipe needs a collection, HotM or slayer unlock; hover it in the List tab to see what.
 - **NPC price:** a bottom line showing what the whole list costs to buy from NPCs and what NPCs pay for it, with how many items have an NPC price.
 - **Forge times:** forge rows show how long is still ahead, e.g. `Titanium Drill DR-X455 [25hrs]`, taking your Quick Forge perk and Cole's Molten Forge into account.
 - **Recipes beyond the crafting table:** Dwarven Forge, NPC shop purchases and Kat pet upgrades. Even the Golden Dragon (Legendary), with its 500M coins, Enchanted Gold Blocks and Perfect gems, can go on the list.
@@ -60,4 +61,4 @@ Minecraft 26.2 or 26.3 (one jar for both), Java 25, Fabric Loader 0.19.5+, Fabri
 - Pets that only drop have no recipe.
 
 ## License and credits
-CC-BY-SA-4.0. Based on [Inventory Reader](https://github.com/Scholiboi/InventoryReader) by Scholiboi. Recipe and item data comes from [NotEnoughUpdates-REPO](https://github.com/NotEnoughUpdates/NotEnoughUpdates-REPO). Source code: [Toakan/Skyblock-Shopping-List](https://github.com/Toakan/Skyblock-Shopping-List).
+GPL-3.0-only, with extra terms: keep the credits, mark modified versions, and give them their own name. Originally based on [Inventory Reader](https://github.com/Scholiboi/InventoryReader) by Scholiboi, whose inventory reading, recipe trees and HUD this mod was built on. Recipe and item data comes from [NotEnoughUpdates-REPO](https://github.com/NotEnoughUpdates/NotEnoughUpdates-REPO). Source code: [Toakan/Skyblock-Shopping-List](https://github.com/Toakan/Skyblock-Shopping-List).

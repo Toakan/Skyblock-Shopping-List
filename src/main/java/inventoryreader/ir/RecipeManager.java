@@ -24,6 +24,8 @@ public class RecipeManager {
     private volatile Map<String, String> types = Collections.emptyMap();
     /** The sack that holds each sack item ("Enchanted Mining Sack"), from the NEU sack list. */
     private volatile Map<String, String> sacks = Collections.emptyMap();
+    /** What unlocks each recipe ("Coal III", "HotM 2"), from NEU's crafttext. */
+    private volatile Map<String, String> requirements = Collections.emptyMap();
     /** Changes every time the recipes are (re)loaded, so the HUD knows to recompute. */
     private volatile long version = 0;
 
@@ -94,6 +96,9 @@ public class RecipeManager {
             Map<String, String> itemSacks = JsonFiles.read(FilePathManager.ITEM_SACKS_JSON,
                 new com.google.gson.reflect.TypeToken<Map<String, String>>(){}.getType());
             sacks = itemSacks == null ? Collections.emptyMap() : Collections.unmodifiableMap(new HashMap<>(itemSacks));
+            Map<String, String> itemRequirements = JsonFiles.read(FilePathManager.ITEM_REQUIREMENTS_JSON,
+                new com.google.gson.reflect.TypeToken<Map<String, String>>(){}.getType());
+            requirements = itemRequirements == null ? Collections.emptyMap() : Collections.unmodifiableMap(new HashMap<>(itemRequirements));
             version++;
         } catch (IOException | JsonParseException e) {
             InventoryReader.LOGGER.error("Failed to load recipes", e);
@@ -154,14 +159,14 @@ public class RecipeManager {
         return types.getOrDefault(name, "");
     }
 
+    /** What unlocks the recipe for {@code name} ("Coal III", "HotM 2"), or "" when nothing is needed or known. */
+    public String getRequirement(String name) {
+        return requirements.getOrDefault(name, "");
+    }
+
     /** The sack that holds {@code name} ("Enchanted Mining Sack"), or "" when it isn't a sack item. */
     public String getSack(String name) {
         return sacks.getOrDefault(name, "");
-    }
-
-    /** Every sack item, item name to sack name. Read only. */
-    public Map<String, String> getItemSacks() {
-        return sacks;
     }
 
     /** Whether the recipe for {@code name} has a direct ingredient whose name contains {@code lowerTerm}. */
@@ -321,6 +326,13 @@ public class RecipeManager {
         /** Shopping-list trees only: held enough only by counting copies still cooking in the Forge. */
         public boolean cooking;
         public long[] forgeCookingEnds = new long[0];
+        /**
+         * Shopping-list trees only: what unlocks this row's own recipe ("HotM 6"), and the requirements of rows
+         * still to make further down ("HotM 2 (Refined Titanium)"), deduplicated in tree order. Empty when the
+         * row is done or nothing needs an unlock.
+         */
+        public String ownLock = "";
+        public List<String> locksBelow = List.of();
         public List<RecipeNode> ingredients;
 
         public long forgeLeft(long now) {

@@ -1,14 +1,18 @@
 # Skyblock Shopping List
 
+> **Built for Ironman first, works for everyone.**
+
 Skyblock Shopping List is a Fabric client mod for Hypixel SkyBlock. It keeps a count of the items in your inventory, sacks, backpacks and ender chest, and shows a shopping list HUD for the recipes you pick: what you can already craft and what you still need. Lists can be saved under a name and swapped back in later.
 
-This tool has been updated to be really beneficial for Ironman accounts, however it can still be useful for regular accounts to keep track of their inventory and plan their crafting efficiently.
+### Ironman first
+This mod is designed around Ironman play. With no Bazaar or Auction House, every item has to be gathered or crafted yourself, so knowing exactly what a recipe tree still needs, which sacks hold it, what is cooking in the Forge and what an NPC sells or pays is the whole game. New features are planned with that in mind: nothing relies on Bazaar or Auction House prices, and prices shown are NPC coin prices.
+
+### Works for everyone
+Nothing in the mod is limited to Ironman profiles. On a regular profile it works the same way: track your stock across inventory, sacks and storage, plan big crafts down to raw materials, and see what you can make right now.
 
 
-# Notification of Change
-This is a renamed, maintained fork of Inventory Reader ([Scholiboi/InventoryReader](https://github.com/Scholiboi/InventoryReader)), originally written by Scholiboi. Remove any old Inventory Reader jar from `mods/` before installing; its data folder (`.ir-data`, or `.skyblock-shopping-list` from earlier versions of this fork) is moved to `config/skyblock-shopping-list/` automatically on first launch.
-
-The license and credits remain the same as the original Inventory Reader project, with modifications only for the renaming and maintenance of this fork.
+## Coming from Inventory Reader?
+Skyblock Shopping List grew out of [Inventory Reader](https://github.com/Scholiboi/InventoryReader) by Scholiboi (see [Credits](#license-and-attribution)). Remove the old Inventory Reader jar from `mods/` before installing; its data folder (`.ir-data`, or `.skyblock-shopping-list` from earlier versions of this mod) is moved to `config/skyblock-shopping-list/` automatically on first launch.
 
 ## Requirements
 - Minecraft 26.2 or 26.3 (the same jar runs on both)
@@ -42,6 +46,7 @@ Press `V` (or `/ssl menu`) to open the menu. It has five tabs:
 - **Appearance** (in Settings): design the HUD yourself. Colours (with transparency) for the panel, borders, title, rows, tree lines, text and the done / partly gathered / missing / can craft / cooking states (cooking: you only have enough by counting items still in the Forge); row height, row gap, indent, padding, border thicknesses and rounded corners (panels and rows, 0-6 px); font (Minecraft's fonts plus any your enabled resource packs add), shadow and bold recipe names; separate text sizes for the title, rows, Craftable and Forging, and left / centre / right alignment for the title, Craftable and Forging; tick/cross marks, row boxes, tree lines, and the amount format (Remaining "3×", Have / need "83/5,120", or Required "6×"), with **Short numbers** (on by default) showing big amounts as 5.1k / 500m / 1.5b. A live preview at the top of the description column shows a sample panel with your changes before you press Save. **Reset look to defaults** restores the original look.
   - **HUD scale** (50-300%) sizes every panel. **HUD sizing** sets how it reacts to the window: **Window size** (default) grows and shrinks with the game window, **Minecraft GUI Scale** follows GUI Scale in steps like vanilla menus, **Fixed pixels** never changes. Panels keep their place relative to the screen and stay on it when the window is resized.
   - **Craftable** and **Forging** can each be hidden, or moved to their **own panel** that you place and size separately in Move HUD.
+  - **Recipe locks** (on by default) can be hidden.
   - **NPC price section** (on by default) can be hidden; it uses the Craftable text size, alignment and section colours.
   - In **Move HUD**, drag a panel to move it, drag a **corner** to scale it (keeps its shape; each panel has its own scale on top of HUD scale), or drag an **edge** to make it wider, narrower, taller or shorter.
   - **Presets** (Appearance > Presets): save your look and panel sizes under a name, load one of yours or a built-in (Default, Compact, Minimal), and **Copy share code** / **Paste share code** to share a look as text (e.g. in Discord). Panel positions are never changed. Loading, pasting or resetting first keeps your current look as the preset "Previous (auto)", and a setup you made before presets existed is kept as "My look".
@@ -52,6 +57,7 @@ The HUD (`H` to toggle) shows:
 - One tree per recipe.
 - **Craftable**: intermediates you can make right now.
 - **Forging**: items cooking in your Dwarven Forge that the list needs, with time left. Updated when you open The Forge.
+- **Recipe locks**: a small padlock after rows you still need to make whose recipe has to be unlocked first: a collection tier, a Heart of the Mountain tier or a slayer level. Rows with such a requirement further down their tree get the padlock too, so you see it before committing to the whole craft, even with the row collapsed. In the List tab preview, hover the row to see what it requires, e.g. `Requires: HotM 6`, then under **Needs below** each lower requirement with its item, e.g. `HotM 2 (Refined Titanium)`. The requirement comes from the NEU repository. Your own collections and levels aren't read, so the padlock shows even if you've already unlocked the recipe; rows you already have enough of never show one.
 - **NPC price** (at the bottom): what the whole list costs at NPCs, like the bottom line of an invoice. **Buy** is the coins to buy every raw material in the Total from NPC shops, **Sell** is what NPCs pay for them. It covers everything the list needs, including what you already hold. Coin prices only: buy prices are the cheapest NPC shop offer that costs coins alone (e.g. Coal: 8 coins for 2 at the Mine Merchant, so 4 each), and sell prices come from Hypixel's item list. Many items have no NPC price (bazaar-only items, mob drops), so each line says how many of the items have one, e.g. `Buy: 1,240 coins (12/15 items)`; those without one are left out of the sum. Coins on the list count towards Buy.
 - **Forge times**: rows made in the Forge show how long is still ahead, e.g. `Titanium Drill DR-X455 [25hrs]`: every forge craft still to make for that row, one after another (forge time × how many are still needed, plus all its ingredients). That is the worst case: forging several at once finishes sooner. Items cooking now add the time they have left and count down on their real timer. Crafts not started yet get your **Quick Forge** perk (read when you open Heart of the Mountain) and Cole's **Molten Forge** while he is mayor or minister (the mayor is checked hourly, only while Forge times is on). Appearance > Forge times: Every row, Top level only, or Off. Long names are cut short so the time always shows.
 
@@ -105,6 +111,7 @@ Each SkyBlock profile keeps its own data in `profiles/<account>/<profile>/`, so 
 - `forging.json`, `gemstone_recipes.json`: built-in fallback recipes
 - `recipes_remote.json`, `recipes_remote_forge.json`, `recipes_remote_shop.json`: crafting, forge and NPC shop recipes parsed from the NEU repository
 - `item_names.json`: SkyBlock item ID to name table
+- `item_requirements.json`: what unlocks each recipe (collection, HotM or slayer level), from the NEU repository
 - `npc_buy_prices.json`, `npc_sell_prices.json`: coins per item to buy from NPC shops (NEU repository) and that NPCs pay (Hypixel's item list)
 - `forge_times.json`: base forge time of each forge item, from the NEU repository
 - `remote_sources.json`, `remote_sources_meta.json`: recipe source list and download cache state
@@ -130,5 +137,7 @@ The jar is written to `build/libs/`. `./gradlew runClient` starts a development 
 - Recipes cover what the NEU repository lists as crafting, forge, NPC shop and Kat upgrade recipes. Pets that only drop have no recipe.
 
 ## License and attribution
-- Code: CC-BY-SA-4.0 (see `LICENSE`). Based on Inventory Reader by Scholiboi.
+- Code: GPL-3.0-only (see `LICENSE`) with additional terms under GPLv3 section 7 (see `NOTICE`): keep the credits to both authors, mark modified versions as changed, and give a modified version its own name, mod id and icon.
+- Originally based on [Inventory Reader](https://github.com/Scholiboi/InventoryReader) by Scholiboi. Its core ideas and code (reading items from your inventory, sacks and storage, working out recipe trees, the HUD and the recipe viewer) are what this mod was built on. Thanks to Scholiboi for the original project. Inventory Reader is licensed CC-BY-SA-4.0; its modified code is used here under GPLv3, which Creative Commons lists as compatible with CC-BY-SA-4.0.
+- Versions up to 4.26.1 were released under CC-BY-SA-4.0.
 - Recipe and item data comes from NotEnoughUpdates-REPO; follow its license when reusing that data.

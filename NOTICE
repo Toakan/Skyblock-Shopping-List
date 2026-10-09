@@ -1,0 +1,58 @@
+Skyblock Shopping List
+Copyright (C) 2026 Tad (Toakan) <https://github.com/Toakan/Skyblock-Shopping-List>
+
+Originally based on Inventory Reader
+Copyright (C) 2025 Scholiboi <https://github.com/Scholiboi/InventoryReader>
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, version 3 of the License only (GPL-3.0-only), together with the
+additional terms below.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with
+this program (the LICENSE file). If not, see <https://www.gnu.org/licenses/>.
+
+
+ORIGINAL WORK
+-------------
+Portions of this program come from Inventory Reader by Scholiboi
+(https://github.com/Scholiboi/InventoryReader), licensed under the Creative
+Commons Attribution-ShareAlike 4.0 International licence (CC BY-SA 4.0,
+https://creativecommons.org/licenses/by-sa/4.0/). Those portions have been
+modified. Inventory Reader's inventory, sack and storage reading, recipe trees,
+HUD and recipe viewer are the base this program was built on.
+
+The modified portions are licensed under GPL-3.0-only as permitted by CC BY-SA
+4.0 section 3(b)(1): Creative Commons declared GPLv3 a BY-SA Compatible License
+on 8 October 2015 (https://creativecommons.org/compatiblelicenses).
+
+Versions of Skyblock Shopping List up to and including 4.26.1 were released
+under CC BY-SA 4.0 and remain available under that licence.
+
+
+ADDITIONAL TERMS (GPLv3 section 7)
+----------------------------------
+The following additional terms apply to this program and to every copy and
+modified version of it.
+
+1. Attribution (section 7(b)). You must keep, in all copies and modified
+   versions, the copyright notices and author credits for Tad (Toakan) and for
+   Scholiboi: those in this NOTICE file, in the "License and attribution"
+   section of the readme, and in the "authors" list of fabric.mod.json (which
+   is shown in the in-game mod list). A modified version that ships its own
+   readme or project page must credit both authors there as well.
+
+2. Marking modified versions (section 7(c)). A modified version must not be
+   presented as the original program or as made or endorsed by its authors. It
+   must be clearly marked as changed: state that it is a modified version, name
+   the original program, and say what was changed and when.
+
+3. Names (section 7(e)). This licence grants no right to use the name
+   "Skyblock Shopping List", its mod id "skyblock-shopping-list" or its icon
+   for a modified version. A modified version that is distributed must use a
+   different name, mod id and icon, except to state truthfully that it is based
+   on Skyblock Shopping List.
