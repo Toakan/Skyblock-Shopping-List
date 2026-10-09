@@ -10,6 +10,7 @@ import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ItemLore;
 
+import java.io.File;
 import java.net.URI;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -39,6 +40,11 @@ public final class ForgeSpeed {
         double quickForge;
         double mayorBonus;
         long mayorCheckedAt;
+        /**
+         * The profile file this was read from; changes are only saved back there, so an update that lands during a
+         * profile switch (the mayor check runs on another thread) can't write this profile's values to the next one.
+         */
+        transient File file;
     }
 
     private static volatile Data data;
@@ -157,8 +163,11 @@ public final class ForgeSpeed {
     /** Under the same lock as {@link #clear()}, so a load from before a profile switch can't be kept after it. */
     private static synchronized Data load() {
         if (data == null) {
-            Data d = JsonFiles.read(FilePathManager.forgeSpeedJson(), Data.class);
-            data = d != null ? d : new Data();
+            File file = FilePathManager.forgeSpeedJson();
+            Data d = JsonFiles.read(file, Data.class);
+            if (d == null) d = new Data();
+            d.file = file;
+            data = d;
         }
         return data;
     }
@@ -173,10 +182,11 @@ public final class ForgeSpeed {
         next.quickForge = current.quickForge;
         next.mayorBonus = current.mayorBonus;
         next.mayorCheckedAt = current.mayorCheckedAt;
+        next.file = current.file;
         change.accept(next);
         data = next;
         version++;
-        JsonFiles.writeAsync(FilePathManager.forgeSpeedJson(), () -> next);
+        JsonFiles.writeAsync(next.file, () -> next);
     }
 
     private static double parse(String number) {
