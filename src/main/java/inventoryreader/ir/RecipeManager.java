@@ -178,7 +178,8 @@ public class RecipeManager {
         for (Map.Entry<String, Map<String, Integer>> entry : input.entrySet()) {
             String output = entry.getKey();
             Map<String, Integer> ing = entry.getValue();
-            if (ing == null || ing.isEmpty()) { out.put(output, ing); continue; }
+            // No ingredients is no recipe: kept, it would count as craftable from nothing.
+            if (ing == null || ing.isEmpty()) continue;
 
             // Drop known decompression entries entirely
             if (DECOMPRESSION_SKIP.contains(output)) continue;
