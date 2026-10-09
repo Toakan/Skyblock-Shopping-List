@@ -14,6 +14,14 @@ One bump per change. Docs-only commits (readme, this file) don't need a bump.
 Order per change: edit, bump `mod_version`, `./gradlew build`, commit. Bump before the final build so
 `build/libs` has the jar for the committed version.
 
+## Code
+- Reuse what exists before writing new code: helpers such as `JsonFiles`, `ItemNames`, `RecipeManager`
+  and `ResourcesManager` lookups, and the fetcher's `writeSnapshot`. Match the surrounding patterns.
+- Minimal dependencies: no new library or mod integration unless the benefit is large. Prefer the
+  smallest change that does the job.
+- Keep the mod resource light (disk, network, CPU): no large temp data, extra polling or extra downloads.
+  Weigh the footprint when proposing a feature.
+
 ## Docs
 When a change adds or changes something a player would notice, update `readme.md` (detailed) and, if it is
 worth advertising, `modrinth.md` (short, synced to the Modrinth description) in the same commit. Internal
