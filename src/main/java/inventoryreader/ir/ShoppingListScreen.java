@@ -2,6 +2,7 @@ package inventoryreader.ir;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Collectors;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
@@ -197,9 +198,9 @@ public class ShoppingListScreen extends Screen {
         if (searchTerm == null || searchTerm.isEmpty()) {
             this.filteredRecipes = new ArrayList<>(recipeManager.getRecipeNames());
         } else {
-            String lowerSearchTerm = searchTerm.toLowerCase();
+            String lowerSearchTerm = searchTerm.toLowerCase(Locale.ROOT);
             this.filteredRecipes = recipeManager.getRecipeNames().stream()
-                .filter(name -> name.toLowerCase().contains(lowerSearchTerm))
+                .filter(name -> name.toLowerCase(Locale.ROOT).contains(lowerSearchTerm))
                 .collect(Collectors.toList());
         }
         scrollOffset = 0;

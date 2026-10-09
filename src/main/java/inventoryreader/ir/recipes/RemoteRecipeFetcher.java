@@ -81,7 +81,7 @@ public final class RemoteRecipeFetcher {
         if (sources.isEmpty()) return;
 
         for (Map<String, String> s : sources) {
-            String type = String.valueOf(s.getOrDefault("type", "")).toLowerCase();
+            String type = String.valueOf(s.getOrDefault("type", "")).toLowerCase(java.util.Locale.ROOT);
             String url = s.get("url");
             if (url == null || url.isBlank()) continue;
             boolean done = false;

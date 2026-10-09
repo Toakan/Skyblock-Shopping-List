@@ -221,16 +221,17 @@ public class SandboxViewer extends Screen {
     }
 
     private void filterResources() {
+        String term = resourceSearchTerm.toLowerCase(Locale.ROOT);
         if (mode == Mode.RESOURCES) {
             filteredResources = resources.stream()
-                .filter(resource -> resourceSearchTerm.isEmpty() || resource.name.toLowerCase().contains(resourceSearchTerm.toLowerCase()))
+                .filter(resource -> term.isEmpty() || resource.name.toLowerCase(Locale.ROOT).contains(term))
                 .sorted((a, b) -> a.name.compareToIgnoreCase(b.name))
                 .collect(Collectors.toList());
         } else {
             boolean hasSearch = resourceSearchTerm != null && !resourceSearchTerm.isEmpty();
             filteredResources = resources.stream()
                 .filter(resource -> hasSearch || resource.amount > 0)
-                .filter(resource -> resourceSearchTerm.isEmpty() || resource.name.toLowerCase().contains(resourceSearchTerm.toLowerCase()))
+                .filter(resource -> term.isEmpty() || resource.name.toLowerCase(Locale.ROOT).contains(term))
                 .sorted((a, b) -> a.name.compareToIgnoreCase(b.name))
                 .collect(Collectors.toList());
         }
@@ -243,8 +244,9 @@ public class SandboxViewer extends Screen {
         if (recipeSearchTerm.isEmpty()) {
             filteredRecipeNames = new ArrayList<>(recipeNames);
         } else {
+            String term = recipeSearchTerm.toLowerCase(Locale.ROOT);
             filteredRecipeNames = recipeNames.stream()
-                .filter(name -> name.toLowerCase().contains(recipeSearchTerm.toLowerCase()))
+                .filter(name -> name.toLowerCase(Locale.ROOT).contains(term))
                 .collect(Collectors.toList());
         }
         int maxVisible = getRecipeMaxVisibleItems();
