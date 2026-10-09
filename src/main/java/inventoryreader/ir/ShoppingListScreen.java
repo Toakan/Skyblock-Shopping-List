@@ -14,7 +14,6 @@ import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
-import org.lwjgl.glfw.GLFW;
 
 /**
  * Menu tab "Shopping List": search recipes and click to add them, edit amounts or remove entries, and see
@@ -28,6 +27,7 @@ public class ShoppingListScreen extends Screen {
     private int scrollOffset = 0;
     /** Recipe rows that fit between the search box and the bottom buttons; set in init(). */
     private int MAX_RECIPES_SHOWN = 10;
+    private static final int MOUSE_BUTTON_RIGHT = InventoryReaderClient.inputCode("MOUSE_BUTTON_RIGHT");
     private static final int LIST_X = 20;
     /** Top of the first recipe row; rows are {@link #ROW_HEIGHT} tall. Drawing and clicks both use these. */
     private static final int LIST_TOP = 107;
@@ -681,7 +681,7 @@ public class ShoppingListScreen extends Screen {
     public boolean mouseClicked(MouseButtonEvent ctx, boolean doubleClick) {
         double mouseX = ctx.x();
         double mouseY = ctx.y();
-        if (ctx.button() == GLFW.GLFW_MOUSE_BUTTON_RIGHT) {
+        if (ctx.button() == MOUSE_BUTTON_RIGHT) {
             for (Button button : new Button[] {matchButton, typeButton, rarityButton, ownedButton}) {
                 if (button != null && button.isMouseOver(mouseX, mouseY)) {
                     button.playDownSound(Minecraft.getInstance().getSoundManager());

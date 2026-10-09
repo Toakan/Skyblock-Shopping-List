@@ -11,15 +11,15 @@ This is a renamed, maintained fork of Inventory Reader ([Scholiboi/InventoryRead
 The license and credits remain the same as the original Inventory Reader project, with modifications only for the renaming and maintenance of this fork.
 
 ## Requirements
-- Minecraft 26.2
+- Minecraft 26.2 or 26.3 (the same jar runs on both)
 - Fabric Loader 0.19.5 or newer
-- Fabric API 0.161.0+26.2 or newer
-- YetAnotherConfigLib 3.9.7+26.2 or newer (already installed if you use Skyblocker)
+- Fabric API 0.161.0 or newer, built for your Minecraft version
+- YetAnotherConfigLib 3.9.7 or newer, built for your Minecraft version (already installed if you use Skyblocker)
 - [Hypixel Mod API](https://modrinth.com/mod/hypixel-mod-api) 1.0.2 or newer (official; used to know when you are on SkyBlock)
 - Java 25
 
 ## Installation
-1. Install Fabric Loader for Minecraft 26.2.
+1. Install Fabric Loader for Minecraft 26.2 or 26.3.
 2. Put Fabric API, YetAnotherConfigLib, the Hypixel Mod API and the Skyblock Shopping List jar in your `mods/` folder.
 3. Launch Minecraft with the Fabric profile.
 

@@ -50,7 +50,7 @@ Mayor Interaction Data: At most once an hour while you're on SkyBlock it reads H
 No player data is sent anywhere.
 
 ## Requirements
-Minecraft 26.2, Java 25, Fabric Loader 0.19.5+, Fabric API, YetAnotherConfigLib (already installed if you use Skyblocker) and the [Hypixel Mod API](https://modrinth.com/mod/hypixel-mod-api) (required: the game won't start without it).
+Minecraft 26.2 or 26.3 (one jar for both), Java 25, Fabric Loader 0.19.5+, Fabric API, YetAnotherConfigLib (already installed if you use Skyblocker) and the [Hypixel Mod API](https://modrinth.com/mod/hypixel-mod-api) (required: the game won't start without it).
 
 ## Known limitations
 - Sack contents only fully resync when you open a sack; in between they follow the `[Sacks]` chat summaries. A reminder appears if no sack has been opened for an hour.
