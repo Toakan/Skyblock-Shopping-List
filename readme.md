@@ -82,7 +82,7 @@ As Hypixel states, every modification is used at your own risk.
 ## Where data is stored
 Everything lives in `config/skyblock-shopping-list/` inside your Minecraft folder.
 
-Each SkyBlock profile keeps its own data in `profiles/<account>/<profile>/`, so switching profile (or account) switches the counts and the shopping list with it. The profile is taken from Hypixel's `Profile ID: ...` chat line, sent each time you join SkyBlock. Right after a server change, tracking waits for that line (or 5 seconds, if another mod hides it) so items are never booked to the wrong profile. Data from before profiles existed is moved into the first profile seen. Per profile:
+Each SkyBlock profile keeps its own data in `profiles/<account>/<profile>/`, so switching profile (or account) switches the counts and the shopping list with it. The profile is taken from Hypixel's `Profile ID: ...` chat line, sent each time you join SkyBlock. Right after a server change, tracking waits for that line (it is read even when another mod hides it), so items are never booked to the wrong profile. Data from before profiles existed is moved into the first profile seen. Per profile:
 - `resources.json`: tracked item counts
 - `shopping_list.json`: the shopping list
 - `inventorydata.json`, `allcontainerData.json`, `sacks.json`, `sacks_meta.json`: last-seen inventory, container and sack contents, used to work out changes
